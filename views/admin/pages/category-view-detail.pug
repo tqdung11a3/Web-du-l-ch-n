@@ -1,0 +1,90 @@
+extends ../layouts/default.pug
+
+block main
+  .box-head
+    h1.box-title Chi tiết danh mục
+    .inner-buttons
+      a.button.button-outline(href=`/${pathAdmin}/category/view`)
+        <i class="fa-solid fa-arrow-left"></i> Quay lại
+
+  .section-6(style="margin-top: 20px;")
+    .box-detail
+      .detail-row
+        .detail-label Ảnh đại diện:
+        .detail-value
+          if category.avatar
+            img(src=category.avatar, alt=category.name, style="width: 200px; height: 200px; object-fit: cover; border-radius: 8px;")
+          else
+            span(style="color: #999;") Chưa có ảnh
+      
+      .detail-row
+        .detail-label Tên danh mục:
+        .detail-value= category.name
+      
+      .detail-row
+        .detail-label Vị trí:
+        .detail-value= category.position
+      
+      .detail-row
+        .detail-label Trạng thái:
+        .detail-value
+          if category.status === "active"
+            span.badge.badge-green Hoạt động
+          else
+            span.badge.badge-red Dừng hoạt động
+      
+      .detail-row
+        .detail-label Danh mục cha:
+        .detail-value
+          if category.parent && category.parentName
+            = category.parentName
+          else if category.parent
+            span(style="color: #999;") Không tìm thấy danh mục cha
+          else
+            span(style="color: #999;") Không có
+      
+      .detail-row
+        .detail-label Mô tả:
+        .detail-value
+          if category.description
+            div!= category.description
+          else
+            span(style="color: #999;") Không có mô tả
+      
+      .detail-row
+        .detail-label Người tạo:
+        .detail-value
+          if category.createdByFullName
+            = category.createdByFullName
+          else
+            span(style="color: #999;") Không rõ
+      
+      .detail-row
+        .detail-label Ngày tạo:
+        .detail-value= category.createdAtFormat
+
+  style.
+    .box-detail {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .detail-row {
+      display: flex;
+      padding: 15px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      font-weight: 600;
+      width: 200px;
+      color: #333;
+    }
+    .detail-value {
+      flex: 1;
+      color: #666;
+    }
+

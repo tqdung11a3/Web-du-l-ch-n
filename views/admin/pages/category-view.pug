@@ -1,0 +1,85 @@
+extends ../layouts/default.pug
+
+block main
+  .box-head
+    h1.box-title Xem danh mục
+    p(style="color: #666; font-size: 14px; margin-top: 8px;") 
+      i.fa-solid.fa-info-circle(style="margin-right: 6px;")
+      | Chỉ Super Admin mới có quyền tạo, sửa, xóa danh mục
+
+  //- Section 4: Bộ lọc
+  .section-4
+    form#form-filter(method="GET")
+      .inner-form
+        .inner-input
+          input(
+            type="text",
+            name="keyword",
+            placeholder="Nhập từ khóa tìm kiếm...",
+            value=keyword
+          )
+        .inner-select
+          select(name="status")
+            option(value="") -- Tất cả trạng thái --
+            option(value="active", selected=statusFilter === "active") Hoạt động
+            option(value="inactive", selected=statusFilter === "inactive") Dừng hoạt động
+        .inner-button
+          button.inner-submit(type="submit") Lọc
+
+  //- Section 6: Danh sách
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Ảnh
+            th Tiêu đề
+            th Vị trí
+            th Trạng thái
+            th Người tạo
+            th Ngày tạo
+            th Hành động
+        tbody
+          if categoryList.length > 0
+            each item, index in categoryList
+              tr
+                td= index + 1 + pagination.skip
+                td
+                  if item.avatar
+                    img(src=item.avatar, alt=item.name, style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;")
+                  else
+                    span(style="color: #999;") Chưa có ảnh
+                td= item.name
+                td= item.position
+                td
+                  if item.status === "active"
+                    span.badge.badge-green Hoạt động
+                  else
+                    span.badge.badge-red Dừng hoạt động
+                td
+                  if item.createdByFullName
+                    = item.createdByFullName
+                  else
+                    span(style="color: #999;") Không rõ
+                td= item.createdAtFormat
+                td
+                  .inner-buttons
+                    a.inner-btn.inner-btn-view(href=`/${pathAdmin}/category/detail/${item._id}`, title="Xem chi tiết")
+                      <i class="fa-solid fa-eye"></i>
+          else
+            tr
+              td(colspan="8", style="text-align: center; padding: 30px; color: #999;") Không có danh mục nào
+
+  //- Section 7: Phân trang
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label
+        | Hiển thị #{pagination.skip + 1}
+        | - #{pagination.skip + categoryList.length}
+        | của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}
+  //- End Section 7
+

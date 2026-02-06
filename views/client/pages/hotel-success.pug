@@ -1,0 +1,19 @@
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+
+block main
+  +box-breadcrumb([{name: "Khách sạn", slug:"/hotel/search", avatar:""}, {name:"Đặt phòng thành công"}])
+
+  .section-9
+    .container
+      h2.inner-title Cảm ơn bạn đã đặt phòng!
+      p Mã đơn đặt phòng của bạn là:
+        b #{code}
+      p Chúng tôi đã ghi nhận thông tin và sẽ liên hệ để xác nhận trong thời gian sớm nhất.
+      if booking && booking.hotel
+        h3.inner-title Thông tin khách sạn
+        p= booking.hotel.name
+        p= booking.hotel.address
+        p Thời gian: #{booking.checkIn.toLocaleDateString('vi-VN')} - #{booking.checkOut.toLocaleDateString('vi-VN')}
+        p Tổng tiền: #{booking.totalAmount.toLocaleString('vi-VN')} #{booking.currency}
+      a.button-primary(href="/") Về trang chủ

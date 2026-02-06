@@ -1,0 +1,32 @@
+mixin pagination(pagination)
+  if pagination.totalPage > 1
+    .pagination(style="margin-top: 20px; display: flex; justify-content: center; gap: 10px;")
+      - var currentPage = parseInt(new URL(fullUrl).searchParams.get('page')) || 1
+      
+      if currentPage > 1
+        a.page-link(href=`?page=${currentPage - 1}`, style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333;")
+          <i class="fa-solid fa-chevron-left"></i>
+      
+      - var startPage = Math.max(1, currentPage - 2)
+      - var endPage = Math.min(pagination.totalPage, currentPage + 2)
+      
+      if startPage > 1
+        a.page-link(href=`?page=1`, style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333;") 1
+        if startPage > 2
+          span(style="padding: 8px 12px;") ...
+      
+      - for (var i = startPage; i <= endPage; i++)
+        if i == currentPage
+          span.page-link.active(style="padding: 8px 12px; border: 1px solid #4CAF50; background: #4CAF50; color: white; border-radius: 4px;")= i
+        else
+          a.page-link(href=`?page=${i}`, style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333;")= i
+      
+      if endPage < pagination.totalPage
+        if endPage < pagination.totalPage - 1
+          span(style="padding: 8px 12px;") ...
+        a.page-link(href=`?page=${pagination.totalPage}`, style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333;")= pagination.totalPage
+      
+      if currentPage < pagination.totalPage
+        a.page-link(href=`?page=${currentPage + 1}`, style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333;")
+          <i class="fa-solid fa-chevron-right"></i>
+

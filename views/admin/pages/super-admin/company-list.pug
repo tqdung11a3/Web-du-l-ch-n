@@ -1,0 +1,132 @@
+extends ../../layouts/super-admin.pug
+
+block main
+  h1.box-title= pageTitle
+
+  //- Section 4: Bộ lọc
+  .section-4
+    .inner-wrap
+      .inner-item
+        i.fa-solid.fa-filter
+        |  Bộ lọc
+      .inner-item
+        form(method="GET" style="display: flex; gap: 10px; align-items: center;")
+          input(
+            type="text"
+            name="keyword"
+            placeholder="Tìm kiếm công ty..."
+            value=keyword
+            style="height: 42px; padding: 0 14px; border: 1px solid #d5d5d5; border-radius: 4px; font-size: 14px;"
+          )
+          select(
+            name="status"
+            style="height: 42px; padding: 0 14px; border: 1px solid #d5d5d5; border-radius: 4px; font-size: 14px; cursor: pointer;"
+          )
+            option(value="" selected=!statusFilter) Tất cả trạng thái
+            option(value="active" selected=statusFilter==='active') Đang hoạt động
+            option(value="inactive" selected=statusFilter==='inactive') Tạm dừng
+          button(
+            type="submit"
+            style="height: 42px; padding: 0 20px; background-color: var(--color-primary); color: white; border: 0; border-radius: 4px; font-weight: 600; font-size: 14px; cursor: pointer;"
+          ) Tìm kiếm
+  //- End Section 4
+
+  //- Section 6: Bảng danh sách
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th(class="inner-center") Logo
+            th Tên công ty
+            th Email
+            th Hotline
+            th(class="inner-center") Admin
+            th(class="inner-center") Tours
+            th(class="inner-center") Hotels
+            th(class="inner-center") Trạng thái
+            th(class="inner-center") Hành động
+        tbody
+          if companies && companies.length
+            each company, index in companies
+              tr
+                td= index + 1
+                td(class="inner-center")
+                  if company.logo
+                    img.inner-avatar(src=company.logo alt=company.name)
+                  else
+                    i.fa-solid.fa-building(style="font-size: 24px; color: #ccc;")
+                td
+                  a(
+                    href=`/${pathAdmin}/super-admin/company/${company._id}`
+                    style="color: var(--color-primary); font-weight: 600; text-decoration: none;"
+                  )= company.name
+                td= company.email || '-'
+                td= company.hotline || '-'
+                td(class="inner-center")= company.adminCount || 0
+                td(class="inner-center")= company.tourCount || 0
+                td(class="inner-center")= company.hotelCount || 0
+                td(class="inner-center")
+                  if company.status === 'active'
+                    .badge.badge-green Hoạt động
+                  else
+                    .badge.badge-red Tạm dừng
+                td
+                  .inner-buttons
+                    - const nextStatus = company.status === 'active' ? 'inactive' : 'active'
+                    - const toggleIcon = company.status === 'active' ? 'fa-toggle-on' : 'fa-toggle-off'
+                    button(
+                      type="button"
+                      class="inner-edit"
+                      onclick=`changeStatus('${company._id}', '${nextStatus}')`
+                      title=company.status === 'active' ? 'Tạm dừng' : 'Kích hoạt'
+                    )
+                      i.fa-solid(class=toggleIcon)
+                    button(
+                      type="button"
+                      class="inner-delete"
+                      onclick=`deleteCompany('${company._id}')`
+                      title="Xóa"
+                    )
+                      i.fa-regular.fa-trash-can
+          else
+            tr
+              td(colspan="10" class="inner-center") Không tìm thấy công ty nào
+  //- End Section 6
+
+  //- Section 7: Pagination (nếu cần)
+  if companies && companies.length
+    .section-7
+      span.inner-label Hiển thị #{companies.length} công ty
+  //- End Section 7
+
+  script.
+    function changeStatus(id, status) {
+      if (!confirm(`Chuyển trạng thái công ty thành "${status}"?`)) return;
+      
+      fetch(`/${pathAdmin}/super-admin/company/change-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message);
+        if (data.code === 'success') location.reload();
+      });
+    }
+
+    function deleteCompany(id) {
+      if (!confirm('Xóa công ty này? Hành động không thể hoàn tác!')) return;
+      
+      fetch(`/${pathAdmin}/super-admin/company/${id}`, {
+        method: 'DELETE'
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message);
+        if (data.code === 'success') location.reload();
+      });
+    }
+

@@ -1,0 +1,1474 @@
+//- views/client/pages/hotel-detail.pug
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+
+block main
+  +box-breadcrumb(breadcrumb || [
+    { name: 'Khách sạn', slug: '/hotel/search' },
+    { 
+      name: `Đặt phòng ${hotel && hotel.name}`, 
+      slug: '',
+      avatar: (hotel && hotel.avatar) || (hotel && Array.isArray(hotel.images) && hotel.images[0]) || ''
+    }
+  ])
+
+  .hotel-detail-container
+    // ================== HEADER ==================
+    .detail-header
+      h1.detail-title= hotel.name
+      if hotel.starRating
+        - const starNum = Number(hotel.starRating || 0);
+        .detail-stars
+          - for (let i = 0; i < starNum; i++) {
+            i.fa-solid.fa-star
+          - }
+      - const provinceName = hotel.province && hotel.province.name ? hotel.province.name : (hotel.cityName || '')
+      if provinceName
+        p.detail-province
+          i.fa-solid.fa-map-marker-alt
+          | #{provinceName}
+      if hotel.address
+        p.detail-address
+          i.fa-solid.fa-location-dot
+          | #{hotel.address}
+      if hotel.phone
+        p.detail-phone
+          i.fa-solid.fa-phone
+          a(href=`tel:${hotel.phone}`)= hotel.phone
+
+      if ratingStats && ratingStats.overall
+        .detail-rating-summary
+          span.detail-rating-summary__score #{ratingStats.overall.toFixed(1)}
+          span.detail-rating-summary__text Tuyệt vời
+          if ratingStats.count
+            span.detail-rating-summary__count (Dựa trên #{ratingStats.count} đánh giá)
+
+    // ================== GALLERY ==================
+    .detail-gallery
+      .detail-gallery__left
+        if galleryImages && galleryImages.length
+          each imgUrl, idx in galleryImages
+            a.gallery-thumb(href=imgUrl target="_blank")
+              img(src=imgUrl alt=`Ảnh ${idx + 1}`)
+        else
+          a.gallery-thumb(href=mainImage target="_blank")
+            img(src=mainImage alt="Ảnh khách sạn")
+
+      .detail-gallery__main
+        img(src=mainImage alt=`Ảnh khách sạn ${hotel.name}`)
+
+    // ================== GIỚI THIỆU + MAP / VỊ TRÍ ==================
+    .detail-about
+      .about-left
+        h2 Tổng quan chỗ nghỉ
+        .about-box
+          if hotel.shortDescription
+            p= hotel.shortDescription
+          if hotel.description
+            p= hotel.description
+          if highlights && highlights.length
+            h3 Điểm nổi bật nhất
+            ul.highlight-list
+              each item in highlights
+                li
+                  if item.image
+                    img.highlight-image.lightbox-image(src=item.image alt=item.title || '' data-title=item.title || '')
+                  i.fa-solid.fa-check
+                  |  #{item.title || item}
+      .about-right
+        h2 Vị trí
+        .map-box
+          if googleMapsEmbedUrl
+            iframe(
+              src=googleMapsEmbedUrl
+              width="100%"
+              height="400"
+              style="border:0; border-radius: 8px;"
+              allowfullscreen=""
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"
+            )
+          else if hotel.googleMapsLink
+            // Fallback: nếu không convert được, hiển thị link
+            .map-share-link
+              a.map-link-button(href=hotel.googleMapsLink target="_blank" rel="noopener noreferrer")
+                i.fa-solid.fa-map-location-dot
+                span Xem trên Google Maps
+              p.map-link-hint Nhấp vào để xem vị trí trên Google Maps
+          else
+            .map-placeholder
+              i.fa-solid.fa-map-location-dot
+              span Bản đồ vị trí sẽ được hiển thị tại đây
+
+    // ================== KHUYẾN MẠI / GỢI Ý ==================
+    if promotionShortText
+      .promo-section
+        h2 Đang có khuyến mại kỳ nghỉ ngắn
+        p.promo-text= promotionShortText
+
+    // ================== LÊN KẾ HOẠCH ĐẾN KHÁCH SẠN ==================
+    if transportOptions && transportOptions.length
+      .transport-section
+        h2 Lên kế hoạch đến khách sạn
+        .transport-cards
+          each t in transportOptions
+            .transport-card
+              i.fa-solid.fa-car-side
+              span= t
+
+    // ================== TIỆN NGHI ==================
+    if amenities && amenities.length
+      .amenities
+        h2 Tiện nghi
+        .amenities-list
+          each amenity in amenities
+            - const amenityName = typeof amenity === 'string' ? amenity : (amenity.name || '')
+            - const amenityFeatures = typeof amenity === 'object' && amenity.features ? amenity.features : []
+            .amenity-item
+              .amenity-header
+                i.fa-solid.fa-check
+                h3.amenity-name= amenityName
+              if amenityFeatures.length > 0
+                ul.amenity-features
+                  each feature in amenityFeatures
+                    li= feature
+
+    // ================== CƠ SỞ VẬT CHẤT ==================
+    if facilities && facilities.length
+      .facilities
+        h2 Cơ sở vật chất
+        .facilities-grid
+          each facility in facilities
+            - const facilityName = facility.name || ''
+            - const facilityCategory = facility.category || ''
+            - const facilityImage = facility.image || ''
+            .facility-card
+              if facilityImage
+                .facility-image
+                  img.lightbox-image(src=facilityImage alt=facilityName data-title=facilityName)
+              .facility-content
+                h3.facility-name= facilityName
+                if facilityCategory
+                  span.facility-category= facilityCategory
+
+    // ================== TOP BAR ==================
+    .detail-top
+      ul.detail-top__info
+        li
+          i.fa-regular.fa-calendar-days
+          if searchInfo
+            span #{searchInfo.checkInLabel} → #{searchInfo.checkOutLabel}
+          else
+            span Chưa chọn ngày
+        li
+          i.fa-regular.fa-building
+          span #{(searchInfo && searchInfo.rooms) || 1} phòng
+        li
+          i.fa-regular.fa-user
+          span #{(searchInfo && searchInfo.adults) || 1} người lớn#{(searchInfo && searchInfo.children) ? `, ${searchInfo.children} trẻ em` : ''}
+      .detail-top__actions
+        button.detail-top__btn#editSearchBtn(type="button" aria-label="Sửa tìm kiếm")
+          i.fa-regular.fa-pen-to-square
+        a.detail-top__primary(href="#rooms") Xem giá
+
+    // ================== MODAL EDIT SEARCH ==================
+    .edit-search-modal#editSearchModal(style="display: none;")
+      .edit-search-modal__overlay
+      .edit-search-modal__content
+        .edit-search-modal__header
+          h3 Chỉnh sửa tìm kiếm
+          button.edit-search-modal__close(type="button" aria-label="Đóng")
+            i.fa-solid.fa-times
+        .edit-search-modal__body
+          form#editSearchForm(action="" method="get")
+            .form-group
+              label(for="editCheckInDate") Ngày nhận phòng
+              input#editCheckInDate(
+                type="date"
+                name="checkInDate"
+                value=(searchInfo && searchInfo.checkInDate) || ""
+              )
+            .form-group
+              label(for="editCheckOutDate") Ngày trả phòng
+              input#editCheckOutDate(
+                type="date"
+                name="checkOutDate"
+                value=(searchInfo && searchInfo.checkOutDate) || ""
+              )
+            .form-group
+              label(for="editGuests") Số khách
+              button#editGuestBtn.edit-search-guests-btn(type="button" aria-expanded="false")
+                - const qRooms = Number((searchInfo && searchInfo.rooms) || 1)
+                - const qAdults = Number((searchInfo && searchInfo.adults) || 1)
+                - const qChildren = Number((searchInfo && searchInfo.children) || 0)
+                span#editGuestText
+                  | #{qRooms} phòng - #{qAdults} người lớn#{qChildren > 0 ? `, ${qChildren} trẻ em` : ''}
+                i.fa-solid.fa-chevron-down
+              .edit-guests-popup#editGuestsPopup(aria-hidden="true")
+                #editRoomsContainer.edit-guests-rooms-container
+                  // Phòng sẽ được render bằng JavaScript
+                .edit-guests-popup__add-room
+                  button#editAddRoomBtn.edit-guests-popup__add-room-btn(type="button") Thêm phòng khác
+                input(type="hidden" name="roomsData" id="editRoomsDataInput" value=(searchInfo && searchInfo.roomsData) || "")
+                input(type="hidden" name="rooms" id="editRoomsInput" value=(searchInfo && searchInfo.rooms) || "1")
+                input(type="hidden" name="adults" id="editAdultsInput" value=(searchInfo && searchInfo.adults) || "1")
+                input(type="hidden" name="children" id="editChildrenInput" value=(searchInfo && searchInfo.children) || "0")
+            .form-group.form-group--actions
+              button.btn-cancel(type="button") Hủy
+              button.btn-submit(type="submit") Áp dụng
+
+    // ================== PHÂN BỔ PHÒNG ==================
+    if searchInfo && searchInfo.roomsData
+      - var parsedRoomsData = [];
+      - try {
+      -   parsedRoomsData = JSON.parse(decodeURIComponent(searchInfo.roomsData));
+      - } catch (e) {
+      -   parsedRoomsData = [];
+      - }
+      if parsedRoomsData && parsedRoomsData.length > 0
+        .room-allocation-section#roomAllocation
+          h2 Phân bổ phòng
+          p.allocation-hint Vui lòng chọn loại phòng cho từng phòng bạn muốn đặt
+          .allocation-list
+            each roomData, roomIdx in parsedRoomsData
+              - var roomAdults = roomData.adults || 1
+              - var roomChildren = Array.isArray(roomData.children) ? roomData.children : []
+              - var roomChildrenCount = roomChildren.length
+              .allocation-item(data-room-index=roomIdx)
+                .allocation-item__info
+                  h3.allocation-item__title Phòng #{roomIdx + 1}
+                  .allocation-item__guests
+                    span
+                      i.fa-regular.fa-user
+                      |  #{roomAdults} người lớn
+                    if roomChildrenCount > 0
+                      span
+                        i.fa-solid.fa-child
+                        |  #{roomChildrenCount} trẻ em (
+                        each child, childIdx in roomChildren
+                          if childIdx > 0
+                            | , 
+                          |#{child.age || 0} tuổi
+                        | )
+                .allocation-item__select
+                  label(for=`room-type-select-${roomIdx}`) Chọn loại phòng:
+                  select.room-type-selector(
+                    id=`room-type-select-${roomIdx}`
+                    data-room-index=roomIdx
+                  )
+                    option(value="" selected) -- Chọn loại phòng --
+                    //- Options sẽ được render bởi JavaScript
+                  .allocation-item__warning(
+                    id=`room-warning-${roomIdx}`
+                    style="display: none;"
+                  )
+                    i.fa-solid.fa-circle-exclamation
+                    span.warning-text Không có loại phòng nào phù hợp với sức chứa của phòng này trong khoảng thời gian bạn chọn
+          .allocation-actions
+            button#addSelectedRoomsToCart.btn-add-allocation(type="button" disabled)
+              i.fa-solid.fa-cart-plus
+              |  Thêm tất cả vào giỏ hàng
+
+    // ================== DANH SÁCH PHÒNG ==================
+    .rooms#rooms
+      h2 Các lựa chọn phòng
+      if roomOptions && roomOptions.length
+        .rooms-filter
+          //- Gợi ý vài filter đơn giản, bạn style theo ý
+          span.filter-chip Hủy miễn phí (nếu có)
+          span.filter-chip Bao gồm bữa sáng
+          span.filter-chip WiFi miễn phí
+        each room, roomIndex in roomOptions
+          - var roomDataObj = {};
+          - roomDataObj.title = room.title || '';
+          - roomDataObj.description = room.description || '';
+          - roomDataObj.pricePerNight = room.pricePerNight || 0;
+          - roomDataObj.currency = room.currency || 'đ';
+          - roomDataObj.baseOccupancy = room.baseOccupancy || 2;
+          - roomDataObj.maxOccupancy = room.maxOccupancy || 3;
+          - roomDataObj.maxExtraBeds = room.maxExtraBeds || 0;
+          - roomDataObj.extraBedFeePerNight = room.extraBedFeePerNight || 0;
+          - roomDataObj.sizeM2 = (room.roomDetails && room.roomDetails.sizeM2) || null;
+          - roomDataObj.bedInfo = (room.roomDetails && room.roomDetails.bedInfo) || '';
+          - roomDataObj.view = (room.roomDetails && room.roomDetails.view) || '';
+          - roomDataObj.smokingPolicy = (room.roomDetails && room.roomDetails.smokingPolicy) || '';
+          - roomDataObj.bathroomAmenities = room.bathroomAmenities || [];
+          - roomDataObj.roomAmenities = room.roomAmenities || [];
+          - roomDataObj.images = room.images || [];
+          - var roomData = JSON.stringify(roomDataObj).replace(/"/g, '&quot;');
+          .room-card(
+            data-room-info=roomData
+            style="cursor: pointer;"
+          )
+            .room-card__left
+              .room-card__image-carousel(class=`room-carousel-${roomIndex}`)
+                .swiper.room-image-swiper
+                  .swiper-wrapper
+                    each image in room.images
+                      .swiper-slide
+                        img(src=image alt=room.title)
+                  .swiper-button-prev
+                  .swiper-button-next
+                  .swiper-pagination
+            .room-card__content
+              h3= room.title
+              .room-meta
+                span
+                  i.fa-regular.fa-user
+                  |  Tối đa #{room.maxGuests} khách
+                if room.vacantRooms !== undefined && room.vacantRooms !== null && room.vacantRooms >= 0
+                  span.room-vacant-count
+                    i.fa-solid.fa-bed
+                    |  Còn #{room.vacantRooms} phòng trống
+              if room.description
+                ul.room-features
+                  li= room.description
+              if room.roomDetails
+                ul.room-features
+                  if room.roomDetails.sizeM2
+                    li
+                      strong Diện tích: 
+                      | #{room.roomDetails.sizeM2} m²
+                  if room.roomDetails.bedInfo
+                    li
+                      strong Thông tin giường: 
+                      | #{room.roomDetails.bedInfo}
+                  if room.roomDetails.view
+                    li
+                      strong Tầm nhìn: 
+                      | #{room.roomDetails.view}
+                  if room.roomDetails.smokingPolicy
+                    li
+                      strong Chính sách hút thuốc: 
+                      | #{room.roomDetails.smokingPolicy}
+            .room-card__right
+              - const priceStr = Number(room.pricePerNight || 0).toLocaleString('vi-VN');
+              - const hasDates = checkInDate && checkOutDate;
+              .room-price #{priceStr} #{room.currency || 'đ'}
+              small / 1 đêm
+              small.room-policy-link(onclick="event.stopPropagation();") Quy định hủy phòng
+      else
+        p Hiện chưa có loại phòng nào được cấu hình cho khách sạn này.
+
+    // ================== QUY ĐỊNH CHỖ NGHỈ ==================
+    .policies
+      h2 Quy định của chỗ nghỉ
+      .policy-grid
+        if rules && (rules.checkinTimeFrom || rules.checkoutTimeTo)
+          .policy-card
+            .policy-card__title
+              i.fa-solid.fa-clock
+              |  Nhận phòng / Trả phòng
+            if rules.checkinTimeFrom
+              p Nhận phòng từ: #{rules.checkinTimeFrom}
+            if rules.checkoutTimeTo
+              p Trả phòng đến: #{rules.checkoutTimeTo}
+            if rules.earlyCheckinTime
+              - const earlyFee = rules.earlyCheckinFee ? Number(rules.earlyCheckinFee).toLocaleString('vi-VN') : '0'
+              p 
+                i.fa-solid.fa-arrow-down(style="color: #28a745; margin-right: 5px;")
+                |  Nhận phòng sớm từ #{rules.earlyCheckinTime}: +#{earlyFee} VND
+            if rules.lateCheckoutTime
+              - const lateFee = rules.lateCheckoutFee ? Number(rules.lateCheckoutFee).toLocaleString('vi-VN') : '0'
+              p 
+                i.fa-solid.fa-arrow-up(style="color: #ffc107; margin-right: 5px;")
+                |  Trả phòng muộn đến #{rules.lateCheckoutTime}: +#{lateFee} VND
+        if rules && rules.numberOfRooms
+          .policy-card
+            .policy-card__title
+              i.fa-solid.fa-door-open
+              |  Số lượng phòng
+            p Có khoảng #{rules.numberOfRooms} phòng tại chỗ nghỉ.
+        if rules && rules.children
+          .policy-card
+            .policy-card__title
+              i.fa-solid.fa-child-reaching
+              |  Trẻ em & giường phụ
+            p= rules.children
+        if rules && rules.pets
+          .policy-card
+            .policy-card__title
+              i.fa-solid.fa-dog
+              |  Thú cưng
+            p= rules.pets
+        if rules && rules.extraBed
+          .policy-card
+            .policy-card__title
+              i.fa-solid.fa-bed
+            p= rules.extraBed
+      if rules && rules.other
+        .policy-others
+          h3 Thông tin khác
+          p= rules.other
+
+    // ================== CHÍNH SÁCH TRẺ EM VÀ GIƯỜNG PHỤ ==================
+    // Ưu tiên hiển thị Age Bands mới, nếu không có thì dùng childrenPolicy cũ
+    if ageBands && ageBands.length > 0
+      .children-policy-section
+        h2 Chính sách trẻ em và giường phụ
+        .children-policy-grid
+          each band in ageBands
+            - const minAge = band.minAge || 0
+            - const maxAge = band.maxAge !== null && band.maxAge !== undefined ? band.maxAge : null
+            - const ageRange = maxAge ? `${minAge}-${maxAge} tuổi` : `${minAge} tuổi trở lên`
+            - const bandName = band.bandName || (band.bandType === 'infant' ? 'Trẻ sơ sinh' : band.bandType === 'child' ? 'Trẻ em' : band.bandType === 'adult' ? 'Người lớn' : 'Khác')
+            .policy-detail-card
+              h3 #{bandName} (#{ageRange})
+              .policy-detail-content
+                // Tính vào sức chứa
+                if band.countInOccupancy !== undefined
+                  p
+                    i.fa-solid.fa-check(style=band.countInOccupancy ? "color: #28a745;" : "color: #dc3545;")
+                    |  #{band.countInOccupancy ? 'Tính vào số người' : 'Không tính vào số người'}
+                  if band.countInOccupancy && band.occupancyWeight
+                    p
+                      i.fa-solid.fa-weight-hanging
+                      |  Trọng số: #{band.occupancyWeight === 0.5 ? '0.5 (tính nửa người)' : '1 (tính đủ 1 người)'}
+                
+                // Ăn sáng
+                if band.breakfastIsFree !== undefined
+                  p
+                    i.fa-solid.fa-utensils
+                    |  Ăn sáng: #{band.breakfastIsFree ? 'Miễn phí' : 'Có phí'}
+                  if !band.breakfastIsFree && band.breakfastFeePerPersonPerMeal > 0
+                    - const breakfastFee = Number(band.breakfastFeePerPersonPerMeal).toLocaleString('vi-VN')
+                    p
+                      i.fa-solid.fa-money-bill
+                      |  Phí ăn sáng: #{breakfastFee} VND/người/bữa
+                
+                // Extra person charge
+                if band.countInOccupancy && band.extraPersonFeePerNight > 0
+                  - const extraPersonFee = Number(band.extraPersonFeePerNight).toLocaleString('vi-VN')
+                  p
+                    i.fa-solid.fa-user-plus
+                    |  Phụ thu vượt base occupancy: #{extraPersonFee} VND/đêm/người
+    else if childrenPolicy && (childrenPolicy.infant0to1 || childrenPolicy.child2to5 || childrenPolicy.guest6Plus)
+      // Fallback: Hiển thị childrenPolicy cũ nếu không có ageBands
+      .children-policy-section
+        h2 Chính sách trẻ em và giường phụ
+        .children-policy-grid
+          if childrenPolicy.infant0to1
+            .policy-detail-card
+              h3 Trẻ sơ sinh (0-1 tuổi)
+              .policy-detail-content
+                if childrenPolicy.infant0to1.freeWithExistingBed !== undefined
+                  p
+                    i.fa-solid.fa-check
+                    |  #{childrenPolicy.infant0to1.freeWithExistingBed ? 'Miễn phí khi sử dụng giường có sẵn' : 'Có phí khi sử dụng giường có sẵn'}
+                if childrenPolicy.infant0to1.cribAvailable
+                  p
+                    i.fa-solid.fa-check
+                    |  Có cũi cho trẻ sơ sinh
+                if childrenPolicy.infant0to1.note
+                  p.note= childrenPolicy.infant0to1.note
+          
+          if childrenPolicy.child2to5
+            .policy-detail-card
+              h3 Trẻ em (2-5 tuổi)
+              .policy-detail-content
+                if childrenPolicy.child2to5.freeWithExistingBed !== undefined
+                  p
+                    i.fa-solid.fa-check
+                    |  #{childrenPolicy.child2to5.freeWithExistingBed ? 'Miễn phí khi sử dụng giường có sẵn' : 'Có phí khi sử dụng giường có sẵn'}
+                if childrenPolicy.child2to5.extraBedCharge > 0
+                  - const extraBedPrice = Number(childrenPolicy.child2to5.extraBedCharge).toLocaleString('vi-VN')
+                  p
+                    i.fa-solid.fa-money-bill
+                    |  Phí giường phụ: #{extraBedPrice} VND
+                if childrenPolicy.child2to5.note
+                  p.note= childrenPolicy.child2to5.note
+          
+          if childrenPolicy.guest6Plus
+            .policy-detail-card
+              h3 Khách từ 6 tuổi trở lên
+              .policy-detail-content
+                if childrenPolicy.guest6Plus.consideredAdult !== undefined
+                  p
+                    i.fa-solid.fa-check
+                    |  #{childrenPolicy.guest6Plus.consideredAdult ? 'Được tính như người lớn' : 'Không được tính như người lớn'}
+                if childrenPolicy.guest6Plus.extraBedRequired
+                  p
+                    i.fa-solid.fa-bed
+                    |  Bắt buộc giường phụ
+                if childrenPolicy.guest6Plus.extraBedCharge > 0
+                  - const extraBedPrice = Number(childrenPolicy.guest6Plus.extraBedCharge).toLocaleString('vi-VN')
+                  p
+                    i.fa-solid.fa-money-bill
+                    |  Phí giường phụ: #{extraBedPrice} VND
+                if childrenPolicy.guest6Plus.note
+                  p.note= childrenPolicy.guest6Plus.note
+
+    // ================== THÔNG TIN HỮU ÍCH ==================
+    if usefulInfo && (usefulInfo.distanceFromCityCenter || usefulInfo.timeToAirport || usefulInfo.airportTransferFee || usefulInfo.wifiFee || usefulInfo.breakfastFee || usefulInfo.builtYear || usefulInfo.numberOfFloors || usefulInfo.inRoomVoltage || usefulInfo.nonSmokingRooms || usefulInfo.numberOfRestaurants || usefulInfo.numberOfBars || usefulInfo.licenseNumber)
+      .useful-info-section
+        h2 Thông tin hữu ích
+        .useful-info-grid
+          // Di chuyển
+          if usefulInfo.distanceFromCityCenter || usefulInfo.timeToAirport || usefulInfo.airportTransferFee
+            .useful-info-card
+              h3
+                i.fa-solid.fa-car
+                |  Di chuyển
+              .useful-info-content
+                if usefulInfo.distanceFromCityCenter
+                  p
+                    strong Khoảng cách từ trung tâm thành phố:
+                    |  #{usefulInfo.distanceFromCityCenter}
+                if usefulInfo.timeToAirport
+                  p
+                    strong Thời gian đến sân bay:
+                    |  #{usefulInfo.timeToAirport}
+                if usefulInfo.airportTransferFee > 0
+                  - const transferFee = Number(usefulInfo.airportTransferFee).toLocaleString('vi-VN')
+                  p
+                    strong Phí đưa đón sân bay:
+                    |  #{transferFee} VND
+          
+          // Thông tin khác
+          if usefulInfo.wifiFee || usefulInfo.breakfastFee
+            .useful-info-card
+              h3
+                i.fa-solid.fa-info-circle
+                |  Thông tin khác
+              .useful-info-content
+                if usefulInfo.wifiFee > 0
+                  - const wifiFee = Number(usefulInfo.wifiFee).toLocaleString('vi-VN')
+                  p
+                    strong Phí WiFi:
+                    |  #{wifiFee} VND/ngày
+                else if usefulInfo.wifiFee === 0
+                  p
+                    i.fa-solid.fa-check
+                    |  WiFi miễn phí
+                if usefulInfo.breakfastFee > 0
+                  - const breakfastFee = Number(usefulInfo.breakfastFee).toLocaleString('vi-VN')
+                  p
+                    strong Phí bữa sáng:
+                    |  #{breakfastFee} VND
+          
+          // Về khách sạn
+          if usefulInfo.builtYear || usefulInfo.numberOfFloors || usefulInfo.inRoomVoltage || usefulInfo.nonSmokingRooms || usefulInfo.numberOfRestaurants || usefulInfo.numberOfBars || usefulInfo.licenseNumber
+            .useful-info-card
+              h3
+                i.fa-solid.fa-building
+                |  Về khách sạn
+              .useful-info-content
+                if usefulInfo.builtYear > 0
+                  p
+                    strong Năm xây dựng:
+                    |  #{usefulInfo.builtYear}
+                if usefulInfo.numberOfFloors > 0
+                  p
+                    strong Số tầng:
+                    |  #{usefulInfo.numberOfFloors}
+                if usefulInfo.inRoomVoltage
+                  p
+                    strong Điện áp trong phòng:
+                    |  #{usefulInfo.inRoomVoltage}V
+                if usefulInfo.nonSmokingRooms
+                  p
+                    i.fa-solid.fa-check
+                    |  Có phòng không hút thuốc
+                if usefulInfo.numberOfRestaurants > 0
+                  p
+                    strong Số nhà hàng:
+                    |  #{usefulInfo.numberOfRestaurants}
+                if usefulInfo.numberOfBars > 0
+                  p
+                    strong Số quầy bar:
+                    |  #{usefulInfo.numberOfBars}
+                if usefulInfo.licenseNumber
+                  p
+                    strong Số giấy phép:
+                    |  #{usefulInfo.licenseNumber}
+
+    // ================== CÂU HỎI THƯỜNG GẶP ==================
+    if faqs && faqs.length
+      .faq-section
+        h2 Các câu hỏi thường gặp
+        ul.faq-list
+          each f, index in faqs
+            li.faq-item
+              button.faq-question(type="button")
+                span.faq-q-label Câu hỏi #{index + 1}:
+                |  #{f.question}
+              .faq-answer
+                p= f.answer
+
+    // ================== BÌNH LUẬN VÀ ĐÁNH GIÁ ==================
+    .hotel-reviews-section#reviews
+      h2 Bình luận và đánh giá
+      
+      // Form đánh giá (chỉ hiển thị khi đã đăng nhập)
+      if isLoggedIn
+        .review-form-container
+          if userReview
+            h3 Chỉnh sửa đánh giá của bạn
+          else
+            h3 Viết đánh giá
+          
+          form#hotel-review-form
+            input(type="hidden" name="hotelId" value=hotel._id)
+            
+            .review-form-group
+              label Điểm tổng thể (1-10) *
+              .star-rating-input
+                - for (let i = 1; i <= 10; i++)
+                  input(type="radio" name="ratingOverall" id=`rating-${i}` value=i checked=(userReview && userReview.ratingOverall === i))
+                  label(for=`rating-${i}`)= i
+              span.rating-display
+                if userReview
+                  | Điểm hiện tại: #{userReview.ratingOverall}/10
+                else
+                  | Chọn điểm từ 1-10
+            
+            .review-form-group
+              label Điểm chi tiết (tùy chọn)
+              .detail-ratings
+                .detail-rating-item
+                  label(for="ratingLocation") Vị trí
+                  .star-rating-small
+                    - for (let i = 1; i <= 10; i++)
+                      input(type="radio" name="ratingLocation" id=`rating-loc-${i}` value=i checked=(userReview && userReview.ratingLocation === i))
+                      label(for=`rating-loc-${i}`)= i
+                
+                .detail-rating-item
+                  label(for="ratingCleanliness") Độ sạch sẽ
+                  .star-rating-small
+                    - for (let i = 1; i <= 10; i++)
+                      input(type="radio" name="ratingCleanliness" id=`rating-clean-${i}` value=i checked=(userReview && userReview.ratingCleanliness === i))
+                      label(for=`rating-clean-${i}`)= i
+                
+                .detail-rating-item
+                  label(for="ratingFacilities") Cơ sở vật chất
+                  .star-rating-small
+                    - for (let i = 1; i <= 10; i++)
+                      input(type="radio" name="ratingFacilities" id=`rating-fac-${i}` value=i checked=(userReview && userReview.ratingFacilities === i))
+                      label(for=`rating-fac-${i}`)= i
+                
+                .detail-rating-item
+                  label(for="ratingService") Dịch vụ
+                  .star-rating-small
+                    - for (let i = 1; i <= 10; i++)
+                      input(type="radio" name="ratingService" id=`rating-serv-${i}` value=i checked=(userReview && userReview.ratingService === i))
+                      label(for=`rating-serv-${i}`)= i
+                
+                .detail-rating-item
+                  label(for="ratingValue") Đáng giá tiền
+                  .star-rating-small
+                    - for (let i = 1; i <= 10; i++)
+                      input(type="radio" name="ratingValue" id=`rating-val-${i}` value=i checked=(userReview && userReview.ratingValue === i))
+                      label(for=`rating-val-${i}`)= i
+            
+            .review-form-group
+              label(for="reviewContent") Nội dung đánh giá
+              textarea#reviewContent(name="content" rows="5" placeholder="Chia sẻ trải nghiệm của bạn về khách sạn này...")= userReview ? (userReview.content || '') : ''
+            
+            button.review-submit-btn(type="submit")
+              if userReview
+                | Cập nhật đánh giá
+              else
+                | Gửi đánh giá
+      
+      // Danh sách đánh giá
+      .reviews-list
+        if reviews && reviews.length > 0
+          each review in reviews
+            .review-item
+              .review-header
+                .review-user
+                  .review-avatar
+                    i.fa-solid.fa-user
+                  .review-user-info
+                    h4.review-user-name= review.userName
+                    - const reviewDate = new Date(review.createdAt)
+                    - const reviewDateStr = reviewDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    .review-date= reviewDateStr
+                .review-rating
+                  span.rating-score= review.ratingOverall
+                  span.rating-max /10
+              if review.content
+                .review-content= review.content
+              if review.ratingLocation || review.ratingCleanliness || review.ratingFacilities || review.ratingService || review.ratingValue
+                .review-details
+                  if review.ratingLocation
+                    .review-detail-item
+                      span.label Vị trí:
+                      span.value= review.ratingLocation
+                  if review.ratingCleanliness
+                    .review-detail-item
+                      span.label Độ sạch sẽ:
+                      span.value= review.ratingCleanliness
+                  if review.ratingFacilities
+                    .review-detail-item
+                      span.label Cơ sở vật chất:
+                      span.value= review.ratingFacilities
+                  if review.ratingService
+                    .review-detail-item
+                      span.label Dịch vụ:
+                      span.value= review.ratingService
+                  if review.ratingValue
+                    .review-detail-item
+                      span.label Đáng giá tiền:
+                      span.value= review.ratingValue
+        else
+          p.reviews-empty Chưa có đánh giá nào. Hãy là người đầu tiên đánh giá khách sạn này!
+
+    // ================== ĐIỂM ĐÁNH GIÁ (TỔNG QUAN) ==================
+    if ratingStats && ratingStats.overall
+      .review-summary
+        h2 Bài đánh giá từ khách hàng
+        .review-summary__top
+          .review-summary__score-box
+            .review-summary__score #{ratingStats.overall.toFixed(1)}
+            span.review-summary__score-text Rất tốt
+            if ratingStats.count
+              span.review-summary__score-count Dựa trên #{ratingStats.count} bài đánh giá
+        .review-summary__grid
+          if ratingStats.cleanliness
+            .review-summary__item
+              span.label Độ sạch sẽ
+              span.value #{ratingStats.cleanliness.toFixed(1)}
+          if ratingStats.facilities
+            .review-summary__item
+              span.label Cơ sở vật chất
+              span.value #{ratingStats.facilities.toFixed(1)}
+          if ratingStats.service
+            .review-summary__item
+              span.label Dịch vụ
+              span.value #{ratingStats.service.toFixed(1)}
+          if ratingStats.valueForMoney
+            .review-summary__item
+              span.label Đáng giá tiền
+              span.value #{ratingStats.valueForMoney.toFixed(1)}
+
+  // ================== ROOM DETAIL MODAL ==================
+  .room-detail-modal#roomDetailModal(style="display: none;")
+    .room-detail-modal__overlay
+    .room-detail-modal__content
+      button.room-detail-modal__close(type="button" aria-label="Đóng")
+        i.fa-solid.fa-times
+      .room-detail-modal__body
+        // Content sẽ được fill bằng JavaScript
+
+  // ================== LIGHTBOX MODAL ==================
+  .lightbox-modal#lightboxModal
+    .lightbox-overlay
+    .lightbox-content
+      button.lightbox-close(type="button" aria-label="Đóng")
+        i.fa-solid.fa-xmark
+      .lightbox-image-wrapper
+        img.lightbox-image-large(src="" alt="")
+      .lightbox-controls
+        button.lightbox-zoom-in(type="button" aria-label="Phóng to")
+          i.fa-solid.fa-plus
+        button.lightbox-zoom-out(type="button" aria-label="Thu nhỏ")
+          i.fa-solid.fa-minus
+        button.lightbox-reset(type="button" aria-label="Đặt lại")
+          i.fa-solid.fa-rotate-left
+      .lightbox-title
+
+  script.
+    // Lightbox functionality with size adjustment
+    document.addEventListener('DOMContentLoaded', function() {
+      const lightboxImages = document.querySelectorAll('.lightbox-image');
+      const lightboxModal = document.getElementById('lightboxModal');
+      if (!lightboxModal) return;
+      
+      const lightboxImageLarge = lightboxModal.querySelector('.lightbox-image-large');
+      const lightboxImageWrapper = lightboxModal.querySelector('.lightbox-image-wrapper');
+      const lightboxTitle = lightboxModal.querySelector('.lightbox-title');
+      const lightboxClose = lightboxModal.querySelector('.lightbox-close');
+      const lightboxOverlay = lightboxModal.querySelector('.lightbox-overlay');
+      const zoomInBtn = lightboxModal.querySelector('.lightbox-zoom-in');
+      const zoomOutBtn = lightboxModal.querySelector('.lightbox-zoom-out');
+      const resetBtn = lightboxModal.querySelector('.lightbox-reset');
+
+      let currentScale = 1;
+      const minScale = 0.5;
+      const maxScale = 3;
+      const scaleStep = 0.25;
+
+      // Reset size
+      function resetSize() {
+        currentScale = 1;
+        originalDisplayWidth = 0;
+        originalDisplayHeight = 0;
+        updateImageSize();
+      }
+
+      // Store original display size
+      let originalDisplayWidth = 0;
+      let originalDisplayHeight = 0;
+
+      // Update image size
+      function updateImageSize() {
+        if (lightboxImageLarge) {
+          // Get container dimensions
+          const containerWidth = window.innerWidth * 0.9;
+          const containerHeight = window.innerHeight * 0.85;
+          
+          // On first load, calculate original fit size
+          if (originalDisplayWidth === 0 || originalDisplayHeight === 0) {
+            const img = new Image();
+            img.src = lightboxImageLarge.src;
+            const naturalWidth = lightboxImageLarge.naturalWidth || img.width;
+            const naturalHeight = lightboxImageLarge.naturalHeight || img.height;
+            
+            // Calculate size to fit container while maintaining aspect ratio
+            const widthRatio = containerWidth / naturalWidth;
+            const heightRatio = containerHeight / naturalHeight;
+            const fitRatio = Math.min(widthRatio, heightRatio);
+            
+            originalDisplayWidth = naturalWidth * fitRatio;
+            originalDisplayHeight = naturalHeight * fitRatio;
+          }
+          
+          // Apply current scale
+          const newWidth = originalDisplayWidth * currentScale;
+          const newHeight = originalDisplayHeight * currentScale;
+          
+          lightboxImageLarge.style.width = newWidth + 'px';
+          lightboxImageLarge.style.height = newHeight + 'px';
+          lightboxImageLarge.style.maxWidth = 'none';
+          lightboxImageLarge.style.maxHeight = 'none';
+        }
+      }
+
+      // Zoom in (make image bigger)
+      function zoomIn() {
+        currentScale = Math.min(currentScale + scaleStep, maxScale);
+        updateImageSize();
+      }
+
+      // Zoom out (make image smaller)
+      function zoomOut() {
+        currentScale = Math.max(currentScale - scaleStep, minScale);
+        updateImageSize();
+      }
+
+      // Open lightbox
+      lightboxImages.forEach(img => {
+        img.style.cursor = 'pointer';
+        img.addEventListener('click', function() {
+          const imageSrc = this.src;
+          const imageTitle = this.getAttribute('data-title') || this.alt || '';
+          
+          // Reset before loading new image
+          originalDisplayWidth = 0;
+          originalDisplayHeight = 0;
+          currentScale = 1;
+          
+          lightboxImageLarge.src = imageSrc;
+          lightboxTitle.textContent = imageTitle;
+          
+          // Wait for image to load before setting size
+          lightboxImageLarge.onload = function() {
+            originalDisplayWidth = 0;
+            originalDisplayHeight = 0;
+            updateImageSize();
+          };
+          
+          lightboxModal.classList.add('active');
+          document.body.style.overflow = 'hidden';
+          
+          // If image already loaded
+          if (lightboxImageLarge.complete) {
+            setTimeout(() => {
+              originalDisplayWidth = 0;
+              originalDisplayHeight = 0;
+              updateImageSize();
+            }, 100);
+          }
+        });
+      });
+
+      // Close lightbox
+      function closeLightbox() {
+        lightboxModal.classList.remove('active');
+        document.body.style.overflow = '';
+        resetSize();
+      }
+
+      if (lightboxClose) {
+        lightboxClose.addEventListener('click', closeLightbox);
+      }
+      if (lightboxOverlay) {
+        lightboxOverlay.addEventListener('click', function(e) {
+          if (e.target === lightboxOverlay) {
+            closeLightbox();
+          }
+        });
+      }
+
+      // Zoom controls
+      if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          zoomIn();
+        });
+      }
+      if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          zoomOut();
+        });
+      }
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          resetSize();
+        });
+      }
+
+      // Mouse wheel zoom
+      if (lightboxImageWrapper) {
+        lightboxImageWrapper.addEventListener('wheel', function(e) {
+          if (!lightboxModal.classList.contains('active')) return;
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -scaleStep : scaleStep;
+          currentScale = Math.max(minScale, Math.min(maxScale, currentScale + delta));
+          updateImageSize();
+        });
+      }
+
+      // Close on Escape key
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lightboxModal.classList.contains('active')) {
+          closeLightbox();
+        }
+      });
+    });
+
+    // Initialize Swiper for room image carousels
+    document.addEventListener('DOMContentLoaded', function() {
+      const roomCarousels = document.querySelectorAll('.room-image-swiper');
+      roomCarousels.forEach((carousel, index) => {
+        const slides = carousel.querySelectorAll('.swiper-slide');
+        const hasMultipleImages = slides.length > 1;
+        
+        const swiperConfig = {
+          slidesPerView: 1,
+          spaceBetween: 0,
+          loop: hasMultipleImages,
+          pagination: {
+            el: carousel.querySelector('.swiper-pagination'),
+            clickable: true,
+          },
+        };
+        
+        // Chỉ thêm navigation nếu có nhiều hơn 1 ảnh
+        if (hasMultipleImages) {
+          swiperConfig.navigation = {
+            nextEl: carousel.querySelector('.swiper-button-next'),
+            prevEl: carousel.querySelector('.swiper-button-prev'),
+          };
+        } else {
+          // Ẩn navigation và pagination nếu chỉ có 1 ảnh
+          const prevBtn = carousel.querySelector('.swiper-button-prev');
+          const nextBtn = carousel.querySelector('.swiper-button-next');
+          const pagination = carousel.querySelector('.swiper-pagination');
+          if (prevBtn) prevBtn.style.display = 'none';
+          if (nextBtn) nextBtn.style.display = 'none';
+          if (pagination) pagination.style.display = 'none';
+        }
+        
+        new Swiper(carousel, swiperConfig);
+      });
+    });
+
+    // Hotel review form submission
+    document.addEventListener('DOMContentLoaded', function() {
+      const reviewForm = document.getElementById('hotel-review-form');
+      if (!reviewForm) return;
+
+      reviewForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const hotelId = reviewForm.querySelector('input[name="hotelId"]').value;
+        const ratingOverall = reviewForm.querySelector('input[name="ratingOverall"]:checked')?.value;
+        const content = reviewForm.querySelector('textarea[name="content"]').value.trim();
+        
+        if (!ratingOverall) {
+          notify.error('Vui lòng chọn điểm tổng thể!');
+          return;
+        }
+
+        const formData = {
+          ratingOverall: parseInt(ratingOverall),
+          content: content,
+        };
+
+        // Lấy các điểm chi tiết nếu có
+        const ratingLocation = reviewForm.querySelector('input[name="ratingLocation"]:checked')?.value;
+        const ratingCleanliness = reviewForm.querySelector('input[name="ratingCleanliness"]:checked')?.value;
+        const ratingFacilities = reviewForm.querySelector('input[name="ratingFacilities"]:checked')?.value;
+        const ratingService = reviewForm.querySelector('input[name="ratingService"]:checked')?.value;
+        const ratingValue = reviewForm.querySelector('input[name="ratingValue"]:checked')?.value;
+
+        if (ratingLocation) formData.ratingLocation = parseInt(ratingLocation);
+        if (ratingCleanliness) formData.ratingCleanliness = parseInt(ratingCleanliness);
+        if (ratingFacilities) formData.ratingFacilities = parseInt(ratingFacilities);
+        if (ratingService) formData.ratingService = parseInt(ratingService);
+        if (ratingValue) formData.ratingValue = parseInt(ratingValue);
+
+        try {
+          const token = document.cookie.split('; ').find(row => row.startsWith('client_token='))?.split('=')[1];
+          const response = await fetch(`/hotel/${hotelId}/reviews`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token ? `Bearer ${token}` : '',
+            },
+            credentials: 'include',
+            body: JSON.stringify(formData),
+          });
+
+          const result = await response.json();
+          
+          if (result.code === 'success') {
+            notify.success(result.message);
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            notify.error(result.message || 'Không thể gửi đánh giá!');
+          }
+        } catch (error) {
+          console.error('Review submission error:', error);
+          notify.error('Có lỗi xảy ra khi gửi đánh giá!');
+        }
+      });
+    });
+
+    // Room Allocation Logic
+    document.addEventListener('DOMContentLoaded', function() {
+      const allocationSection = document.getElementById('roomAllocation');
+      if (!allocationSection) return;
+      
+      const roomOptions = !{JSON.stringify(roomOptions || [])};
+      const selectors = allocationSection.querySelectorAll('.room-type-selector');
+      const addButton = document.getElementById('addSelectedRoomsToCart');
+      
+      // Get roomsData from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomsDataParam = urlParams.get('roomsData');
+      let parsedRoomsData = [];
+      try {
+        parsedRoomsData = JSON.parse(decodeURIComponent(roomsDataParam));
+      } catch (e) {
+        console.error('Failed to parse roomsData:', e);
+      }
+      
+      // Function to calculate effective occupancy (client-side version)
+      function calculateEffectiveOccupancy(room, ageBands) {
+        let totalEffective = room.adults || 0;
+        
+        if (room.children && Array.isArray(room.children)) {
+          room.children.forEach(child => {
+            const age = child.age;
+            
+            // Find matching age band
+            const band = ageBands.find(b => {
+              const minAge = b.minAge || 0;
+              const maxAge = b.maxAge;
+              
+              if (maxAge === null || maxAge === undefined) {
+                return age >= minAge;
+              } else {
+                return age >= minAge && age <= maxAge;
+              }
+            });
+            
+            if (band && band.countInOccupancy) {
+              totalEffective += (band.occupancyWeight || 1);
+            }
+          });
+        }
+        
+        return totalEffective;
+      }
+      
+      // Populate room type options for each room selector
+      selectors.forEach((select, idx) => {
+        const roomData = parsedRoomsData[idx];
+        if (!roomData) {
+          console.warn(`No room data for selector ${idx}`);
+          return;
+        }
+        
+        let hasValidOptions = false;
+        
+        // Filter room options to only show types that fit this specific room
+        roomOptions.forEach(roomType => {
+          const effectiveOccupancy = calculateEffectiveOccupancy(roomData, roomType.ageBands || []);
+          const maxOccupancy = roomType.maxOccupancy || 2;
+          
+          // Only add option if this room fits in this room type
+          if (effectiveOccupancy <= maxOccupancy) {
+            const option = document.createElement('option');
+            option.value = roomType.roomTypeId;
+            option.textContent = `${roomType.title} - ${Number(roomType.pricePerNight || 0).toLocaleString('vi-VN')} ${roomType.currency || 'đ'}/đêm (Còn ${roomType.vacantRooms || 0} phòng)`;
+            option.dataset.roomData = JSON.stringify(roomType);
+            select.appendChild(option);
+            hasValidOptions = true;
+          }
+        });
+        
+        // If no valid options, hide select and show warning
+        const warningElement = document.getElementById(`room-warning-${idx}`);
+        if (!hasValidOptions) {
+          select.style.display = 'none';
+          select.previousElementSibling.style.display = 'none'; // Hide label
+          if (warningElement) {
+            warningElement.style.display = 'flex';
+          }
+        } else {
+          select.style.display = 'block';
+          select.previousElementSibling.style.display = 'block'; // Show label
+          if (warningElement) {
+            warningElement.style.display = 'none';
+          }
+        }
+      });
+      
+      // Enable/disable add button based on selections
+      function updateAddButton() {
+        // Check if all visible selectors have a selection
+        const allSelected = Array.from(selectors).every(s => {
+          // If selector is hidden (no valid options), skip it
+          if (s.style.display === 'none') return true;
+          return s.value !== '';
+        });
+        
+        // Check if there are any hidden selectors (rooms that can't be booked)
+        const hasInvalidRooms = Array.from(selectors).some(s => s.style.display === 'none');
+        
+        // Disable button if not all selected OR if there are invalid rooms
+        addButton.disabled = !allSelected || hasInvalidRooms;
+      }
+      
+      selectors.forEach(select => {
+        select.addEventListener('change', updateAddButton);
+      });
+      
+      // Initial button state update
+      updateAddButton();
+      
+      // Add to cart handler
+      addButton.addEventListener('click', async function() {
+        const selections = {};
+        
+        // Group rooms by room type
+        selectors.forEach(select => {
+          const roomTypeId = select.value;
+          if (!roomTypeId) return;
+          
+          if (!selections[roomTypeId]) {
+            selections[roomTypeId] = {
+              roomTypeId,
+              roomData: JSON.parse(select.options[select.selectedIndex].dataset.roomData),
+              roomIndices: []
+            };
+          }
+          selections[roomTypeId].roomIndices.push(parseInt(select.dataset.roomIndex));
+        });
+        
+        // Get search params
+        const urlParams = new URLSearchParams(window.location.search);
+        const checkInDate = urlParams.get('checkInDate');
+        const checkOutDate = urlParams.get('checkOutDate');
+        const roomsData = urlParams.get('roomsData');
+        const hotelId = '#{hotel._id}';
+        
+        // Parse roomsData to get details for each room
+        let parsedRoomsData = [];
+        try {
+          parsedRoomsData = JSON.parse(decodeURIComponent(roomsData));
+        } catch (e) {
+          console.error('Failed to parse roomsData:', e);
+        }
+        
+        // Add each room type to cart
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (const [roomTypeId, data] of Object.entries(selections)) {
+          const quantity = data.roomIndices.length;
+          
+          // Build roomsData for this room type (only the rooms assigned to it)
+          const roomsForThisType = data.roomIndices.map(idx => parsedRoomsData[idx]);
+          const roomsDataForType = encodeURIComponent(JSON.stringify(roomsForThisType));
+          
+          // Calculate totals for this room type
+          const totalAdults = roomsForThisType.reduce((sum, r) => sum + (r.adults || 0), 0);
+          const totalChildren = roomsForThisType.reduce((sum, r) => sum + (r.children?.length || 0), 0);
+          
+          try {
+            const response = await fetch('/hotel-cart/add', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                hotelId,
+                roomTypeId,
+                quantity,
+                checkInDate,
+                checkOutDate,
+                roomsData: roomsDataForType,
+                adults: totalAdults,
+                children: totalChildren,
+                rooms: quantity
+              })
+            });
+            
+            const result = await response.json();
+            if (result.code === 'success') {
+              successCount++;
+            } else {
+              errorCount++;
+              console.error('Failed to add room type:', result.message);
+            }
+          } catch (error) {
+            errorCount++;
+            console.error('Error adding to cart:', error);
+          }
+        }
+        
+        // Show notification
+        if (successCount > 0) {
+          if (typeof Notyf !== 'undefined') {
+            const notyf = new Notyf({
+              duration: 3000,
+              position: { x: 'right', y: 'top' }
+            });
+            notyf.success(`Đã thêm ${successCount} loại phòng vào giỏ hàng`);
+          }
+          
+          // Redirect to cart after a short delay
+          setTimeout(() => {
+            window.location.href = '/cart?tab=hotel';
+          }, 1000);
+        } else if (errorCount > 0) {
+          if (typeof Notyf !== 'undefined') {
+            const notyf = new Notyf({
+              duration: 3000,
+              position: { x: 'right', y: 'top' }
+            });
+            notyf.error('Có lỗi xảy ra khi thêm vào giỏ hàng');
+          }
+        }
+      });
+    });
+
+    // Room Detail Modal
+    document.addEventListener('DOMContentLoaded', function() {
+      const roomModal = document.getElementById('roomDetailModal');
+      if (!roomModal) return;
+
+      const roomCards = document.querySelectorAll('.room-card[data-room-info]');
+      const modalBody = roomModal.querySelector('.room-detail-modal__body');
+      const modalClose = roomModal.querySelector('.room-detail-modal__close');
+      const modalOverlay = roomModal.querySelector('.room-detail-modal__overlay');
+
+      function formatPrice(price) {
+        return Number(price || 0).toLocaleString('vi-VN');
+      }
+
+      function openRoomModal(roomData) {
+        const room = JSON.parse(roomData.replace(/&quot;/g, '"'));
+        
+        let html = `
+          <div class="room-detail-content">
+            <div class="room-detail-header">
+              <h2 class="room-detail-title">${room.title || ''}</h2>
+              <div class="room-detail-price-box">
+                <div class="price-label">Giá phòng từ</div>
+                <div class="price-value">${formatPrice(room.pricePerNight)} <span class="price-currency">${room.currency || 'VND'}</span></div>
+                <div class="price-unit">/ đêm</div>
+                <div class="price-info-grid">
+                  <div class="price-info-item">
+                    <span>Base occupancy</span>
+                    <strong>${room.baseOccupancy || 2} người</strong>
+                  </div>
+                  <div class="price-info-item">
+                    <span>Diện tích</span>
+                    <strong>${room.sizeM2 || 50} m²</strong>
+                  </div>
+                  <div class="price-info-item">
+                    <span>Loại giường</span>
+                    <strong>${room.bedInfo || '2 giường đôi'}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            ${room.description ? `
+            <div class="room-detail-section">
+              <p class="room-detail-description">${room.description}</p>
+            </div>
+            ` : ''}
+
+            <!-- Chi tiết phòng -->
+            ${room.sizeM2 || room.view || room.bedInfo || room.smokingPolicy ? `
+            <div class="room-detail-section">
+              <h3>Chi tiết phòng</h3>
+              <div class="room-detail-info-grid">
+                ${room.sizeM2 ? `
+                <div class="room-detail-info-item">
+                  <i class="fa-regular fa-square"></i>
+                  <div>
+                    <div class="info-label">Diện tích phòng</div>
+                    <div class="info-value">${room.sizeM2} m²</div>
+                  </div>
+                </div>
+                ` : ''}
+                ${room.view ? `
+                <div class="room-detail-info-item">
+                  <i class="fa-regular fa-eye"></i>
+                  <div>
+                    <div class="info-label">Tầm nhìn</div>
+                    <div class="info-value">${room.view}</div>
+                  </div>
+                </div>
+                ` : ''}
+                ${room.bedInfo ? `
+                <div class="room-detail-info-item">
+                  <i class="fa-solid fa-bed"></i>
+                  <div>
+                    <div class="info-label">Thông tin giường</div>
+                    <div class="info-value">${room.bedInfo}</div>
+                  </div>
+                </div>
+                ` : ''}
+                ${room.smokingPolicy ? `
+                <div class="room-detail-info-item">
+                  <i class="fa-solid fa-ban-smoking"></i>
+                  <div>
+                    <div class="info-label">Chính sách hút thuốc</div>
+                    <div class="info-value">${room.smokingPolicy}</div>
+                  </div>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- Thiết lập sức chứa chung -->
+            <div class="room-detail-section">
+              <h3>Thiết lập sức chứa chung</h3>
+              <div class="room-detail-occupancy-box">
+                <div class="occupancy-item">
+                  <i class="fa-solid fa-users"></i>
+                  <span>Số người đã bao gồm trong giá</span>
+                  <strong>${room.baseOccupancy || 2} người</strong>
+                </div>
+                <div class="occupancy-item">
+                  <i class="fa-solid fa-users"></i>
+                  <span>Tối đa người có thể ở</span>
+                  <strong>${room.maxOccupancy || 3} người</strong>
+                </div>
+                <div class="occupancy-item">
+                  <i class="fa-solid fa-bed"></i>
+                  <span>Tối đa giường phụ</span>
+                  <strong>${room.maxExtraBeds || 0} giường</strong>
+                </div>
+                ${room.extraBedFeePerNight > 0 ? `
+                <div class="occupancy-item occupancy-fee">
+                  <span>Phí giường phụ/đêm</span>
+                  <strong class="fee-value">+${formatPrice(room.extraBedFeePerNight)} VND</strong>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Tiện nghi phòng -->
+            ${room.roomAmenities && room.roomAmenities.length > 0 ? `
+            <div class="room-detail-section">
+              <h3>Tiện nghi trong phòng</h3>
+              <div class="room-detail-amenity-list">
+                ${room.roomAmenities.map(amenity => `
+                  <div class="amenity-list-item">
+                    <i class="fa-solid fa-check-circle"></i>
+                    <span>${amenity}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- Tiện nghi phòng tắm -->
+            ${room.bathroomAmenities && room.bathroomAmenities.length > 0 ? `
+            <div class="room-detail-section">
+              <h3>Tiện nghi phòng tắm</h3>
+              <div class="room-detail-amenity-list">
+                ${room.bathroomAmenities.map(amenity => `
+                  <div class="amenity-list-item">
+                    <i class="fa-solid fa-check-circle"></i>
+                    <span>${amenity}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- Hình ảnh phòng -->
+            ${room.images && room.images.length > 0 ? `
+            <div class="room-detail-section">
+              <h3>Hình ảnh phòng</h3>
+              <div class="room-detail-images">
+                ${room.images.map((img, idx) => `
+                  <div class="room-detail-image-item">
+                    <img src="${img}" alt="Ảnh phòng ${idx + 1}" />
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+        `;
+
+        modalBody.innerHTML = html;
+        roomModal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeRoomModal() {
+        roomModal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+
+      // Open modal on room card click
+      roomCards.forEach(card => {
+        card.addEventListener('click', function(e) {
+          // Không mở modal nếu click vào các nút hoặc link
+          if (e.target.closest('button') || e.target.closest('a')) {
+            return;
+          }
+          const roomData = card.getAttribute('data-room-info');
+          if (roomData) {
+            openRoomModal(roomData);
+          }
+        });
+      });
+
+      // Close modal handlers
+      if (modalClose) {
+        modalClose.addEventListener('click', closeRoomModal);
+      }
+      if (modalOverlay) {
+        modalOverlay.addEventListener('click', function(e) {
+          if (e.target === modalOverlay) {
+            closeRoomModal();
+          }
+        });
+      }
+
+      // Close on Escape key
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && roomModal.style.display === 'block') {
+          closeRoomModal();
+        }
+      });
+    });

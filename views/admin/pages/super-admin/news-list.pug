@@ -1,0 +1,181 @@
+extends ../../layouts/default.pug
+
+block main
+  
+  .box-head
+    h1.box-title Quản lý Tin tức
+    .inner-buttons
+      a.button.button-primary(href=`/${pathAdmin}/super-admin/news/create`)
+        <i class="fa-solid fa-plus"></i> Tạo tin tức mới
+
+  //- Section 4: Bộ lọc
+  .section-4
+    form#form-filter(method="GET")
+      .inner-form
+        .inner-input
+          input(
+            type="text",
+            name="keyword",
+            placeholder="Tìm tin tức...",
+            value=keyword || ""
+          )
+        .inner-select
+          select(name="status")
+            option(value="") -- Tất cả trạng thái --
+            option(value="active", selected=statusFilter === "active") Hoạt động
+            option(value="inactive", selected=statusFilter === "inactive") Dừng hoạt động
+        .inner-button
+          button.inner-submit(type="submit") Lọc
+
+  //- Section 6: Danh sách
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Ảnh
+            th Tiêu đề
+            th Trạng thái
+            th Nổi bật
+            th Ngày xuất bản
+            th Người tạo
+            th Hành động
+        tbody
+          if newsList && newsList.length > 0
+            each news, index in newsList
+              tr
+                td= index + 1 + pagination.skip
+                td
+                  if news.avatar
+                    img(src=news.avatar, alt=news.title, style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;")
+                  else
+                    span(style="color: #999;") Chưa có ảnh
+                td
+                  strong= news.title
+                  if news.shortDescription
+                    div(style="color: #666; font-size: 13px; margin-top: 5px;")= news.shortDescription.substring(0, 100) + (news.shortDescription.length > 100 ? '...' : '')
+                td.text-center
+                  if news.status === 'active'
+                    button.badge.badge-green(
+                      type="button"
+                      data-id=news._id
+                      data-status="inactive"
+                      onclick="changeStatus(this)"
+                    ) Hoạt động
+                  else
+                    button.badge.badge-red(
+                      type="button"
+                      data-id=news._id
+                      data-status="active"
+                      onclick="changeStatus(this)"
+                    ) Dừng hoạt động
+                td.text-center
+                  if news.isFeatured
+                    span.badge.badge-blue Nổi bật
+                  else
+                    span.badge.badge-secondary Thường
+                td= news.publishedAtFormat
+                td= news.createdByName || "N/A"
+                td
+                  .inner-buttons
+                    a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/news/detail/${news._id}`, title="Xem chi tiết")
+                      <i class="fa-solid fa-eye"></i>
+                    a.inner-btn.inner-btn-edit(href=`/${pathAdmin}/super-admin/news/edit/${news._id}`, title="Chỉnh sửa")
+                      <i class="fa-solid fa-pen-to-square"></i>
+                    button.inner-btn.inner-btn-delete(
+                      type="button"
+                      data-id=news._id
+                      onclick="deleteNews(this)"
+                      title="Xóa"
+                    )
+                      <i class="fa-solid fa-trash"></i>
+          else
+            tr
+              td(colspan="8", style="text-align: center; padding: 30px; color: #999;") Chưa có tin tức nào
+
+  //- Section 7: Phân trang
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label
+        | Hiển thị #{pagination.skip + 1}
+        | - #{pagination.skip + newsList.length}
+        | của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}
+  //- End Section 7
+
+  script.
+    // Thay đổi trạng thái
+    function changeStatus(button) {
+      const id = button.getAttribute('data-id');
+      const status = button.getAttribute('data-status');
+      
+      fetch(`/${pathAdmin}/super-admin/news/change-status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id, status })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.code === 'success') {
+          if (typeof drawNotify === 'function') {
+            drawNotify('success', data.message);
+          }
+          setTimeout(() => location.reload(), 500);
+        } else {
+          if (typeof drawNotify === 'function') {
+            drawNotify('error', data.message);
+          } else {
+            alert(data.message);
+          }
+        }
+      })
+      .catch(error => {
+        console.error(error);
+        if (typeof drawNotify === 'function') {
+          drawNotify('error', 'Có lỗi xảy ra!');
+        } else {
+          alert('Có lỗi xảy ra!');
+        }
+      });
+    }
+    
+    // Xóa tin tức
+    function deleteNews(button) {
+      const id = button.getAttribute('data-id');
+      
+      const confirmMsg = confirm('Bạn có chắc chắn muốn xóa tin tức này?');
+      if (!confirmMsg) return;
+      
+      fetch(`/${pathAdmin}/super-admin/news/${id}`, {
+        method: 'DELETE'
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.code === 'success') {
+          if (typeof drawNotify === 'function') {
+            drawNotify('success', data.message);
+          }
+          setTimeout(() => location.reload(), 500);
+        } else {
+          if (typeof drawNotify === 'function') {
+            drawNotify('error', data.message);
+          } else {
+            alert(data.message);
+          }
+        }
+      })
+      .catch(error => {
+        console.error(error);
+        if (typeof drawNotify === 'function') {
+          drawNotify('error', 'Có lỗi xảy ra!');
+        } else {
+          alert('Có lỗi xảy ra!');
+        }
+      });
+    }
+

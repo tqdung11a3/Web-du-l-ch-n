@@ -1,0 +1,219 @@
+extends ../../layouts/super-admin.pug
+
+block main
+  h1.box-title= pageTitle
+
+  //- Section 8: Form
+  .section-8
+    form#admin-create-form(enctype="multipart/form-data")
+      .inner-group
+        label.inner-label(for="fullName") Họ tên *
+        input#fullName.inner-control(
+          type="text"
+          name="fullName"
+          placeholder="Nhập họ tên..."
+          required
+        )
+
+      .inner-group
+        label.inner-label(for="email") Email *
+        input#email.inner-control(
+          type="email"
+          name="email"
+          placeholder="Nhập email..."
+          required
+        )
+
+      .inner-group
+        label.inner-label(for="phone") Số điện thoại
+        input#phone.inner-control(
+          type="text"
+          name="phone"
+          placeholder="Nhập số điện thoại..."
+        )
+
+      .inner-group
+        label.inner-label(for="companyId") Công ty *
+        select#companyId.inner-control(name="companyId" required)
+          option(value="") -- Chọn công ty --
+          option(value="new") ➕ Tạo công ty mới
+          each company in companies
+            option(value=company._id)= company.name
+
+      //- Hiện form tạo công ty mới khi chọn "Tạo công ty mới"
+      .inner-group#newCompanyGroup(style="display: none;")
+        label.inner-label(for="newCompanyName") Tên công ty mới *
+        input#newCompanyName.inner-control(
+          type="text"
+          name="newCompanyName"
+          placeholder="Nhập tên công ty..."
+        )
+        small(style="color: #666; font-size: 12px;") Công ty mới sẽ được tạo tự động khi bạn tạo tài khoản admin
+
+      .inner-group
+        label.inner-label(for="positionCompany") Chức vụ
+        input#positionCompany.inner-control(
+          type="text"
+          name="positionCompany"
+          placeholder="VD: Giám đốc, Quản lý..."
+        )
+
+      .inner-group
+        label.inner-label(for="role") Nhóm quyền
+        select#role.inner-control(name="role")
+          option(value="") -- Chọn nhóm quyền --
+          each roleItem in roles
+            option(value=roleItem._id)= roleItem.name
+
+      .inner-group
+        label.inner-label(for="password") Mật khẩu *
+        input#password.inner-control(
+          type="password"
+          name="password"
+          placeholder="Nhập mật khẩu..."
+          required
+        )
+
+      .inner-group
+        label.inner-label(for="confirmPassword") Xác nhận mật khẩu *
+        input#confirmPassword.inner-control(
+          type="password"
+          name="confirmPassword"
+          placeholder="Nhập lại mật khẩu..."
+          required
+        )
+
+      .inner-group
+        label.inner-label(for="status") Trạng thái *
+        select#status.inner-control(name="status" required)
+          option(value="active" selected) Hoạt động
+          option(value="inactive") Tạm dừng
+          option(value="initial") Chờ duyệt
+
+      .inner-group
+        label.inner-label Avatar
+        input#avatar.inner-control(
+          type="file"
+          name="avatar"
+          accept="image/*"
+          filepond-image
+        )
+
+      .inner-two-col
+        .inner-button
+          button(type="submit") Tạo tài khoản
+        .inner-back
+          a(href=`/${pathAdmin}/super-admin/admin`) ← Quay lại danh sách
+  //- End Section 8
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      // Xử lý hiển thị form tạo công ty mới
+      const companySelect = document.querySelector('#companyId');
+      const newCompanyGroup = document.querySelector('#newCompanyGroup');
+      const newCompanyNameInput = document.querySelector('#newCompanyName');
+
+      if (companySelect && newCompanyGroup) {
+        companySelect.addEventListener('change', function() {
+          if (this.value === 'new') {
+            newCompanyGroup.style.display = 'block';
+            newCompanyNameInput.required = true;
+          } else {
+            newCompanyGroup.style.display = 'none';
+            newCompanyNameInput.required = false;
+            newCompanyNameInput.value = '';
+          }
+        });
+      }
+
+      const form = document.querySelector('#admin-create-form');
+      if (form) {
+        const validator = new JustValidate('#admin-create-form');
+
+        validator
+          .addField('#fullName', [
+            { rule: 'required', errorMessage: 'Vui lòng nhập họ tên!' },
+            { rule: 'minLength', value: 5, errorMessage: 'Họ tên phải có ít nhất 5 ký tự!' }
+          ])
+          .addField('#email', [
+            { rule: 'required', errorMessage: 'Vui lòng nhập email!' },
+            { rule: 'email', errorMessage: 'Email không đúng định dạng!' }
+          ])
+          .addField('#companyId', [
+            { rule: 'required', errorMessage: 'Vui lòng chọn công ty!' }
+          ])
+          .addField('#password', [
+            { rule: 'required', errorMessage: 'Vui lòng nhập mật khẩu!' },
+            { rule: 'minLength', value: 8, errorMessage: 'Mật khẩu phải có ít nhất 8 ký tự!' }
+          ])
+          .addField('#confirmPassword', [
+            { rule: 'required', errorMessage: 'Vui lòng xác nhận mật khẩu!' },
+            {
+              validator: (value) => {
+                const password = document.querySelector('#password').value;
+                return password === value;
+              },
+              errorMessage: 'Mật khẩu xác nhận không khớp!'
+            }
+          ])
+          .onSuccess((event) => {
+            event.preventDefault(); // Ngăn form submit mặc định
+            
+            const formData = new FormData(event.target);
+            
+            // Kiểm tra nếu chọn "Tạo công ty mới"
+            const companyId = formData.get('companyId');
+            if (companyId === 'new') {
+              const newCompanyName = formData.get('newCompanyName');
+              if (!newCompanyName || newCompanyName.trim() === '') {
+                if (typeof notify?.error === 'function') {
+                  notify.error('Vui lòng nhập tên công ty mới!');
+                } else {
+                  alert('Vui lòng nhập tên công ty mới!');
+                }
+                return;
+              }
+              // Set companyId = 'new' và gửi newCompanyName
+              formData.set('companyId', 'new');
+            }
+            
+            const avatarFile = window.filePond?.avatar?.getFile?.()?.file;
+            if (avatarFile) {
+              formData.set('avatar', avatarFile);
+            }
+
+            fetch(`/${pathAdmin}/super-admin/admin/create`, {
+              method: 'POST',
+              body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.code === 'error') {
+                if (typeof notify?.error === 'function') {
+                  notify.error(data.message);
+                } else {
+                  alert(data.message);
+                }
+              } else {
+                if (typeof drawNotify === 'function') {
+                  drawNotify(data.code, data.message);
+                } else {
+                  alert(data.message);
+                }
+                setTimeout(() => {
+                  window.location.href = `/${pathAdmin}/super-admin/admin`;
+                }, 1500);
+              }
+            })
+            .catch(err => {
+              console.error(err);
+              if (typeof notify?.error === 'function') {
+                notify.error('Có lỗi xảy ra!');
+              } else {
+                alert('Có lỗi xảy ra!');
+              }
+            });
+          });
+      }
+    });
+

@@ -1,0 +1,161 @@
+extends ../../layouts/default.pug
+
+block main
+  .box-head
+    h1.box-title Chi tiết Tour
+    .inner-buttons
+      a.button.button-outline(href=`/${pathAdmin}/super-admin/tours`)
+        <i class="fa-solid fa-arrow-left"></i> Quay lại
+
+  .section-6(style="margin-top: 20px;")
+    .box-detail
+      .detail-row
+        .detail-label Ảnh đại diện:
+        .detail-value
+          if tour.avatar
+            img(src=tour.avatar, alt=tour.name, style="width: 300px; height: 300px; object-fit: cover; border-radius: 8px;")
+          else
+            span(style="color: #999;") Chưa có ảnh
+      
+      .detail-row
+        .detail-label Tên Tour:
+        .detail-value
+          strong(style="font-size: 18px;")= tour.name
+      
+      .detail-row
+        .detail-label Công ty:
+        .detail-value
+          if tour.companyId
+            span.badge.badge-info(style="font-size: 14px; padding: 6px 12px;")= tour.companyId.name
+          else
+            span(style="color: #999;") N/A
+      
+      .detail-row
+        .detail-label Danh mục:
+        .detail-value
+          if tour.categoryName
+            = tour.categoryName
+          else if tour.category
+            span(style="color: #999;") Không tìm thấy danh mục
+          else
+            span(style="color: #999;") N/A
+      
+      .detail-row
+        .detail-label Trạng thái:
+        .detail-value
+          if tour.status === "active"
+            span.badge.badge-green Hoạt động
+          else
+            span.badge.badge-red Dừng hoạt động
+      
+      .detail-row
+        .detail-label Giá Người lớn:
+        .detail-value
+          strong(style="color: #27ae60; font-size: 16px;")= (tour.priceNewAdult || tour.priceAdult || 0).toLocaleString('vi-VN') + ' đ'
+      
+      .detail-row
+        .detail-label Giá Trẻ em:
+        .detail-value
+          strong(style="color: #27ae60;")= (tour.priceNewChildren || tour.priceChildren || 0).toLocaleString('vi-VN') + ' đ'
+      
+      .detail-row
+        .detail-label Giá Em bé:
+        .detail-value
+          if tour.babyPricingMode === 'fixed'
+            strong(style="color: #27ae60;")= (tour.priceNewBaby || tour.priceBaby || 0).toLocaleString('vi-VN') + ' đ'
+          else
+            span.badge.badge-blue Theo bậc
+      
+      .detail-row
+        .detail-label Số ghế còn lại:
+        .detail-value= tour.seatsRemaining || 0
+      
+      .detail-row
+        .detail-label Tổng số ghế:
+        .detail-value= tour.seatsTotal || 0
+      
+      .detail-row
+        .detail-label Điểm khởi hành:
+        .detail-value
+          if tour.departureCity && tour.departureCity.name
+            = tour.departureCity.name
+          else if tour.departureCity
+            = tour.departureCity
+          else
+            span(style="color: #999;") N/A
+      
+      .detail-row
+        .detail-label Ngày khởi hành:
+        .detail-value
+          if tour.departureDate
+            = new Date(tour.departureDate).toLocaleDateString('vi-VN')
+          else
+            span(style="color: #999;") N/A
+      
+      .detail-row
+        .detail-label Thời gian:
+        .detail-value= tour.time || "N/A"
+      
+      .detail-row
+        .detail-label Phương tiện:
+        .detail-value= tour.vehicle || "N/A"
+      
+      if tour.information
+        .detail-row
+          .detail-label Thông tin tour:
+          .detail-value
+            div!= tour.information
+      
+      if tour.images && tour.images.length > 0
+        .detail-row
+          .detail-label Danh sách ảnh:
+          .detail-value
+            .image-gallery(style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;")
+              each image in tour.images
+                img(src=image, alt=tour.name, style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; cursor: pointer;", onclick=`window.open('${image}', '_blank')`)
+      
+      .detail-row
+        .detail-label Ngày tạo:
+        .detail-value
+          if tour.createdAt
+            = new Date(tour.createdAt).toLocaleDateString('vi-VN') + ' ' + new Date(tour.createdAt).toLocaleTimeString('vi-VN')
+          else
+            span(style="color: #999;") N/A
+      
+      .detail-row
+        .detail-label Ngày cập nhật:
+        .detail-value
+          if tour.updatedAt
+            = new Date(tour.updatedAt).toLocaleDateString('vi-VN') + ' ' + new Date(tour.updatedAt).toLocaleTimeString('vi-VN')
+          else
+            span(style="color: #999;") Chưa cập nhật
+
+  style.
+    .box-detail {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .detail-row {
+      display: flex;
+      padding: 15px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      font-weight: 600;
+      width: 200px;
+      color: #333;
+    }
+    .detail-value {
+      flex: 1;
+      color: #666;
+    }
+    .image-gallery img:hover {
+      transform: scale(1.05);
+      transition: transform 0.2s;
+    }
+

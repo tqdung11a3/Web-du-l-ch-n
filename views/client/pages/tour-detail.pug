@@ -1,0 +1,330 @@
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+
+block main
+  +box-breadcrumb(breadcrumb)
+
+  .section-10
+    .container
+      .inner-wrap
+        .inner-left
+          // Danh sách ảnh
+          .box-images
+            .inner-images-main
+              .swiper.swiper-box-images-main
+                .swiper-wrapper
+                  each image in tourDetail.images
+                    .swiper-slide
+                      .inner-image
+                        img(
+                          alt=""
+                          src=image
+                        )
+            .inner-images-thumb
+              .swiper.swiper-box-images-thumb
+                .swiper-wrapper
+                  each image in tourDetail.images
+                    .swiper-slide
+                      .inner-image
+                        img(
+                          alt=""
+                          src=image
+                        )
+          // Hết Danh sách ảnh
+
+          // Tabs nội dung tour
+          .tour-tabs
+            .tour-tabs-header
+              button.tour-tab-btn.is-active(data-tab="overview") Tổng quan
+              button.tour-tab-btn(data-tab="schedule") Lịch trình
+              button.tour-tab-btn(data-tab="includes") Bao gồm
+              button.tour-tab-btn(data-tab="reviews") Đánh giá
+
+            .tour-tabs-body
+              // Tab: Tổng quan
+              .tour-tab-panel.is-active(data-tab="overview")
+                // Thông Tin Tour
+                .box-tour-info
+                  .inner-title Thông Tin Tour
+                  .inner-content !{tourDetail.information}
+
+                // Điểm nổi bật
+                if tourDetail.highlights && tourDetail.highlights.length
+                  .box-tour-highlights
+                    .inner-title-main Điểm nổi bật
+                    ul.list-highlights
+                      each item in tourDetail.highlights
+                        li= item
+
+                // Những địa điểm có trong tour (accordion theo tỉnh/thành)
+                if tourDetail.locations && tourDetail.locations.length
+                  .box-tour-destinations
+                    .inner-title-main Những địa điểm có trong tour
+                    .dest-accordion
+                      each loc, idx in tourDetail.locations
+                        .dest-accordion-item(class= idx === 0 ? 'is-open' : '')
+                          button.dest-accordion-header(type="button")
+                            .dest-accordion-title
+                              i.fa-solid.fa-location-dot
+                              span
+                                | 
+                                = loc.cityName || loc.cityLabel || 'Địa điểm'
+                            i.dest-accordion-icon.fa-solid.fa-chevron-down
+                          .dest-accordion-body
+                            if loc.spots && loc.spots.length
+                              ul.dest-spots-list
+                                each spot in loc.spots
+                                  li= spot
+                            else
+                              p.dest-spots-empty
+                                | Chưa có địa điểm nổi bật được thiết lập cho tỉnh/thành này.
+
+              // Tab: Lịch trình
+              .tour-tab-panel(data-tab="schedule")
+                // Lịch Trình Tour
+                .box-tour-schedule
+                  .inner-title-main Lịch Trình Tour
+                  .inner-list
+                    each item in tourDetail.schedules
+                      .inner-item
+                        .inner-title #{item.title}
+                        .inner-content !{item.description}
+
+                // Hoạt động gợi ý tại điểm đến (data đã sync từ Amadeus)
+                if activities && activities.length
+                  .box-tour-activities
+                    .inner-title-main Hoạt động gợi ý tại điểm đến
+                    .inner-activities-list
+                      each act in activities
+                        .activity-item
+                          if act.pictureUrl
+                            .activity-thumb
+                              img(src=act.pictureUrl alt=act.name)
+                          .activity-body
+                            .activity-title #{act.name}
+                            if act.shortDescription
+                              p.activity-desc= act.shortDescription
+                            .activity-meta
+                              if act.priceAmount
+                                span Giá tham khảo:
+                                span.activity-price #{act.priceAmount} #{act.priceCurrency}
+                              if act.bookingLink
+                                a.activity-link(
+                                  href=act.bookingLink
+                                  target="_blank"
+                                ) Xem chi tiết
+
+              // Tab: Bao gồm
+              .tour-tab-panel(data-tab="includes")
+                // Giá tour bao gồm
+                if tourDetail.includes && tourDetail.includes.length
+                  .box-tour-includes
+                    .inner-title-main Giá tour bao gồm
+                    ul.list-includes
+                      each item in tourDetail.includes
+                        li= item
+                // Giá tour không bao gồm
+                if tourDetail.excludes && tourDetail.excludes.length
+                  .box-tour-excludes
+                    .inner-title-main Giá tour không bao gồm
+                    ul.list-excludes
+                      each item in tourDetail.excludes
+                        li= item
+
+              // Tab: Đánh giá
+              .tour-tab-panel(data-tab="reviews")
+                // ==== ĐÁNH GIÁ & BÌNH LUẬN ====
+                - const loggedIn = !!(account && account.id);
+                .box-reviews(
+                  id="box-reviews"
+                  data-tour-id=tourDetail._id
+                  data-logged-in=(loggedIn ? "1" : "0")
+                )
+                  .inner-title-main Đánh giá và bình luận
+
+                  // Tổng quan sao
+                  .review-summary
+                    .avg
+                      span.avg-number 0
+                      span.avg-text / 5
+                    .stars(role="img" aria-label="average stars")
+                    .count (0 đánh giá)
+                    // thanh phân bố 5→1 sao
+                    ul.distribution
+                      each s in [5,4,3,2,1]
+                        li
+                          span.star-label #{s} ★
+                          .bar
+                            .bar-inner(style="width:0%")
+                          span.bar-count 0
+
+                  // Form viết review (chỉ hiện nếu đã đăng nhập)
+                  if loggedIn
+                    form#review-form(class="review-form", action="", method="post")
+                      .rating-input
+                        span.label Chọn số sao:
+                        ul.star-input(aria-label="chọn số sao")
+                          each i in [1,2,3,4,5]
+                            li(data-value=i)
+                              i.fa-solid.fa-star
+                        input(type="hidden" name="rating" value="5")
+                      .content-input
+                        textarea(name="content" rows="4" placeholder="Chia sẻ cảm nhận của bạn (tuỳ chọn, tối đa 2000 ký tự)")
+                      button(type="submit").button-primary Gửi đánh giá
+                  else
+                    .login-hint
+                      | Bạn cần đăng nhập để viết đánh giá.
+                  // Danh sách review
+                  .review-list
+                    // sẽ render bằng JS
+                  .review-pagination
+                    button.btn-prev(disabled) Trước
+                    span.page-info 1/1
+                    button.btn-next(disabled) Sau
+
+        .inner-right
+          // Truyền thêm dữ liệu cho JS
+          - const babyMode      = tourDetail.babyPricingMode || 'fixed';
+          - const babyRulesJson = JSON.stringify(tourDetail.babyPricingRules || []);
+          - const priceAdult    = Number(tourDetail.priceNewAdult || 0);
+          - const priceChild    = Number(tourDetail.priceNewChildren || 0);
+          - const priceBabyFix  = Number(tourDetail.priceNewBaby || 0);
+          - const babyUnit      = (babyMode === 'fixed' ? priceBabyFix.toLocaleString('vi-VN') : '0');
+
+          .box-tour-detail(
+            data-seats-remaining=tourDetail.seatsRemaining
+            data-price-adult=priceAdult
+            data-price-children=priceChild
+            data-price-baby=priceBabyFix
+            data-baby-mode=babyMode
+            data-baby-rules=babyRulesJson
+          )
+            .inner-title-main Chuyến Đi Của Bạn
+            .inner-product
+              .inner-image
+                img(alt=tourDetail.name src=tourDetail.avatar)
+              .inner-info
+                .inner-title #{tourDetail.name}
+
+            .inner-meta
+              .inner-item
+                i.fa-solid.fa-calendar-days
+                span Thời Gian:
+                span.inner-hl #{tourDetail.time}
+              .inner-item
+                i.fa-solid.fa-car
+                span Phương Tiện:
+                span.inner-hl #{tourDetail.vehicle}
+              .inner-item
+                i.fa-solid.fa-calendar-days
+                span Ngày Khởi Hành:
+                - const departureDatesList = tourDetail.departureDatesFormatted && tourDetail.departureDatesFormatted.length ? tourDetail.departureDatesFormatted : (tourDetail.departureDateFormat ? [tourDetail.departureDateFormat] : []);
+                if departureDatesList && departureDatesList.length
+                  select#departureDateSelect.departure-date-select(
+                    name="departureDate"
+                    data-has-multiple=(departureDatesList.length > 1 ? "1" : "0")
+                  )
+                    option(value="") Chọn ngày khởi hành
+                    each d, idx in departureDatesList
+                      option(
+                        value=d
+                        selected=(departureDatesList.length === 1 && idx === 0)
+                      )= d
+                else
+                  span.inner-hl Chưa thiết lập ngày khởi hành
+
+            // Khởi hành tại: 1 điểm duy nhất
+            .inner-group.departure
+              .inner-label Khởi Hành Tại:
+              .inner-value
+                if tourDetail.departureCity && tourDetail.departureCityName
+                  span.inner-hl #{tourDetail.departureCityName}
+                else
+                  span Chưa thiết lập điểm khởi hành
+            .inner-group
+              .inner-label Số Lượng Hành Khách
+              .inner-list
+                .inner-item
+                  .inner-item-label Người lớn:
+                  .inner-item-input
+                    input(
+                      value="1"
+                      type="number"
+                      min="0"
+                      input-quantity="stockAdult"
+                      data-price=priceAdult
+                      name="quantityAdult"
+                    )
+                  .inner-item-price
+                    span(label-quantity="stockAdult") 1
+                    span x
+                    span.inner-hl= priceAdult.toLocaleString('vi-VN')
+
+                .inner-item
+                  .inner-item-label Trẻ em (3-11 tuổi):
+                  .inner-item-input
+                    input(
+                      value="0"
+                      type="number"
+                      min="0"
+                      input-quantity="stockChildren"
+                      data-price=priceChild
+                      name="quantityChildren"
+                    )
+                  .inner-item-price
+                    span(label-quantity="stockChildren") 0
+                    span x
+                    span.inner-hl= priceChild.toLocaleString('vi-VN')
+
+                .inner-item
+                  .inner-item-label Em bé (0-2 tuổi):
+                  .inner-item-input
+                    input(
+                      value="0"
+                      type="number"
+                      min="0"
+                      input-quantity="stockBaby"
+                      data-price=priceBabyFix
+                      name="quantityBaby"
+                      data-baby-dynamic="1"
+                    )
+                  .inner-item-price
+                    span(label-quantity="stockBaby") 0
+                    span x
+                    // chỉ còn 1 dòng, dùng biến đã tính sẵn
+                    span.inner-hl(data-baby-unit)= babyUnit
+
+                .inner-seat-option
+                  label
+                    input(type="checkbox" name="seatBaby" seat-baby-toggle)
+                    |  Đặt chỗ ngồi riêng cho em bé
+
+            .inner-total
+              .inner-label Tổng cộng:
+              .inner-price
+                span(total-price)= priceAdult.toLocaleString('vi-VN')
+                span đ
+            .inner-actions
+              button.inner-button-add-cart(tour-id=tourDetail._id) Đặt ngay
+              // Nút thêm vào so sánh
+              button.inner-compare-btn(
+                type="button"
+                data-tour-id=tourDetail._id
+                data-tour-name=tourDetail.name
+                data-tour-slug=tourDetail.slug
+                data-tour-avatar=tourDetail.avatar
+                data-tour-price=tourDetail.priceNewAdult || tourDetail.priceAdult || 0
+                data-tour-price-old=tourDetail.priceAdult || 0
+                data-tour-discount=tourDetail.discount || 0
+                data-tour-company=(tourDetail.company ? JSON.stringify(tourDetail.company) : '{}')
+                title="Thêm tour này vào so sánh"
+              )
+                i.fa-solid.fa-code-compare
+                span.compare-btn-text So sánh
+
+            // Thông tin công ty tổ chức
+            if tourDetail.company
+              .inner-company-info
+                .inner-label Công ty tổ chức:
+                .inner-value
+                  a(href=`/company/${tourDetail.company.slug}` target="_blank") #{tourDetail.company.name}

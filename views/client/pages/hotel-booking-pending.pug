@@ -1,0 +1,135 @@
+//- views/client/pages/hotel-booking-pending.pug
+extends ../layouts/default.pug
+
+block main
+  .hotel-booking-pending-page
+    .container
+      .pending-content
+        .pending-icon
+          i.fa-solid.fa-clock
+        h1.pending-title Đơn đặt phòng tạm thời
+        p.pending-message Đơn của bạn đang được giữ chỗ. Vui lòng thanh toán trong thời gian quy định.
+        
+        //- Hiển thị countdown timer
+        if bookingDetail && bookingDetail.isTemporaryHold && bookingDetail.paymentStatus === 'unpaid' && bookingDetail.holdExpiresAt
+          .hold-warning
+            .warning-icon
+              i.fa-solid.fa-hourglass-half
+            .warning-content
+              p.warning-title ⏰ Thời gian giữ chỗ
+              p.warning-message Vui lòng thanh toán trong vòng:
+              .countdown-timer#countdownTimer
+                span.countdown-minutes 00
+                span.countdown-separator :
+                span.countdown-seconds 00
+              p.warning-note Đơn sẽ tự động hủy nếu không thanh toán đúng hạn.
+
+        if bookingDetail
+          .booking-info
+            .info-card
+              h3.info-title Thông tin đặt phòng
+              .info-row
+                span.info-label Mã đặt phòng:
+                strong.info-value= bookingDetail.code
+              .info-row
+                span.info-label Khách sạn:
+                strong.info-value= bookingDetail.hotel.name
+              .info-row
+                span.info-label Địa chỉ:
+                span.info-value= bookingDetail.hotel.address || 'N/A'
+              .info-row
+                span.info-label Ngày nhận phòng:
+                strong.info-value= bookingDetail.checkIn
+              .info-row
+                span.info-label Ngày trả phòng:
+                strong.info-value= bookingDetail.checkOut
+              .info-row
+                span.info-label Tổng tiền:
+                strong.info-value.total-amount= Number(bookingDetail.totalAmount || 0).toLocaleString('vi-VN') + ' VND'
+              .info-row
+                span.info-label Trạng thái thanh toán:
+                strong.info-value.status-unpaid Chưa thanh toán
+
+            if bookingDetail.guest
+              .info-card
+                h3.info-title Thông tin khách hàng
+                .info-row
+                  span.info-label Họ tên:
+                  span.info-value= bookingDetail.guest.fullName
+                .info-row
+                  span.info-label Số điện thoại:
+                  span.info-value= bookingDetail.guest.phone
+                if bookingDetail.guest.email
+                  .info-row
+                    span.info-label Email:
+                    span.info-value= bookingDetail.guest.email
+
+        .pending-actions
+          //- Hiển thị nút thanh toán nếu chưa thanh toán
+          if bookingDetail && bookingDetail.paymentStatus === 'unpaid'
+            if bookingDetail.paymentMethod === 'vnpay'
+              a.btn-payment.btn-vnpay(href=`/hotel-booking/payment-vnpay?bookingCode=${bookingDetail.code}&phone=${bookingDetail.phone}`)
+                i.fa-solid.fa-credit-card
+                |  Thanh toán ngay qua VNPay
+            else if bookingDetail.paymentMethod === 'bank'
+              .payment-info
+                p
+                  strong Phương thức thanh toán: 
+                  | Chuyển khoản ngân hàng
+                p Vui lòng chuyển khoản theo thông tin bên dưới và gửi ảnh chứng từ cho chúng tôi.
+            else if bookingDetail.paymentMethod === 'money'
+              .payment-info
+                p
+                  strong Phương thức thanh toán: 
+                  | Tiền mặt khi nhận phòng
+                p Vui lòng đến khách sạn đúng giờ để nhận phòng và thanh toán.
+          
+          a.btn-primary(href="/hotel/search") Tìm kiếm khách sạn khác
+          a.btn-secondary(href="/") Về trang chủ
+  
+  //- JavaScript cho countdown timer
+  if bookingDetail && bookingDetail.isTemporaryHold && bookingDetail.paymentStatus === 'unpaid' && bookingDetail.holdExpiresAt
+    script.
+      (function() {
+        const holdExpiresAt = new Date("#{bookingDetail.holdExpiresAt}");
+        const countdownTimer = document.getElementById('countdownTimer');
+        
+        if (!countdownTimer) return;
+        
+        const minutesEl = countdownTimer.querySelector('.countdown-minutes');
+        const secondsEl = countdownTimer.querySelector('.countdown-seconds');
+        
+        function updateCountdown() {
+          const now = new Date();
+          const diff = holdExpiresAt - now;
+          
+          if (diff <= 0) {
+            // Hết thời gian
+            minutesEl.textContent = '00';
+            secondsEl.textContent = '00';
+            
+            // Hiển thị thông báo và reload trang
+            alert('Đơn đặt phòng đã hết hạn! Vui lòng đặt lại.');
+            window.location.href = '/hotel/search';
+            return;
+          }
+          
+          const minutes = Math.floor(diff / 60000);
+          const seconds = Math.floor((diff % 60000) / 1000);
+          
+          minutesEl.textContent = String(minutes).padStart(2, '0');
+          secondsEl.textContent = String(seconds).padStart(2, '0');
+        }
+        
+        // Cập nhật ngay lập tức
+        updateCountdown();
+        
+        // Cập nhật mỗi giây
+        const interval = setInterval(updateCountdown, 1000);
+        
+        // Cleanup khi rời trang
+        window.addEventListener('beforeunload', function() {
+          clearInterval(interval);
+        });
+      })();
+

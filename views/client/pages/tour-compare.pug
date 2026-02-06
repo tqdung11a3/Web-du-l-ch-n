@@ -1,0 +1,199 @@
+extends ../layouts/default.pug
+
+block main
+
+  .section-tour-compare
+    .container
+      .compare-header
+        .compare-header__left
+          h1.compare-title So sánh tour du lịch
+          if tours && tours.length > 0
+            p.compare-subtitle Đang so sánh #{tours.length} tour
+        .compare-header__right
+          if tours && tours.length > 0
+            button.btn-clear-all(
+              type="button"
+              onclick="clearCompareListAndRedirect();"
+            ) Xóa tất cả
+            a.btn-back(href="/") ← Quay lại
+
+      if tours && tours.length > 0
+        .compare-table-wrapper
+          table.compare-table
+            thead
+              tr
+                th.compare-th
+                each tour in tours
+                  th.compare-th
+                    .compare-tour-card
+                      button.compare-remove(
+                        type="button"
+                        data-tour-id=tour._id
+                        onclick=`removeFromCompare('${tour._id}');`
+                        title="Xóa khỏi danh sách so sánh"
+                      ) ×
+                      if tour.avatar
+                        .compare-tour-image
+                          img(src=tour.avatar alt=tour.name)
+                      else
+                        .compare-tour-image.compare-tour-image--placeholder
+                          i.fa-solid.fa-image
+                      h3.compare-tour-name= tour.name
+                      if tour.company && tour.company.name
+                        p.compare-tour-company= tour.company.name
+                      .compare-tour-price
+                        if tour.discount > 0
+                          span.compare-price-old= tour.priceAdultFormatted + '₫'
+                          span.compare-price-new= tour.priceNewAdultFormatted + '₫'
+                        else
+                          span.compare-price-new= tour.priceNewAdultFormatted + '₫'
+                      a.compare-tour-link(
+                        href=tour.company && tour.company.slug ? `/company/${tour.company.slug}/tour/detail/${tour.slug}` : `/tour/detail/${tour.slug}`
+                      ) Xem chi tiết
+
+            tbody
+              tr
+                td.compare-label
+                  i.fa-regular.fa-clock
+                  | Thời gian
+                each tour in tours
+                  td.compare-value= tour.time || 'N/A'
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-location-dot
+                  | Địa điểm
+                each tour in tours
+                  td.compare-value
+                    if tour.locations && tour.locations.length > 0
+                      .compare-locations
+                        each location in tour.locations
+                          .compare-location-item
+                            .compare-location-city
+                              i.fa-solid.fa-map-marker-alt
+                              strong= location.cityName || location.cityLabel || 'Địa điểm'
+                            if location.spots && location.spots.length > 0
+                              ul.compare-location-spots
+                                each spot in location.spots
+                                  li= spot
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-star
+                  | Đánh giá
+                each tour in tours
+                  td.compare-value
+                    if tour.ratingAvg > 0
+                      .compare-rating
+                        span.compare-rating-stars ★
+                        span.compare-rating-value= tour.ratingAvg.toFixed(1)
+                        if tour.ratingCount > 0
+                          span.compare-rating-count (#{tour.ratingCount})
+                    else
+                      | Chưa có đánh giá
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-star
+                  | Điểm nổi bật
+                each tour in tours
+                  td.compare-value
+                    if tour.highlights && tour.highlights.length > 0
+                      ul.compare-highlights
+                        each item in tour.highlights
+                          li= item
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-users
+                  | Số chỗ
+                each tour in tours
+                  td.compare-value= (tour.seatsRemaining || tour.stockAdult || 0).toLocaleString('vi-VN') + ' chỗ'
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-map-marker-alt
+                  | Điểm khởi hành
+                each tour in tours
+                  td.compare-value= tour.departureCityName || 'N/A'
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-check-circle
+                  | Bao gồm
+                each tour in tours
+                  td.compare-value
+                    if tour.includes && tour.includes.length > 0
+                      ul.compare-includes
+                        each item in tour.includes.slice(0, 4)
+                          li ✓ #{item}
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-times-circle
+                  | Không bao gồm
+                each tour in tours
+                  td.compare-value
+                    if tour.excludes && tour.excludes.length > 0
+                      ul.compare-excludes
+                        each item in tour.excludes.slice(0, 4)
+                          li ✗ #{item}
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-info-circle
+                  | Chính sách hủy
+                each tour in tours
+                  td.compare-value
+                    if tour.cancelPolicy
+                      | #{tour.cancelPolicy}
+                    else if tour.company && tour.company.cancelPolicyTour
+                      | #{tour.company.cancelPolicyTour}
+                    else
+                      | Theo chính sách của công ty
+
+      else
+        .compare-empty
+          .compare-empty__icon
+            i.fa-solid.fa-code-compare
+          h2.compare-empty__title Chưa có tour nào để so sánh
+          p.compare-empty__desc
+            | Hãy thêm các tour bạn muốn so sánh bằng cách bấm nút "So sánh" trên từng tour.
+          a.btn-primary(href="/") Tiếp tục xem các tour khác
+
+  script.
+    // Tự động load tour từ localStorage nếu không có ids trong URL
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ids = urlParams.get('ids');
+      
+      // Nếu không có ids trong URL và trang đang hiển thị empty state
+      if (!ids && document.querySelector('.compare-empty')) {
+        try {
+          const stored = localStorage.getItem('tour_compare_list');
+          const compareList = stored ? JSON.parse(stored) : [];
+          
+          if (compareList.length > 0) {
+            // Lọc các tour có _id hợp lệ
+            const validTours = compareList.filter((tour) => tour._id && tour._id.length > 0);
+            
+            if (validTours.length > 0) {
+              // Redirect đến URL có ids
+              const tourIds = validTours.map((tour) => tour._id).join(',');
+              window.location.href = `/tour/compare?ids=${tourIds}`;
+            }
+          }
+        } catch (e) {
+          console.error('Error loading compare list from localStorage:', e);
+        }
+      }
+    })();
+

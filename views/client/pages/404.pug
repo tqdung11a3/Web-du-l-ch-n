@@ -1,0 +1,14 @@
+extends ../layouts/default.pug
+
+block main
+  .section-404
+    .container
+      .error-content
+        .error-image
+          i.fa-solid.fa-triangle-exclamation(style="font-size: 120px; color: #f39c12; margin-bottom: 30px;")
+        h1.error-title= pageTitle || "Trang không tồn tại"
+        p.error-message Trang bạn đang tìm kiếm không tồn tại hoặc đã bị xóa.
+        a.btn-back-home(href="/") 
+          i.fa-solid.fa-home
+          | Về trang chủ
+

@@ -1,0 +1,8 @@
+.section-7
+  span.inner-label
+    | Hiển thị #{pagination.skip + 1}
+    | - #{pagination.skip + categoryList.length}
+    | của #{pagination.totalRecord}
+  select(class="inner-pagination" box-pagination)
+    - for (let i = 1; i <= pagination.totalPage; i++)
+      option(value=i) Trang #{i}

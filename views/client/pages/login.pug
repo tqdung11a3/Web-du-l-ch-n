@@ -1,0 +1,52 @@
+extends ../layouts/account.pug
+
+block main
+  .form-account
+    h1.inner-title Đăng nhập
+    .inner-desc Vui lòng nhập email và mật khẩu để tiếp tục
+
+    form.inner-form(id="login-form")
+      .inner-group
+        label(
+          for="email"
+          class="inner-label"
+        ) Email
+        input(
+          type="email"
+          name="email"
+          id="email"
+          placeholder="Ví dụ: levana@gmail.com"
+          class="inner-control"
+        )
+      .inner-group
+        label(
+          for="password"
+          class="inner-label"
+        ) Mật khẩu
+        input(
+          type="password"
+          name="password"
+          id="password"
+          class="inner-control"
+        )
+      .inner-meta
+        .inner-confirm
+          input(
+            type="checkbox"
+            name="rememberPassword"
+            id="remember-password"
+            class="inner-check"
+          )
+          label(
+            for="remember-password"
+            class="inner-label"
+          ) Nhớ mật khẩu
+        a(
+          href=`/account/forgot-password`
+          class="inner-button-link"
+        ) Quên mật khẩu?
+      button(class="inner-button") Đăng Nhập
+
+    .inner-more
+      span Bạn chưa có tài khoản?
+      a(href=`/account/register`) Tạo tài khoản

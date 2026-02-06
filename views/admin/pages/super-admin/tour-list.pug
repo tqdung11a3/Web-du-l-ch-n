@@ -1,0 +1,89 @@
+extends ../../layouts/default.pug
+
+block main
+  
+  .box-head
+    h1.box-title Tất cả Tours
+
+  //- Section 4: Bộ lọc
+  .section-4
+    form#form-filter(method="GET")
+      .inner-form
+        .inner-input
+          input(
+            type="text",
+            name="keyword",
+            placeholder="Tìm tour...",
+            value=keyword || ""
+          )
+        .inner-select
+          select(name="status")
+            option(value="") -- Tất cả trạng thái --
+            option(value="active", selected=statusFilter === "active") Hoạt động
+            option(value="inactive", selected=statusFilter === "inactive") Dừng hoạt động
+        .inner-select
+          select(name="companyId")
+            option(value="") -- Tất cả công ty --
+            each company in companies
+              option(value=company._id selected=companyFilter === company._id.toString())= company.name
+        .inner-button
+          button.inner-submit(type="submit") Lọc
+
+  //- Section 6: Danh sách
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Ảnh
+            th Tên Tour
+            th Công ty
+            th Giá (Adult)
+            th Trạng thái
+            th Ngày tạo
+            th Hành động
+        tbody
+          if tours && tours.length > 0
+            each tour, index in tours
+              tr
+                td= index + 1 + pagination.skip
+                td
+                  if tour.avatar
+                    img(src=tour.avatar, alt=tour.name, style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;")
+                  else
+                    span(style="color: #999;") Chưa có ảnh
+                td
+                  strong= tour.name
+                td
+                  if tour.companyId
+                    span.badge.badge-info= tour.companyId.name
+                  else
+                    span(style="color: #999;") N/A
+                td
+                  strong(style="color: #27ae60;")= (tour.priceNewAdult || tour.priceAdult || 0).toLocaleString('vi-VN') + ' đ'
+                td.text-center
+                  if tour.status === 'active'
+                    span.badge.badge-green Hoạt động
+                  else
+                    span.badge.badge-red Dừng hoạt động
+                td= new Date(tour.createdAt).toLocaleDateString('vi-VN')
+                td
+                  .inner-buttons
+                    a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/tours/${tour._id}`, title="Xem chi tiết")
+                      <i class="fa-solid fa-eye"></i>
+          else
+            tr
+              td(colspan="8", style="text-align: center; padding: 30px; color: #999;") Không có tour nào
+
+  //- Section 7: Phân trang
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label
+        | Hiển thị #{pagination.skip + 1}
+        | - #{pagination.skip + tours.length}
+        | của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}
+  //- End Section 7

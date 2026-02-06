@@ -1,0 +1,74 @@
+extends ../layouts/default.pug
+
+block main
+  
+  h1.box-title Đơn hàng: #{orderDetail.code}
+
+  //- Section 8
+  .section-8
+    form(id="order-edit-form")
+      .inner-group(style="display: none;")
+        label(for="id" class="inner-label") Id
+        input(type="text" id="id" name="id" value=orderDetail._id)
+      .inner-group
+        label(for="fullName" class="inner-label") Tên khách hàng
+        input(type="text" id="fullName" name="fullName" value=orderDetail.fullName)
+      .inner-group
+        label(for="phone" class="inner-label") Số điện thoại
+        input(type="text" id="phone" name="phone" value=orderDetail.phone)
+      .inner-group.inner-two-col
+        label(for="note" class="inner-label") Ghi chú
+        textarea(id="note" name="note") #{orderDetail.note}
+      .inner-group
+        label(for="paymentMethod" class="inner-label") Phương thức thanh toán
+        select(id="paymentMethod" name="paymentMethod")
+          each item in paymentMethodList
+            option(
+              value=item.value
+              selected=(item.value == orderDetail.paymentMethod)
+              ) #{item.label}
+      .inner-group
+        label(for="paymentStatus" class="inner-label") Trạng thái thanh toán
+        select(id="paymentStatus" name="paymentStatus")
+          each item in paymentStatusList
+            option(
+              value=item.value
+              selected=(item.value == orderDetail.paymentStatus)
+              ) #{item.label}
+      .inner-group
+        label(class="inner-label") Ngày đặt
+        input(type="datetime-local" value=orderDetail.createdAtFormat readonly)
+      .inner-group
+        label(for="status" class="inner-label") Trạng thái
+        select(id="status" name="status")
+          each item in statusList
+            option(
+              value=item.value
+              selected=(item.value == orderDetail.status)
+              ) #{item.label}
+      .inner-group
+        label(class="inner-label") Danh sách tour
+        .inner-order-list
+          each item in orderDetail.items
+            .inner-order-item
+              .inner-order-image
+                img(src=item.avatar)
+              .inner-order-content
+                .inner-order-name #{item.name}
+                .inner-order-text
+                  div Người lớn: #{item.quantityAdult} x #{item.priceNewAdult.toLocaleString("vi-VN")}đ
+                  div Trẻ em: #{item.quantityChildren} x #{item.priceNewChildren.toLocaleString("vi-VN")}đ
+                  div Em bé: #{item.quantityBaby} x #{item.babyUnitForUi.toLocaleString("vi-VN")}đ
+                  div Ngày khởi hành: #{item.departureDateFormat}
+                  div Khởi hành tại: #{item.cityName}
+      .inner-group
+        label(class="inner-label") Thanh toán
+        .inner-order-total
+          div Tạm tính: #{orderDetail.subTotalView.toLocaleString("vi-VN")}đ
+          div Giảm: #{orderDetail.discountView.toLocaleString("vi-VN")}đ
+          div Thanh toán: <span class="inner-hl">#{orderDetail.totalView.toLocaleString("vi-VN")}đ</span>
+      .inner-button.inner-two-col
+        button Cập nhật
+    .inner-back
+      a(href=`/${pathAdmin}/order/list`) Quay lại danh sách
+  //- End Section 8

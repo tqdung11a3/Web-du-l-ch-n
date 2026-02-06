@@ -1,0 +1,274 @@
+extends ../layouts/default.pug
+
+block main
+  .booking-detail-page
+    .page-header
+      h1.page-title Chi tiết đơn đặt phòng
+      .page-actions
+        a.btn-back(href=`/${pathAdmin}/hotel/booking/list`)
+          i.fa-solid.fa-arrow-left
+          |  Quay lại danh sách
+
+    if bookingDetail
+      .booking-detail-container
+        //- Thông tin khách hàng
+        .booking-section
+          .section-header
+            i.fa-solid.fa-user
+            h3 Thông tin khách hàng
+          .section-content
+            .info-grid
+              .info-item
+                .label Họ và tên:
+                .value= bookingDetail.guest.fullName || "—"
+              .info-item
+                .label Số điện thoại:
+                .value= bookingDetail.guest.phone || "—"
+              .info-item
+                .label Email:
+                .value= bookingDetail.guest.email || "—"
+
+        //- Thông tin khách sạn
+        .booking-section
+          .section-header
+            i.fa-solid.fa-hotel
+            h3 Thông tin khách sạn
+          .section-content
+            .info-grid
+              .info-item
+                .label Tên khách sạn:
+                .value= bookingDetail.hotel.name || "—"
+              .info-item
+                .label Địa chỉ:
+                .value= bookingDetail.hotel.address || "—"
+
+        //- Thông tin đặt phòng
+        .booking-section
+          .section-header
+            i.fa-solid.fa-calendar-days
+            h3 Thông tin đặt phòng
+          .section-content
+            .info-grid
+              .info-item
+                .label Mã đơn:
+                .value
+                  strong= bookingDetail.code
+              .info-item
+                .label Ngày nhận phòng:
+                .value= bookingDetail.checkInDate
+              .info-item
+                .label Ngày trả phòng:
+                .value= bookingDetail.checkOutDate
+              .info-item
+                .label Số đêm:
+                .value= `${bookingDetail.nights} đêm`
+              .info-item
+                .label Số phòng:
+                .value= bookingDetail.totalRooms
+              .info-item
+                .label Số người lớn:
+                .value= bookingDetail.adults
+              .info-item
+                .label Số trẻ em:
+                .value= bookingDetail.childrenText
+              .info-item
+                .label Trạng thái:
+                .value
+                  span.badge(class=bookingDetail.statusClass)= bookingDetail.status
+
+        //- Chi tiết phòng
+        .booking-section
+          .section-header
+            i.fa-solid.fa-bed
+            h3 Chi tiết phòng
+          .section-content
+            .table-responsive
+              table.booking-detail-table
+                thead
+                  tr
+                    th Mã booking
+                    th Loại phòng
+                    th Giá / đêm
+                    th Số phòng
+                    th Chi tiết từng phòng
+                    th Thành tiền
+                tbody
+                  each room in bookingDetail.roomDetails
+                    tr
+                      td= room.code
+                      td= room.roomTypeName
+                      td #{room.pricePerNightFormat} #{bookingDetail.currency}
+                      td= room.rooms
+                      td
+                        if room.roomsDetails && room.roomsDetails.length > 0
+                          .rooms-details-list
+                            each detail in room.roomsDetails
+                              .room-detail-item
+                                strong Phòng #{detail.roomIndex}: 
+                                span #{detail.adults} người lớn, #{detail.children} trẻ em
+                                if detail.children > 0
+                                  span.children-ages  (#{detail.childrenAges})
+                        else
+                          span Không có chi tiết
+                      td
+                        strong #{room.totalAmountFormat} #{bookingDetail.currency}
+
+        //- Dịch vụ thêm
+        .booking-section
+          .section-header
+            i.fa-solid.fa-plus-circle
+            h3 Dịch vụ thêm
+          .section-content
+            //- Dịch vụ chung (global)
+            if bookingDetail.additionalServices && bookingDetail.additionalServices.length > 0
+              h4.services-subtitle Dịch vụ chung (cho toàn bộ booking)
+              .additional-services-list
+                each service in bookingDetail.additionalServices
+                  .service-item
+                    .service-info
+                      i.fa-solid.fa-check-circle
+                      span.service-name= service.name
+                    .service-pricing
+                      if service.quantity && service.quantity > 1
+                        span.service-quantity Số lượng: #{service.quantity}
+                        span.service-separator ×
+                      span.service-price #{service.price} VND
+            
+            //- Dịch vụ theo từng loại phòng (perItem)
+            if bookingDetail.perItemServices && bookingDetail.perItemServices.length > 0
+              each itemService in bookingDetail.perItemServices
+                if itemService.services && itemService.services.length > 0
+                  h4.services-subtitle.mt-3 #{itemService.roomTypeName}
+                  .additional-services-list
+                    each service in itemService.services
+                      .service-item
+                        .service-info
+                          i.fa-solid.fa-check-circle
+                          span.service-name= service.name
+                        .service-pricing
+                          if service.quantity && service.quantity > 1
+                            span.service-quantity Số lượng: #{service.quantity}
+                            span.service-separator ×
+                          span.service-price #{service.price} VND
+            
+            //- Nếu không có dịch vụ nào
+            if (!bookingDetail.additionalServices || bookingDetail.additionalServices.length === 0) && (!bookingDetail.perItemServices || bookingDetail.perItemServices.length === 0)
+              .empty-services
+                i.fa-solid.fa-info-circle
+                p Khách hàng không chọn dịch vụ thêm nào
+
+        //- Thông tin thanh toán
+        .booking-section
+          .section-header
+            i.fa-solid.fa-credit-card
+            h3 Thông tin thanh toán
+          .section-content
+            .info-grid
+              .info-item
+                .label Phương thức thanh toán:
+                .value= bookingDetail.paymentMethod
+              .info-item
+                .label Trạng thái thanh toán:
+                .value
+                  span.badge(class=bookingDetail.paymentStatusClass)= bookingDetail.paymentStatus
+              .info-item
+                .label Tổng tiền phòng:
+                .value
+                  strong #{bookingDetail.totalAmountFormat} #{bookingDetail.currency}
+              .info-item
+                .label Tổng đơn hàng:
+                .value
+                  strong.total-amount #{bookingDetail.orderTotalFormat} #{bookingDetail.currency}
+
+        //- Ghi chú
+        if bookingDetail.note
+          .booking-section
+            .section-header
+              i.fa-solid.fa-note-sticky
+              h3 Ghi chú
+            .section-content
+              .note-content= bookingDetail.note
+
+        //- Thông tin khác
+        .booking-section
+          .section-header
+            i.fa-solid.fa-info-circle
+            h3 Thông tin khác
+          .section-content
+            .info-grid
+              .info-item
+                .label Ngày tạo:
+                .value= bookingDetail.createdAt
+
+    else
+      .empty-state
+        p Không tìm thấy thông tin đơn đặt phòng
+
+  style.
+    .services-subtitle {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .mt-3 {
+      margin-top: 24px;
+    }
+    
+    .additional-services-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .service-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .service-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .service-info i {
+      color: #10b981;
+      font-size: 16px;
+    }
+    
+    .service-name {
+      font-weight: 500;
+      color: #374151;
+    }
+    
+    .service-pricing {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: #6b7280;
+    }
+    
+    .service-quantity {
+      font-weight: 500;
+      color: #374151;
+    }
+    
+    .service-separator {
+      color: #9ca3af;
+    }
+    
+    .service-price {
+      font-weight: 600;
+      color: #059669;
+    }
+

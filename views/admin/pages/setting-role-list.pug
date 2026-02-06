@@ -1,0 +1,64 @@
+extends ../layouts/default.pug
+
+block main
+  
+  h1.box-title Nhóm quyền
+
+  //- Section 5
+  .section-5
+    .inner-wrap
+      .inner-change-status
+        .inner-item
+          select
+            option(value="") -- Hành động --
+            option(value="") Xóa
+        .inner-item
+          button Áp dụng
+      .inner-search
+        <i class="fa-solid fa-magnifying-glass"></i>
+        input(type="text" placeholder="Tìm kiếm")
+      .inner-button-create
+        a(href=`/${pathAdmin}/setting/role/create`) + Tạo mới 
+  //- End Section 5
+
+  //- Section 6
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th
+              input(type="checkbox" class="inner-check")
+            th Tên nhóm quyền
+            th Mô tả ngắn
+            th Hành động
+        tbody
+          each item in roleList
+            tr
+              td
+                input(type="checkbox" class="inner-check")
+              td #{item.name}
+              td #{item.description}
+              td
+                .inner-buttons
+                  a(
+                    href=`/${pathAdmin}/setting/role/edit/${item.id}` 
+                    class="inner-edit"
+                    )
+                    <i class="fa-regular fa-pen-to-square"></i>
+                  button(
+                    class="inner-delete"
+                    button-delete
+                    data-api=`/${pathAdmin}/setting/role/delete/${item.id}`
+                    )
+                    <i class="fa-regular fa-trash-can"></i>
+  //- End Section 6
+
+  //- Section 7
+  .section-7
+    span.inner-label Hiển thị 1 - 9 của 78
+    select(class="inner-pagination")
+      option(value="") Trang 1
+      option(value="") Trang 2
+      option(value="") Trang 3
+  //- End Section 7

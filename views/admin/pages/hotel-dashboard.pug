@@ -1,0 +1,125 @@
+//- views/admin/pages/hotel-dashboard.pug
+extends ../layouts/default.pug
+
+block main
+  .hotel-dashboard
+    //- Hotel Selector
+    include ../partials/hotel-selector.pug
+    
+    //- Header
+    .dashboard-header
+      .header-left
+        h1.dashboard-title Dashboard
+        p.dashboard-subtitle Tổng quan khách sạn
+      .header-right
+        a.btn-manage-hotels(href=`/${pathAdmin}/hotel/list`)
+          i.fa-solid.fa-hotel
+          span Quản lý khách sạn
+
+    //- Summary Cards
+    .summary-cards
+      .summary-card
+        .card-icon.hotel-icon
+          i.fa-solid.fa-building
+        .card-content
+          .card-label Tổng khách sạn
+          .card-value= dashboardData ? dashboardData.totalHotels : 0
+      
+      .summary-card
+        .card-icon.revenue-icon
+          i.fa-solid.fa-dollar-sign
+        .card-content
+          .card-label Tổng doanh thu (tháng)
+          .card-value-wrapper
+            .card-value= dashboardData ? (dashboardData.totalRevenue / 1000000).toFixed(0) + 'M' : '0M'
+            if dashboardData && dashboardData.revenueTrend > 0
+              .card-trend.trend-up
+                i.fa-solid.fa-arrow-up
+                span= '+' + dashboardData.revenueTrend + '%'
+            else if dashboardData && dashboardData.revenueTrend < 0
+              .card-trend.trend-down
+                i.fa-solid.fa-arrow-down
+                span= dashboardData.revenueTrend + '%'
+      
+      .summary-card
+        .card-icon.bookings-icon
+          i.fa-solid.fa-bed
+        .card-content
+          .card-label Tổng đặt phòng (tháng)
+          .card-value-wrapper
+            .card-value= dashboardData ? dashboardData.totalBookings.toLocaleString('vi-VN') : '0'
+            if dashboardData && dashboardData.bookingsTrend > 0
+              .card-trend.trend-up
+                i.fa-solid.fa-arrow-up
+                span= '+' + dashboardData.bookingsTrend + '%'
+            else if dashboardData && dashboardData.bookingsTrend < 0
+              .card-trend.trend-down
+                i.fa-solid.fa-arrow-down
+                span= dashboardData.bookingsTrend + '%'
+
+    //- Hotel Performance Table
+    if dashboardData && dashboardData.hotelPerformance && dashboardData.hotelPerformance.length > 0
+      .performance-section
+        .section-header
+          h2.section-title Hiệu suất theo khách sạn
+        .performance-table-wrapper
+          table.performance-table
+            thead
+              tr
+                th Khách sạn
+                th Doanh thu (tháng)
+                th Đặt phòng
+                th Tỷ lệ lấp đầy
+                th Xu hướng
+                th Thao tác
+            tbody
+              each hotel in dashboardData.hotelPerformance
+                tr
+                  td
+                    .hotel-name-cell
+                      i.fa-solid.fa-hotel
+                      span= hotel.hotelName
+                  td
+                    .revenue-cell= (hotel.revenue / 1000000).toFixed(0) + 'M'
+                  td= hotel.bookingCount.toLocaleString('vi-VN')
+                  td
+                    .occupancy-badge= hotel.occupancyRate + '%'
+                  td
+                    if hotel.trend > 0
+                      i.fa-solid.fa-arrow-up.trend-up-icon
+                    else if hotel.trend < 0
+                      i.fa-solid.fa-arrow-down.trend-down-icon
+                    else
+                      i.fa-solid.fa-minus.trend-neutral-icon
+                  td
+                    a.btn-view-details(href=`/${pathAdmin}/hotel/edit/${hotel.hotelId}`) Xem chi tiết →
+
+    //- Bottom Sections: Top Booking Sources & Recent Activities
+    .dashboard-bottom
+      //- Top Booking Sources
+      .bottom-section.booking-sources-section
+        .section-header
+          h2.section-title Top nguồn đặt phòng
+        .booking-sources-list
+          if dashboardData && dashboardData.topBookingSources
+            each source in dashboardData.topBookingSources
+              .source-item
+                .source-name= source.source
+                .source-bar-wrapper
+                  .source-bar(style=`width: ${(source.count / dashboardData.topBookingSources[0].count * 100)}%`)
+                .source-count= source.count + ' đặt phòng'
+
+      //- Recent Activities
+      .bottom-section.recent-activities-section
+        .section-header
+          h2.section-title Hoạt động gần đây
+        .activities-list
+          if dashboardData && dashboardData.recentActivities
+            each activity in dashboardData.recentActivities
+              .activity-item
+                - const dotClass = `dot-${activity.color}`
+                .activity-dot(class=dotClass)
+                .activity-content
+                  .activity-text= activity.activity
+                  .activity-time= activity.timeAgo
+

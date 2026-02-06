@@ -1,0 +1,67 @@
+//- views/admin/pages/hotel-room-types-list.pug
+extends ../layouts/default.pug
+
+block main
+  //- Hotel Selector
+  include ../partials/hotel-selector.pug
+  
+  h1.box-title Quản lý loại phòng
+
+  .section-8
+    .inner-header
+      .inner-header-left
+        .inner-search
+          input(type="text" placeholder="Tìm kiếm theo tên khách sạn..." search)
+
+    .inner-table
+      table
+        thead
+          tr
+            th STT
+            th Tên khách sạn
+            th Địa chỉ
+            th Số loại phòng
+            th Thao tác
+        tbody
+          if hotelList && hotelList.length > 0
+            each hotel, index in hotelList
+              tr
+                td #{index + 1}
+                td
+                  strong= hotel.name
+                td= hotel.address || 'Chưa có thông tin'
+                td
+                  span.badge.badge-info= (hotel.roomTypesCount || 0) + ' loại phòng'
+                td
+                  .inner-actions
+                    a.btn-edit(href=`/${pathAdmin}/hotel/${hotel.id}/room-types/manage`)
+                      i.fa-solid.fa-door-open
+                      |  Quản lý loại phòng
+          else
+            tr
+              td(colspan="5" style="text-align: center; padding: 40px;")
+                p(style="color: #6b7280; font-size: 14px;") Không có khách sạn nào.
+
+  script.
+    // Tìm kiếm
+    document.addEventListener('DOMContentLoaded', function() {
+      const searchInput = document.querySelector('input[search]');
+      if (searchInput) {
+        searchInput.addEventListener('input', function() {
+          const searchTerm = this.value.toLowerCase().trim();
+          const rows = document.querySelectorAll('.inner-table tbody tr');
+          
+          rows.forEach(row => {
+            const hotelName = row.querySelector('td:nth-child(2)')?.textContent.toLowerCase() || '';
+            const address = row.querySelector('td:nth-child(3)')?.textContent.toLowerCase() || '';
+            
+            if (hotelName.includes(searchTerm) || address.includes(searchTerm)) {
+              row.style.display = '';
+            } else {
+              row.style.display = 'none';
+            }
+          });
+        });
+      }
+    });
+

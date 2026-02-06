@@ -1,0 +1,106 @@
+extends ../layouts/default.pug
+
+block main
+  // bọc cả trang trong 1 div để truyền pathAdmin sang JS qua data-attr
+  .discount-page(data-path-admin=pathAdmin)
+    h1.box-title Danh sách tour khuyến mãi
+
+    .section-5
+      .inner-wrap
+        .inner-back
+          a(href=`/${pathAdmin}/tour/list`) ← Quay lại danh sách tour
+
+    .section-6
+      .table-2
+        table
+          thead
+            tr
+              th Tên tour
+              th % giảm
+              th Trạng thái
+              th Thời gian
+              th Giá hiện tại (NL/TE/EB)
+              th Hành động
+          tbody
+            if tourList.length === 0
+              tr
+                td(colspan="6") Hiện không có tour nào đang hoặc sắp khuyến mãi.
+            else
+              each item in tourList
+                -
+                  const hasPercent =
+                    item.discountPercent && item.discountPercent > 0;
+                  const hasOldPrice =
+                    (item.priceAdult && item.priceAdult > 0) ||
+                    (item.priceChildren && item.priceChildren > 0) ||
+                    (item.priceBaby && item.priceBaby > 0);
+                  // tour giảm linh hoạt = có giá cũ nhưng discountPercent = 0
+                  const isFlexibleDiscount = !hasPercent && hasOldPrice;
+
+                // thêm data-tour-row + data-id để JS dễ xử lý
+                tr(data-tour-row data-id=item._id)
+                  // TÊN TOUR
+                  td
+                    a(href=`/${pathAdmin}/tour/edit/${item._id}`) #{item.name}
+
+                  // % GIẢM
+                  td
+                    if isFlexibleDiscount
+                      // tour giảm theo giá trị cố định -> chỉ hiển thị text
+                      span.discount-flexible Giảm linh hoạt
+                    else
+                      // tour giảm theo % -> cho phép nhập %
+                      form.discount-form(data-id=item._id)
+                        input.discount-percent(
+                          type="number"
+                          name="percent"
+                          min="1"
+                          max="90"
+                          value=item.discountPercentDisplay
+                          style="width:70px"
+                        )
+
+                  // TRẠNG THÁI
+                  td
+                    if item.discountStatus === 'active'
+                      .badge.badge-green Đang giảm giá
+                    else if item.discountStatus === 'upcoming'
+                      .badge.badge-blue Sắp giảm giá
+                    else
+                      .badge.badge-gray Khác
+
+                  // THỜI GIAN – 2 ô date có thể sửa
+                  td
+                    .time-edit
+                      input(
+                        type="date"
+                        name="discountFrom"
+                        value=item.discountFromInput
+                        style="width:140px"
+                      )
+                      span &nbsp;-&nbsp;
+                      input(
+                        type="date"
+                        name="discountTo"
+                        value=item.discountToInput
+                        style="width:140px"
+                      )
+
+                  // GIÁ HIỆN TẠI
+                  td
+                    - const fmt = (n) => {
+                    -   const v = Number(n);
+                    -   return Number.isFinite(v) ? v.toLocaleString('vi-VN') : '0';
+                    - };
+                    div NL: #{fmt(item.priceNewAdult)}đ
+                    div TE: #{fmt(item.priceNewChildren)}đ
+                    if item.babyPricingMode === 'fixed'
+                      div EB: #{fmt(item.priceNewBaby)}đ
+                    else
+                      div EB: Theo bậc
+
+                  // HÀNH ĐỘNG
+                  td
+                    .discount-actions
+                      button(type="button" class="btn-discount btn-save") Lưu
+                      button(type="button" class="btn-discount btn-cancel-discount") Hủy KM

@@ -1,0 +1,67 @@
+//- views/admin/pages/hotel-payments.pug
+extends ../layouts/default.pug
+
+block main
+  .payments-page
+    //- Hotel Selector
+    include ../partials/hotel-selector.pug
+    
+    //- Header
+    .page-header
+      .header-left
+        h1.page-title Thanh toán
+        p.page-subtitle Quản lý hóa đơn và thanh toán
+
+    //- Invoices Table
+    .invoices-table-wrapper
+      table.invoices-table
+        thead
+          tr
+            th Booking
+            th Khách
+            th Số phòng
+            th Ngày phát hành
+            th Hạn thanh toán
+            th Tổng tiền
+            th Đã thanh toán
+            th Trạng thái
+            th Hành động
+        tbody
+          if paymentsData.invoices && paymentsData.invoices.length > 0
+            each invoice in paymentsData.invoices
+              tr
+                td= invoice.bookingCode
+                td= invoice.customerName
+                td= invoice.roomCount + ' phòng'
+                td= invoice.issueDate
+                td= invoice.dueDate
+                td
+                  .amount= invoice.totalAmount + 'K'
+                td
+                  .paid-amount= invoice.paidAmount + 'K'
+                td
+                  - const statusBadgeClass = `badge-${invoice.statusColor}`
+                  .status-badge(class=statusBadgeClass)= invoice.statusText
+                td
+                  .action-buttons
+                    button.action-btn.view-btn
+                      i.fa-solid.fa-eye
+                    button.action-btn.download-btn
+                      i.fa-solid.fa-download
+          else
+            tr
+              td(colspan="9" style="text-align: center; padding: 40px;")
+                .empty-message Không có hóa đơn nào
+
+    //- Summary Cards
+    .summary-cards
+      .summary-card
+        .card-label Tổng doanh thu (Tháng này)
+        .card-value= paymentsData.summary ? paymentsData.summary.totalRevenue.toLocaleString('vi-VN') + 'K' : '0K'
+      .summary-card.orange
+        .card-label Thanh toán chờ xử lý
+        .card-value.orange-value= paymentsData.summary ? paymentsData.summary.pendingPayments.toLocaleString('vi-VN') + 'K' : '0K'
+      .summary-card.red
+        .card-label Hóa đơn chưa thanh toán
+        .card-value.red-value= paymentsData.summary ? paymentsData.summary.unpaidInvoices : 0
+

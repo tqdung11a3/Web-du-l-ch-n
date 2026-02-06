@@ -1,0 +1,73 @@
+extends ../layouts/default.pug
+
+block main
+  
+  h1.box-title Quản lý người dùng
+
+  //- Section 4
+  .section-4
+    .inner-wrap
+      .inner-item
+        i.fa-solid.fa-filter
+        |  Bộ lọc
+      .inner-item
+        select
+          option(value="") Trạng thái
+          option(value="active") Hoạt động
+          option(value="inactive") Tạm dừng
+      .inner-item
+        input(type="text" placeholder="Tìm theo tên hoặc email..." )
+
+  //- Section 6
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th
+              input(type="checkbox" class="inner-check")
+            th Họ tên
+            th(class="inner-center") Ảnh đại diện
+            th Email
+            th Số điện thoại
+            th Địa chỉ
+            th Trạng thái
+            th Hành động
+        tbody
+          if users && users.length
+            each user in users
+              tr
+                td
+                  input(type="checkbox" class="inner-check" value=user._id)
+                td= user.fullName || ""
+                td(class="inner-center")
+                  //- Tạm dùng icon người, hoặc bạn đổi thành img nếu muốn
+                  i.fa-solid.fa-user
+                td= user.email || ""
+                td= user.phone || ""
+                td= user.address || ""
+                td(class="inner-center")
+                  .badge.badge-green Hoạt động
+                td
+                  .inner-buttons
+                    a(href="#" class="inner-edit")
+                      i.fa-regular.fa-pen-to-square
+                    button(type="button" class="inner-delete" data-id=user._id)
+                      i.fa-regular.fa-trash-can
+          else
+            tr
+              td(colspan="8" class="inner-center")
+                | Chưa có người dùng nào thuộc công ty này.
+  //- End Section 6
+
+  //- Section 7
+  .section-7
+    span.inner-label
+      if users && users.length
+        | Hiển thị #{users.length} người dùng
+      else
+        | Không có người dùng để hiển thị
+    select(class="inner-pagination")
+      option(value="") Trang 1
+      option(value="") Trang 2
+      option(value="") Trang 3

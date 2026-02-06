@@ -1,0 +1,273 @@
+/* ============================================
+   Unified Cart Page - Tabs
+   ============================================ */
+.unified-cart-page {
+  padding: 40px 0;
+  min-height: 70vh;
+  background: #f5f5f5;
+}
+
+.unified-cart-page .container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.unified-cart-page .page-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 32px;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+/* Cart Tabs */
+.cart-tabs {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.cart-tab {
+  flex: 1;
+  max-width: 300px;
+  padding: 16px 24px;
+  background: #fff;
+  border: 2px solid #ddd;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+}
+
+.cart-tab i {
+  font-size: 20px;
+}
+
+.cart-tab:hover {
+  border-color: #0071c2;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 113, 194, 0.2);
+}
+
+.cart-tab.active {
+  background: #0071c2;
+  border-color: #0071c2;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 113, 194, 0.3);
+}
+
+.cart-tab-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #d32f2f;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.cart-tab.active .cart-tab-badge {
+  background: #fff;
+  color: #0071c2;
+}
+
+/* Tab Content */
+.cart-tab-content {
+  position: relative;
+}
+
+.tab-pane {
+  display: none;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .cart-tabs {
+    flex-direction: column;
+  }
+  
+  .cart-tab {
+    max-width: 100%;
+  }
+}
+
+/* Hotel Cart Section in Unified Page */
+.hotel-cart-section {
+  background: transparent;
+  padding: 24px 0 0;
+}
+
+.hotel-checkout-section {
+  margin-top: 32px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  padding: 24px 28px 28px;
+}
+
+.hotel-checkout-section .section-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+
+.hotel-checkout-section .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin-bottom: 20px;
+}
+
+.hotel-checkout-section .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hotel-checkout-section label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.hotel-checkout-section .form-input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+
+.hotel-checkout-section .form-input:focus {
+  border-color: #0071c2;
+  box-shadow: 0 0 0 1px rgba(0, 113, 194, 0.15);
+}
+
+.hotel-checkout-section textarea.form-input {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.hotel-checkout-section .payment-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hotel-checkout-section .payment-method-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.hotel-checkout-section .inner-info-bank {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f3f4ff;
+  border: 1px dashed #c4c6f5;
+  margin-bottom: 16px;
+  font-size: 13px;
+  display: none;
+}
+
+.hotel-checkout-section .inner-info-bank.active {
+  display: block;
+}
+
+.hotel-checkout-section .inner-info-bank .inner-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.hotel-checkout-section .checkout-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.hotel-checkout-section .btn-checkout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 24px;
+  background: #e11d48;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.hotel-checkout-section .btn-checkout:hover {
+  background: #be123c;
+}
+
+.hotel-checkout-section .btn-continue-shopping {
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2563eb;
+}
+
+.hotel-checkout-section .btn-continue-shopping:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .hotel-checkout-section {
+    padding: 20px 16px 22px;
+  }
+
+  .hotel-checkout-section .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hotel-checkout-section .checkout-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hotel-checkout-section .btn-checkout,
+  .hotel-checkout-section .btn-continue-shopping {
+    justify-content: center;
+  }
+}

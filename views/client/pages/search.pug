@@ -1,0 +1,46 @@
+extends ../layouts/default.pug
+include ../mixins/product.pug
+
+block main
+  .section-9
+    .container
+      .inner-wrap
+        .inner-left
+          include ../partials/box-filter.pug
+        .inner-right
+          .inner-info
+            h2.inner-title #{pageTitle}
+          .inner-info-2
+            .inner-sort
+              .inner-label Sắp xếp :
+              a.inner-item(class=(sort==='price_asc' ? 'active' : ''), href=sortHrefs.priceAsc)
+                | Giá tăng dần
+                i.fa-solid.fa-square-caret-up
+              a.inner-item(class=(sort==='price_desc' ? 'active' : ''), href=sortHrefs.priceDesc)
+                | Giá giảm dần
+                i.fa-solid.fa-square-caret-down
+              a.inner-item(class=(sort==='rating' ? 'active' : ''), href=sortHrefs.rating)
+                | Đánh giá
+                i.fa-solid.fa-tag
+            .inner-total-item
+              | Tất cả: 
+              b #{pagination.totalRecord} Tour
+            button.inner-filter-mobile
+              | Bộ Lọc
+              i.fa-solid.fa-filter
+          .inner-product-list
+            if (tourList.length > 0)
+              each item in tourList
+                +product-item(item)
+            else
+              div Không tìm thấy bản ghi nào.
+          // Pagination
+          .section-7
+            span.inner-label
+              | Hiển thị #{pagination.skip + 1}
+              | - #{pagination.skip + tourList.length}
+              | của #{pagination.totalRecord}
+            select(class="inner-pagination" box-pagination)
+              - for (let i = 1; i <= pagination.totalPage; i++)
+                option(value=i) Trang #{i}
+          // End Pagination

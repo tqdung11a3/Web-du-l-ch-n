@@ -1,0 +1,54 @@
+//- views/client/pages/hotel-booking-success.pug
+extends ../layouts/default.pug
+
+block main
+  .hotel-booking-success-page
+    .container
+      .success-content
+        .success-icon
+          i.fa-solid.fa-circle-check
+        h1.success-title Đặt phòng thành công!
+        p.success-message Cảm ơn bạn đã đặt phòng. Chúng tôi đã gửi thông tin đặt phòng đến email của bạn.
+
+        if bookingDetail
+          .booking-info
+            .info-card
+              h3.info-title Thông tin đặt phòng
+              .info-row
+                span.info-label Mã đặt phòng:
+                strong.info-value= bookingDetail.code
+              .info-row
+                span.info-label Khách sạn:
+                strong.info-value= bookingDetail.hotel.name
+              .info-row
+                span.info-label Địa chỉ:
+                span.info-value= bookingDetail.hotel.address || 'N/A'
+              .info-row
+                span.info-label Ngày nhận phòng:
+                strong.info-value= bookingDetail.checkIn
+              .info-row
+                span.info-label Ngày trả phòng:
+                strong.info-value= bookingDetail.checkOut
+              .info-row
+                span.info-label Tổng tiền:
+                strong.info-value= Number(bookingDetail.totalAmount || 0).toLocaleString('vi-VN') + ' VND'
+
+            if bookingDetail.guest
+              .info-card
+                h3.info-title Thông tin khách hàng
+                .info-row
+                  span.info-label Họ tên:
+                  span.info-value= bookingDetail.guest.fullName
+                .info-row
+                  span.info-label Số điện thoại:
+                  span.info-value= bookingDetail.guest.phone
+                if bookingDetail.guest.email
+                  .info-row
+                    span.info-label Email:
+                    span.info-value= bookingDetail.guest.email
+
+        .success-actions
+          a.btn-primary(href="/hotel/search") Tìm kiếm khách sạn khác
+          a.btn-secondary(href="/account/profile?tab=hotel-bookings") Xem đơn hàng của tôi
+          a.btn-secondary(href="/") Về trang chủ
+

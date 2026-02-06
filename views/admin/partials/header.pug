@@ -1,0 +1,32 @@
+header.header
+  .inner-logo
+    a(href=`/${pathAdmin}/dashboard`)
+      span TQD
+      span Admin
+  .inner-wrap
+    .inner-notify#notificationBell
+      img(src="/admin/assets/images/icon-bell.svg", alt="")
+      if unreadNotificationCount && unreadNotificationCount > 0
+        span.notification-badge= unreadNotificationCount
+    .inner-account
+      .inner-avatar
+        img(src=account.avatar, alt="")
+      .inner-text
+        .inner-name #{account.fullName}
+        .inner-role #{account.roleName}
+    button.inner-button-menu
+      <i class="fa-solid fa-bars"></i>
+
+//- Notification Modal
+#notificationModal.notification-modal(style="display: none;")
+  .notification-modal-overlay
+  .notification-modal-content
+    .notification-modal-header
+      h3 Thông báo
+      button.notification-modal-close(type="button")
+        i.fa-solid.fa-times
+    .notification-modal-body
+      .notification-list
+        .loading-notifications
+          i.fa-solid.fa-spinner.fa-spin
+          span Đang tải...

@@ -1,0 +1,221 @@
+extends ../../layouts/super-admin.pug
+
+block main
+  h1.box-title= pageTitle
+
+  //- Section 4: Bộ lọc
+  .section-4
+    .inner-wrap
+      .inner-item
+        i.fa-solid.fa-filter
+        |  Bộ lọc
+      .inner-item
+        form(method="GET" style="display: flex; gap: 10px; align-items: center;")
+          input(
+            type="text"
+            name="keyword"
+            placeholder="Tìm admin..."
+            value=keyword
+            style="height: 42px; padding: 0 14px; border: 1px solid #d5d5d5; border-radius: 4px; font-size: 14px;"
+          )
+          select(
+            name="status"
+            style="height: 42px; padding: 0 14px; border: 1px solid #d5d5d5; border-radius: 4px; font-size: 14px; cursor: pointer;"
+          )
+            option(value="" selected=!statusFilter) Tất cả
+            option(value="initial" selected=statusFilter==='initial') Chờ duyệt
+            option(value="active" selected=statusFilter==='active') Đang hoạt động
+            option(value="inactive" selected=statusFilter==='inactive') Tạm dừng
+          button(
+            type="submit"
+            style="height: 42px; padding: 0 20px; background-color: var(--color-primary); color: white; border: 0; border-radius: 4px; font-weight: 600; font-size: 14px; cursor: pointer;"
+          ) Lọc
+  //- End Section 4
+
+  //- Section 5: Nút tạo mới
+  .section-5
+    .inner-wrap
+      .inner-button-create
+        a(href=`/${pathAdmin}/super-admin/admin/create`) + Tạo Company Admin
+  //- End Section 5
+
+  //- Section 6: Bảng danh sách
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Họ tên
+            th Email
+            th Công ty
+            th Chức vụ
+            th(class="inner-center") Trạng thái
+            th(class="inner-center") Ngày tạo
+            th(class="inner-center") Hành động
+        tbody
+          if admins && admins.length
+            each admin, index in admins
+              tr
+                td= index + 1
+                td= admin.fullName
+                td= admin.email
+                td
+                  if admin.companyId
+                    = admin.companyId.name
+                    if admin.companyId.status !== 'active'
+                      span.badge.badge-orange(style="margin-left: 8px;") (Tạm dừng)
+                  else
+                    | N/A
+                td= admin.positionCompany || '-'
+                td(class="inner-center")
+                  if admin.status === 'initial'
+                    .badge.badge-orange Chờ duyệt
+                  else if admin.status === 'active'
+                    .badge.badge-green Hoạt động
+                  else
+                    .badge.badge-red Tạm dừng
+                td(class="inner-center")= new Date(admin.createdAt).toLocaleDateString('vi-VN')
+                td
+                  .inner-buttons
+                    - const editUrl = `/${pathAdmin}/super-admin/admin/edit/${admin._id}`
+                    a(
+                      href=editUrl
+                      class="inner-edit"
+                      title="Chỉnh sửa"
+                      style="color: inherit; text-decoration: none;"
+                    )
+                      i.fa-regular.fa-pen-to-square
+                    if admin.status === 'initial'
+                      button(
+                        type="button"
+                        onclick=`approveAdmin('${admin._id}')`
+                        title="Phê duyệt"
+                      )
+                        i.fa-solid.fa-check
+                      button(
+                        type="button"
+                        class="inner-delete"
+                        onclick=`rejectAdmin('${admin._id}')`
+                        title="Từ chối"
+                      )
+                        i.fa-solid.fa-times
+                    else if admin.status === 'active'
+                      button(
+                        type="button"
+                        onclick=`rejectAdmin('${admin._id}')`
+                        title="Vô hiệu hóa"
+                      )
+                        i.fa-solid.fa-ban
+                      button(
+                        type="button"
+                        class="inner-delete"
+                        onclick=`deleteAdmin('${admin._id}')`
+                        title="Xóa"
+                      )
+                        i.fa-regular.fa-trash-can
+                    else
+                      button(
+                        type="button"
+                        onclick=`approveAdmin('${admin._id}')`
+                        title="Kích hoạt"
+                      )
+                        i.fa-solid.fa-check
+                      button(
+                        type="button"
+                        class="inner-delete"
+                        onclick=`deleteAdmin('${admin._id}')`
+                        title="Xóa"
+                      )
+                        i.fa-regular.fa-trash-can
+          else
+            tr
+              td(colspan="8" class="inner-center") Không tìm thấy admin nào
+  //- End Section 6
+
+  //- Section 7: Pagination
+  if admins && admins.length
+    .section-7
+      span.inner-label Hiển thị #{admins.length} admin
+  //- End Section 7
+
+  script.
+    function approveAdmin(id) {
+      if (!confirm('Phê duyệt admin này?')) return;
+      
+      fetch(`/${pathAdmin}/super-admin/admin/approve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (typeof drawNotify === 'function') {
+          drawNotify(data.code, data.message);
+        } else {
+          alert(data.message);
+        }
+        if (data.code === 'success') location.reload();
+      })
+      .catch(err => {
+        console.error(err);
+        if (typeof notify?.error === 'function') {
+          notify.error('Có lỗi xảy ra!');
+        } else {
+          alert('Có lỗi xảy ra!');
+        }
+      });
+    }
+
+    function rejectAdmin(id) {
+      if (!confirm('Từ chối/Vô hiệu hóa admin này?')) return;
+      
+      fetch(`/${pathAdmin}/super-admin/admin/reject`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (typeof drawNotify === 'function') {
+          drawNotify(data.code, data.message);
+        } else {
+          alert(data.message);
+        }
+        if (data.code === 'success') location.reload();
+      })
+      .catch(err => {
+        console.error(err);
+        if (typeof notify?.error === 'function') {
+          notify.error('Có lỗi xảy ra!');
+        } else {
+          alert('Có lỗi xảy ra!');
+        }
+      });
+    }
+
+    function deleteAdmin(id) {
+      if (!confirm('Xóa admin này? Hành động không thể hoàn tác!')) return;
+      
+      fetch(`/${pathAdmin}/super-admin/admin/${id}`, {
+        method: 'DELETE'
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (typeof drawNotify === 'function') {
+          drawNotify(data.code, data.message);
+        } else {
+          alert(data.message);
+        }
+        if (data.code === 'success') location.reload();
+      })
+      .catch(err => {
+        console.error(err);
+        if (typeof notify?.error === 'function') {
+          notify.error('Có lỗi xảy ra!');
+        } else {
+          alert('Có lỗi xảy ra!');
+        }
+      });
+    }
+

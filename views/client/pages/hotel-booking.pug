@@ -1,0 +1,145 @@
+//- views/client/pages/hotel-booking.pug
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+
+block main
+  // ===== Chuẩn hoá dữ liệu an toàn để dùng trong template (không dùng ?.) =====
+  -
+    var b = booking || {};
+    var h = b.hotel || {};
+    var room = b.room || {};
+    var nights = Number(b.nights || 1);
+    var currency = b.currency || 'đ';
+    var fmt = function(n){ return Number(n||0).toLocaleString('vi-VN'); };
+
+  // ===== Thanh bước tiến trình =====
+  .booking-steps
+    .booking-steps__item.booking-steps__item--active
+      .booking-steps__icon
+        i.fa-solid.fa-truck-fast
+      .booking-steps__label NHẬP THÔNG TIN
+    .booking-steps__arrow →
+    .booking-steps__item
+      .booking-steps__icon
+        i.fa-regular.fa-handshake
+      .booking-steps__label THANH TOÁN
+    .booking-steps__arrow →
+    .booking-steps__item
+      .booking-steps__icon
+        i.fa-solid.fa-receipt
+      .booking-steps__label HOÀN TẤT
+
+  .booking-container
+    h1.page-title(style="margin:10px 0 18px; font-weight:800;") NHẬP THÔNG TIN
+
+    .booking-grid
+      // ---- LEFT: FORM ----
+      form.booking-form(action="/hotel/booking" method="post")
+        h3.section-title THÔNG TIN LIÊN LẠC
+        .form-grid
+          .form-group
+            label(for="fullName") Họ tên *
+            input#fullName.form-input(type="text" name="fullName" placeholder="Nhập họ tên" required)
+          .form-group
+            label(for="phone") Điện thoại *
+            input#phone.form-input(type="text" name="phone" placeholder="Nhập số điện thoại" required)
+          .form-group
+            label(for="email") Email *
+            input#email.form-input(type="email" name="email" placeholder="Nhập email" required)
+          .form-group
+            label(for="contactAddress") Địa chỉ
+            input#contactAddress.form-input(type="text" name="contactAddress" placeholder="Nhập địa chỉ")
+
+        h3.section-title HÓA ĐƠN THANH TOÁN
+        .invoice-row
+          input(type="checkbox" name="needInvoice" id="needInvoice")
+          label(for="needInvoice") Tôi muốn xuất hoá đơn
+
+        h3.section-title SỐ LƯỢNG HÀNH KHÁCH
+        .counters
+          .counter
+            .counter__left
+              .counter__icon
+                i.fa-regular.fa-user
+              div
+                .counter__title Người lớn
+                .counter__sub (Từ 12 tuổi trở lên)
+            .counter__value
+              input.form-input(type="number" name="adults" min="1" value=b.adults || 1 style="width:80px; text-align:center")
+          .counter
+            .counter__left
+              .counter__icon
+                i.fa-solid.fa-children
+              div
+                .counter__title Trẻ em
+                .counter__sub Dưới 12 tuổi
+            .counter__value
+              input.form-input(type="number" name="children" min="0" value=b.children || 0 style="width:80px; text-align:center")
+
+        h3.section-title QUÝ KHÁCH CÓ THÊM YÊU CẦU GÌ VỀ KHÁCH SẠN HÃY NÓI VỚI CHÚNG TÔI
+        textarea.form-textarea(name="note" rows="5" placeholder="Vui lòng nhập nội dung lời nhắn bằng tiếng Anh hoặc tiếng Việt")
+
+        .form-note
+          strong Quý khách đã biết khi nào sẽ đến nhận phòng chưa?
+          .arrival-row
+            input(type="checkbox" id="hasArrival")
+            label(for="hasArrival") Tôi đã có dự định nhận phòng vào
+            select.form-select(name="checkinTime")
+              option 02:00 PM
+              option 03:00 PM
+              option 04:00 PM
+            |  và trả phòng vào
+            select.form-select(name="checkoutTime")
+              option 12:00 PM
+              option 11:00 AM
+
+        //- Hidden fields KHÔNG dùng optional chaining
+        input(type="hidden" name="hotelName"     value=h.name)
+        input(type="hidden" name="address"       value=h.address)
+        input(type="hidden" name="checkInDate"   value=b.checkInDate)
+        input(type="hidden" name="checkOutDate"  value=b.checkOutDate)
+        input(type="hidden" name="rooms"         value=b.rooms)
+        input(type="hidden" name="roomTitle"     value=room.title)
+        input(type="hidden" name="pricePerNight" value=b.pricePerNight)
+        input(type="hidden" name="currency"      value=b.currency)
+        input(type="hidden" name="tax"           value=b.tax)
+        input(type="hidden" name="fee"           value=b.fee)
+        input(type="hidden" name="total"         value=b.total)
+
+        .policy-row
+          i.fa-solid.fa-check-circle
+          label
+            input(type="checkbox" required)
+            |  Tôi đồng ý với Chính sách bảo vệ dữ liệu cá nhân và các điều khoản.
+
+        button.summary__confirm(type="submit" style="max-width:260px") Xác nhận
+
+      // ---- RIGHT: SUMMARY ----
+      .booking-summary
+        .summary__header
+          span Tóm tắt đơn hàng
+        .summary__section
+          .summary__row
+            .summary__label Khách sạn
+            .summary__value #{h.name || '—'}
+          small.subtle #{b.checkInDate} – #{b.checkOutDate}
+        .summary__section
+          .summary__row
+            strong #{room.title || 'Hạng phòng'}
+          if room.image
+            img(src=room.image alt="room" style="width:100%;border-radius:10px;margin-top:8px;")
+          .summary__row
+            small Giá (#{b.rooms || 1} phòng × #{nights} đêm)
+            small #{fmt(b.pricePerNight)} #{currency}
+        .summary__section
+          .summary__row
+            span Thuế GTGT
+            span #{fmt(b.tax)} #{currency}
+          .summary__row
+            span Phụ thu quản trị
+            span #{fmt(b.fee)} #{currency}
+          .summary-total-line
+            span Tổng cộng
+            span #{fmt(b.total)} #{currency}
+        .summary__footer
+          button.summary__confirm(type="submit" form="") Xác nhận

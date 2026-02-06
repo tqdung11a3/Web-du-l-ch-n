@@ -1,0 +1,99 @@
+doctype html
+html
+  head
+    title #{pageTitle}
+    meta(charset="UTF-8")
+    meta(
+      content="width=device-width, initial-scale=1.0" 
+      name="viewport"
+      )
+    link(
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" 
+      rel="stylesheet"
+      )
+    link(
+      rel="stylesheet" 
+      href="https://unpkg.com/aos@2.3.1/dist/aos.css"
+      )
+    link(
+      href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" 
+      rel="stylesheet"
+      )
+    link(
+      href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.7/viewer.css" 
+      rel="stylesheet"
+      )
+    link(
+      rel="stylesheet", 
+      href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css"
+      )
+    link(
+      href="/assets/css/style.css" 
+      rel="stylesheet"
+      )
+    link(
+      href="/assets/css/hotel-cart.css" 
+      rel="stylesheet"
+      )
+    link(
+      href="/assets/css/cart-unified.css" 
+      rel="stylesheet"
+      )
+
+  body
+    include ../partials/top-header.pug
+
+    include ../partials/header.pug
+  
+    block main
+    
+    include ../partials/footer.pug
+
+    include ../partials/box-compare.pug
+
+    script(src="https://unpkg.com/aos@2.3.1/dist/aos.js")
+    script(src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.7/viewer.js")
+    script(src="https://unpkg.com/just-validate@latest/dist/just-validate.production.min.js")
+    script(src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js") 
+    script(src="/admin/assets/js/notify.js")
+    script.
+      // Truyền thông tin user vào JavaScript
+      window.currentUserId = !{account && account.id ? `"${account.id}"` : 'null'};
+    script(src="/assets/js/script.js")
+    script.
+      // Load hotel-cart.js trên các trang hotel và trang /cart (có tab hotel)
+      if (window.location.pathname.includes('/hotel') || window.location.pathname === '/cart') {
+        // Đảm bảo script load sau khi DOM và các thư viện đã sẵn sàng
+        function loadHotelCartScript() {
+          if (typeof Notyf === 'undefined') {
+            // Chờ Notyf load xong
+            setTimeout(loadHotelCartScript, 100);
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = '/assets/js/hotel-cart.js';
+          script.onload = function() {
+            console.log('hotel-cart.js loaded');
+          };
+          document.body.appendChild(script);
+        }
+        
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', loadHotelCartScript);
+        } else {
+          loadHotelCartScript();
+        }
+      }
+      // Load hotel-detail-edit-search.js trên trang hotel detail
+      if (window.location.pathname.includes('/hotel/detail/')) {
+        const script = document.createElement('script');
+        script.src = '/assets/js/hotel-detail-edit-search.js';
+        document.body.appendChild(script);
+      }
+      // Load cart-unified.js trên trang giỏ hàng thống nhất
+      if (window.location.pathname === '/cart') {
+        const script = document.createElement('script');
+        script.src = '/assets/js/cart-unified.js';
+        document.body.appendChild(script);
+      }

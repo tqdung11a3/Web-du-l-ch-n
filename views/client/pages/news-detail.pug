@@ -1,0 +1,53 @@
+extends ../layouts/default.pug
+
+block main
+  .section-10
+    .container
+      .inner-wrap
+        .inner-left(style="width: 100%; max-width: 800px; margin: 0 auto;")
+          // Ảnh đại diện
+          if news.avatar
+            .box-images(style="margin-bottom: 30px;")
+              .inner-image(style="width: 100%; border-radius: 8px; overflow: hidden;")
+                img(alt=news.title src=news.avatar style="width: 100%; height: auto; display: block;")
+          
+          // Tiêu đề và thông tin
+          .box-tour-info(style="margin-bottom: 30px;")
+            h1.inner-title(style="font-size: 32px; font-weight: 700; margin-bottom: 15px; color: #333;")= news.title
+            .inner-meta(style="display: flex; gap: 20px; margin-bottom: 20px; color: #999; font-size: 14px;")
+              span
+                i.fa-solid.fa-calendar(style="margin-right: 5px;")
+                = news.publishedAtFormat
+              span
+                i.fa-solid.fa-eye(style="margin-right: 5px;")
+                = (news.views || 0) + " lượt xem"
+            
+            // Mô tả ngắn
+            if news.shortDescription
+              .inner-desc(style="font-size: 18px; color: #666; line-height: 1.6; margin-bottom: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px;")= news.shortDescription
+          
+          // Nội dung
+          .box-tour-info
+            .inner-title(style="font-size: 24px; font-weight: 600; margin-bottom: 20px;") Nội dung
+            .inner-content(style="font-size: 16px; line-height: 1.8; color: #333;")!= news.content || "Không có nội dung"
+  
+  // Tin tức liên quan
+  if relatedNews && relatedNews.length > 0
+    .section-8(style="padding-top: 0;")
+      .container
+        h2.box-title Tin Tức Liên Quan
+        .inner-wrap
+          each item in relatedNews
+            .blog-item-2
+              a(href=`/news/${item.slug}`)
+                .inner-image
+                  if item.avatar
+                    img(alt=item.title src=item.avatar)
+                  else
+                    img(alt=item.title src="/assets/images/blog-1.jpg")
+                .inner-content
+                  .inner-date= item.publishedAtFormat
+                  h3.inner-title= item.title
+                  if item.shortDescription
+                    .inner-desc= item.shortDescription
+

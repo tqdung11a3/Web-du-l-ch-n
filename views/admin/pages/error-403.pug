@@ -1,0 +1,15 @@
+extends ../layouts/default.pug
+
+block main
+  .inner-header
+    h1.inner-title 403 - Forbidden
+    
+  .inner-content.text-center
+    h2 Bạn không có quyền truy cập!
+    if message
+      p.error-message= message
+    else
+      p Bạn không có quyền truy cập trang này.
+    
+    a.btn.btn-primary(href=`/${pathAdmin}/dashboard`) Về Dashboard
+

@@ -1,0 +1,228 @@
+//- views/admin/pages/hotel-customers.pug
+extends ../layouts/default.pug
+
+block main
+  .customers-page
+    //- Hotel Selector
+    include ../partials/hotel-selector.pug
+    
+    //- Header
+    .page-header
+      .header-left
+        h1.page-title Khách hàng
+        p.page-subtitle Quản lý hồ sơ khách hàng
+
+    //- Main Content - 2 Columns Layout
+    .customers-layout
+      //- Left Panel - Customer List
+      .customers-list-panel
+        .search-section
+          .search-box
+            i.fa-solid.fa-magnifying-glass
+            input(type="text" placeholder="Tìm kiếm khách hàng..." id="customerSearch")
+
+        .customers-list
+          if customersData.customers && customersData.customers.length > 0
+            each customer in customersData.customers
+              .customer-card(
+                data-customer-id=customer.id
+                data-customer-name=customer.name
+                data-customer-email=customer.email
+                data-customer-phone=customer.phone
+                data-customer-bookings=customer.bookings
+                data-customer-spending=customer.spending
+                data-customer-last-activity=customer.lastActivity
+                data-customer-initials=customer.initials
+                data-customer-is-vip=customer.isVIP
+                data-customer-bookings-list=JSON.stringify(customer.bookingList)
+              )
+                .customer-avatar= customer.initials
+                .customer-info
+                  .customer-name-row
+                    span.customer-name= customer.name
+                    if customer.isVIP
+                      i.fa-solid.fa-star.vip-star
+                  .customer-email= customer.email
+                  .customer-stats
+                    span.stat-item #{customer.bookings} đặt phòng
+                    span.stat-item #{customer.spending}K chi tiêu
+                    span.stat-item Lần cuối: #{customer.lastActivity}
+                  if customer.tags && customer.tags.length > 0
+                    .customer-tags
+                      each tag in customer.tags
+                        span.tag= tag
+                .customer-actions
+                  button.view-details-btn
+                    i.fa-solid.fa-eye
+          else
+            .empty-customers
+              p Không có khách hàng nào
+
+      //- Right Panel - Customer Details
+      .customer-details-panel
+        .empty-details
+          i.fa-solid.fa-user
+          p Chọn khách hàng để xem chi tiết
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const searchInput = document.getElementById('customerSearch');
+      const customerCards = document.querySelectorAll('.customer-card');
+      const detailsPanel = document.querySelector('.customer-details-panel');
+      
+      // Search functionality
+      if (searchInput) {
+        searchInput.addEventListener('input', function() {
+          const searchTerm = this.value.toLowerCase().trim();
+          
+          customerCards.forEach(card => {
+            const name = card.querySelector('.customer-name')?.textContent.toLowerCase() || '';
+            const email = card.querySelector('.customer-email')?.textContent.toLowerCase() || '';
+            
+            if (name.includes(searchTerm) || email.includes(searchTerm)) {
+              card.style.display = 'flex';
+            } else {
+              card.style.display = 'none';
+            }
+          });
+        });
+      }
+      
+      // Customer card click handler
+      customerCards.forEach(card => {
+        card.addEventListener('click', function(e) {
+          // Không trigger nếu click vào nút view-details-btn
+          if (e.target.closest('.view-details-btn')) {
+            e.stopPropagation();
+            return;
+          }
+          
+          showCustomerDetails(this);
+        });
+        
+        // Nút view-details-btn click handler
+        const viewBtn = card.querySelector('.view-details-btn');
+        if (viewBtn) {
+          viewBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            showCustomerDetails(card);
+          });
+        }
+      });
+      
+      function showCustomerDetails(card) {
+        // Remove active class from all cards
+        customerCards.forEach(c => c.classList.remove('active'));
+        // Add active class to clicked card
+        card.classList.add('active');
+        
+        // Lấy thông tin từ data attributes
+        const customerId = card.dataset.customerId;
+        const customerName = card.dataset.customerName || '';
+        const customerEmail = card.dataset.customerEmail || '—';
+        const customerPhone = card.dataset.customerPhone || '—';
+        const customerBookings = card.dataset.customerBookings || '0';
+        const customerSpending = card.dataset.customerSpending || '0';
+        const customerLastActivity = card.dataset.customerLastActivity || '—';
+        const customerInitials = card.dataset.customerInitials || 'KL';
+        const customerIsVip = card.dataset.customerIsVip === 'true';
+        const bookingList = JSON.parse(card.dataset.customerBookingsList || '[]');
+        
+        // Format status
+        const formatStatus = (status) => {
+          const statusMap = {
+            'pending': { text: 'Chờ xác nhận', color: 'orange' },
+            'confirmed': { text: 'Đã xác nhận', color: 'blue' },
+            'checked_in': { text: 'Đã nhận phòng', color: 'green' },
+            'checked_out': { text: 'Đã trả phòng', color: 'gray' },
+            'cancelled': { text: 'Đã hủy', color: 'red' },
+          };
+          return statusMap[status] || { text: status, color: 'gray' };
+        };
+        
+        const formatPaymentStatus = (status) => {
+          return status === 'paid' ? { text: 'Đã thanh toán', color: 'green' } : { text: 'Chưa thanh toán', color: 'orange' };
+        };
+        
+        // Render booking list HTML (đã được group theo mã gốc)
+        let bookingListHTML = '';
+        if (bookingList.length > 0) {
+          bookingListHTML = bookingList.map(booking => {
+            const statusInfo = formatStatus(booking.status);
+            const paymentInfo = formatPaymentStatus(booking.paymentStatus);
+            return `
+              <div class="booking-item">
+                <div class="booking-header">
+                  <span class="booking-code">${booking.code}</span>
+                  <span class="booking-date">${booking.createdAt}</span>
+                </div>
+                <div class="booking-details">
+                  <div class="detail-row">
+                    <i class="fa-solid fa-door-open"></i>
+                    <span>Số phòng: ${booking.roomCount} phòng</span>
+                  </div>
+                  <div class="detail-row">
+                    <i class="fa-solid fa-calendar-check"></i>
+                    <span>Check-in: ${booking.checkIn}</span>
+                  </div>
+                  <div class="detail-row">
+                    <i class="fa-solid fa-calendar-xmark"></i>
+                    <span>Check-out: ${booking.checkOut}</span>
+                  </div>
+                  <div class="detail-row">
+                    <i class="fa-solid fa-money-bill"></i>
+                    <span>Tổng tiền: ${booking.totalAmount}K</span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="status-badge badge-${statusInfo.color}">${statusInfo.text}</span>
+                    <span class="status-badge badge-${paymentInfo.color}">${paymentInfo.text}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          bookingListHTML = '<p class="empty-bookings">Chưa có booking nào</p>';
+        }
+        
+        // Render customer details
+        detailsPanel.innerHTML = `
+          <div class="customer-details-content">
+            <div class="customer-details-header">
+              <div class="customer-avatar-large">${customerInitials}</div>
+              <div class="customer-header-info">
+                <h2 class="customer-details-name">
+                  ${customerName}
+                  ${customerIsVip ? '<i class="fa-solid fa-star vip-star"></i>' : ''}
+                </h2>
+                <p class="customer-details-email">${customerEmail}</p>
+                ${customerPhone !== '—' ? `<p class="customer-details-phone">${customerPhone}</p>` : ''}
+              </div>
+            </div>
+            
+            <div class="customer-stats-section">
+              <div class="stat-card">
+                <div class="stat-value">${customerBookings}</div>
+                <div class="stat-label">Đặt phòng</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${customerSpending}K</div>
+                <div class="stat-label">Tổng chi tiêu</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${customerLastActivity}</div>
+                <div class="stat-label">Lần cuối</div>
+              </div>
+            </div>
+            
+            <div class="customer-bookings-section">
+              <h3 class="section-title">Lịch sử đặt phòng</h3>
+              <div class="bookings-list">
+                ${bookingListHTML}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    });
+

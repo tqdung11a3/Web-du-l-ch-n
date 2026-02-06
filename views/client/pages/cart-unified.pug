@@ -1,0 +1,366 @@
+//- views/client/pages/cart-unified.pug
+extends ../layouts/default.pug
+
+block main
+  .unified-cart-page
+    .container
+      h1.page-title Giỏ hàng của bạn
+      
+      //- Tabs Navigation
+      .cart-tabs
+        button.cart-tab.active(data-tab="tour") 
+          i.fa-solid.fa-route
+          |  Tour du lịch
+          span.cart-tab-badge#tourCartBadge 0
+        button.cart-tab(data-tab="hotel")
+          i.fa-solid.fa-hotel
+          |  Khách sạn
+          span.cart-tab-badge#hotelCartBadge 0
+      
+      //- Tab Contents
+      .cart-tab-content
+        //- TOUR CART TAB
+        #tourCartTab.tab-pane.active
+          .section-11(page-cart)
+            .inner-wrap
+              .inner-tour-list(cart-list)
+              .inner-coupon
+                form#coupon-form(action="")
+                  input#coupon-input(
+                    name="coupon" 
+                    placeholder="Nhập mã giảm giá" 
+                    type="text"
+                  )
+                  button Dùng Mã
+              .inner-list-price
+                .inner-item
+                  .inner-label Tạm tính:
+                  .inner-price
+                    span(cart-sub-total) 0
+                    span đ
+                .inner-item
+                  .inner-label Giảm:
+                  .inner-price -0đ
+                .inner-item
+                  .inner-label Thanh toán:
+                  .inner-price-hl
+                    span(cart-total) 0
+                    span đ
+          
+          .section-12
+            .inner-wrap
+              form#order-form(action="")
+                .inner-info
+                  .inner-title-main Thông Tin Khách Hàng
+                  .inner-list-group
+                    .inner-group
+                      input#fullname-input(
+                        placeholder="Họ và tên" 
+                        name="fullName" 
+                        type="text"
+                        value=(account && account.fullName ? account.fullName : "")
+                      )
+                    .inner-group
+                      input#phone-input(
+                        placeholder="Số điện thoại" 
+                        name="phone" 
+                        type="text"
+                      )
+                    .inner-group.inner-two-col
+                      textarea(
+                        placeholder="Ghi chú" 
+                        name="note"
+                      )
+                .inner-method
+                  .inner-title-main Chọn phương thức thanh toán
+                  .inner-list
+                    .inner-item
+                      input#methodMoney(
+                        checked="" 
+                        value="money" 
+                        name="method" 
+                        type="radio"
+                      )
+                      label(for="methodMoney") Thanh toán tiền mặt khi đi tour
+                    .inner-item
+                      input#methodVNPay(
+                        value="vnpay" 
+                        name="method" 
+                        type="radio"
+                      )
+                      label(for="methodVNPay") VNPay
+                    .inner-item
+                      input#methodBank(
+                        value="bank" 
+                        name="method" 
+                        type="radio"
+                      )
+                      label(for="methodBank") Chuyển khoản ngân hàng
+                  .inner-info-bank
+                    .inner-title Thông tin chuyển khoản
+                    .inner-desc
+                      div Ngân hàng : Vietcombank
+                      div Tên tài khoản: Le Van A
+                      div STK: 0123456789
+                .inner-button
+                  button ĐẶT TOUR
+        
+        //- HOTEL CART TAB
+        #hotelCartTab.tab-pane
+          .hotel-cart-section
+            if !hotelCart || !hotelCart.items || hotelCart.items.length === 0
+              .empty-cart
+                i.fa-solid.fa-hotel
+                h2 Chưa có phòng trong giỏ hàng
+                p Thêm phòng khách sạn vào giỏ hàng để tiếp tục
+                a.btn-primary(href="/hotel/search") Tìm kiếm khách sạn
+            else
+              .cart-grid
+                .cart-items
+                  if hotelInfo
+                    .hotel-info-card
+                      h3= hotelInfo.name
+                      .hotel-meta
+                        if hotelInfo.province
+                          p
+                            i.fa-solid.fa-location-dot
+                            |  #{hotelInfo.province.name}
+                        if hotelInfo.address
+                          p.hotel-address= hotelInfo.address
+                        if hotelCart.items && hotelCart.items.length > 0
+                          p
+                            i.fa-regular.fa-calendar
+                            |  #{hotelCart.items[0].checkInDate} → #{hotelCart.items[0].checkOutDate}
+                            |  (#{hotelCart.items[0].nights} đêm)
+
+                  each item, itemIndex in hotelCart.items
+                    .cart-item(data-room-type-id=item.roomTypeId data-item-index=itemIndex)
+                      .cart-item__image
+                        if item.roomTypeImage
+                          img(src=item.roomTypeImage, alt=item.roomTypeName)
+                        else
+                          img(src="/images/no-image.jpg", alt=item.roomTypeName)
+                      
+                      .cart-item__info
+                        h3.item-title= item.roomTypeName
+                        .item-meta
+                          p
+                            i.fa-regular.fa-calendar
+                            |  #{item.nights} đêm
+                          p
+                            i.fa-solid.fa-bed
+                            |  #{item.rooms || item.quantity} phòng
+                          if item.maxAvailable !== undefined
+                            p.item-available(data-max=item.maxAvailable)
+                              i.fa-solid.fa-bed
+                              |  Còn #{item.maxAvailable} phòng trống
+                        
+                        //- Hiển thị thông tin khách
+                        .guests-info
+                          - const totalAdults = item.adults || 0
+                          - const totalChildren = item.children || 0
+                          p.guests-summary
+                            i.fa-regular.fa-user
+                            |  #{totalAdults} người lớn
+                            if totalChildren > 0
+                              | , #{totalChildren} trẻ em
+                        
+                        //- Hiển thị chi tiết từng phòng (nếu có)
+                        if item.roomsDetails && Array.isArray(item.roomsDetails) && item.roomsDetails.length > 0
+                          .rooms-details-list
+                            each roomDetail, roomIdx in item.roomsDetails
+                              .room-detail-item
+                                strong Phòng #{roomIdx + 1}: 
+                                - const roomAdults = roomDetail.adults || 0
+                                - const roomChildren = Array.isArray(roomDetail.children) ? roomDetail.children : []
+                                - const roomChildrenCount = roomChildren.length
+                                span #{roomAdults} người lớn
+                                if roomChildrenCount > 0
+                                  | , #{roomChildrenCount} trẻ em (
+                                  each child, childIdx in roomChildren
+                                    if childIdx > 0
+                                      | , 
+                                    |#{child.age || 0} tuổi
+                                  | )
+                        
+                        .item-price-per-night
+                          - const priceStr = Number(item.pricePerNight || 0).toLocaleString('vi-VN');
+                          | #{priceStr} #{hotelCurrency || 'VND'} / đêm
+                        
+                        //- Dịch vụ thêm cho từng loại phòng
+                        if item.additionalServices && item.additionalServices.length > 0
+                          .item-additional-services
+                            h4.services-title Dịch vụ thêm cho loại phòng này:
+                            .services-list
+                              each service in item.additionalServices
+                                .service-item(data-service-id=service.id data-item-index=itemIndex)
+                                  .service-info
+                                    .service-name= service.name
+                                    .service-price 
+                                      | #{Number(service.price || 0).toLocaleString('vi-VN')} #{hotelCurrency || 'VND'}
+                                      if service.unit
+                                        |  / #{service.unit}
+                                    if service.description
+                                      .service-description= service.description
+                                  .service-controls
+                                    button.service-btn.service-btn-minus(type="button" data-service-id=service.id data-item-index=itemIndex) −
+                                    input.service-quantity-input(
+                                      type="number" 
+                                      value="0" 
+                                      min="0" 
+                                      max=service.maxQuantity 
+                                      data-price=service.price 
+                                      data-service-id=service.id 
+                                      data-item-index=itemIndex
+                                      data-nights=(service.nights || 1) 
+                                      readonly
+                                    )
+                                    button.service-btn.service-btn-plus(type="button" data-service-id=service.id data-item-index=itemIndex data-max=service.maxQuantity) +
+
+                      .cart-item__actions
+                        .item-subtotal
+                          - const itemQuantity = item.rooms || item.quantity
+                          - const itemTotal = item.pricePerNight * item.nights * itemQuantity;
+                          - const itemTotalStr = Number(itemTotal).toLocaleString('vi-VN');
+                          strong #{itemTotalStr} #{hotelCurrency || 'VND'}
+                        
+                        button.btn-remove(
+                          type="button"
+                          data-room-type-id=item.roomTypeId
+                        )
+                          i.fa-solid.fa-trash
+                          |  Xóa
+
+                .cart-summary
+                  .summary-card
+                    h3 Chi tiết đơn hàng
+                    
+                    .summary-rows
+                      .summary-row
+                        span Tạm tính:
+                        - const subtotalStr = Number(hotelSubtotal || 0).toLocaleString('vi-VN');
+                        span= subtotalStr + ' ' + (hotelCurrency || 'VND')
+                      
+                      .summary-row
+                        span Thuế VAT (#{hotelTaxPercent}%):
+                        - const taxStr = Number(hotelTax || 0).toLocaleString('vi-VN');
+                        span= taxStr + ' ' + (hotelCurrency || 'VND')
+                      
+                      .summary-row
+                        span Phí dịch vụ (#{hotelFeePercent}%):
+                        - const feeStr = Number(hotelFee || 0).toLocaleString('vi-VN');
+                        span= feeStr + ' ' + (hotelCurrency || 'VND')
+                      
+                      if hotelExtraOccupancyFee && hotelExtraOccupancyFee > 0
+                        .summary-row.summary-extra-fee
+                          span Phụ thu vượt sức chứa:
+                          - const extraFeeStr = Number(hotelExtraOccupancyFee || 0).toLocaleString('vi-VN');
+                          span= extraFeeStr + ' ' + (hotelCurrency || 'VND')
+                      
+                      if hotelAdditionalServices && hotelAdditionalServices.length > 0
+                        .summary-section
+                          h4.summary-subtitle + Dịch vụ chung (cho toàn bộ booking)
+                          
+                          each service in hotelAdditionalServices
+                            if service.isGlobal
+                              .service-item(data-service-id=service.id)
+                                if service.isCheckbox
+                                  .service-checkbox-wrapper
+                                    .service-info
+                                      .service-name= service.name
+                                      .service-price #{Number(service.price || 0).toLocaleString('vi-VN')} #{hotelCurrency || 'VND'}
+                                    input.service-checkbox(type="checkbox" data-price=service.price data-service-id=service.id)
+                                else
+                                  .service-quantity-wrapper
+                                    .service-info
+                                      .service-name= service.name
+                                      .service-price #{Number(service.price || 0).toLocaleString('vi-VN')} #{hotelCurrency || 'VND'} / #{service.unit}
+                                    .service-quantity-controls
+                                      button.service-btn.service-btn-minus(type="button" data-service-id=service.id) −
+                                      input.service-quantity(type="number" value="0" min="0" max=service.maxQuantity data-price=service.price data-service-id=service.id data-nights=(service.nights || 1) readonly)
+                                      button.service-btn.service-btn-plus(type="button" data-service-id=service.id data-max=service.maxQuantity) +
+                      
+                      .summary-row.summary-total
+                        strong Tổng cộng:
+                        - const totalStr = Number(hotelTotal || 0).toLocaleString('vi-VN');
+                        strong#cartTotalPrice= totalStr + ' ' + (hotelCurrency || 'VND')
+
+              //- Checkout Form: Đặt dưới danh sách khách sạn thay vì nằm cạnh
+              .hotel-checkout-section
+                form#hotelCheckoutForm.checkout-form(action="/hotel-booking/create" method="POST")
+                  h3.section-title Thông tin liên hệ
+                  .form-grid
+                    .form-group
+                      label(for="hotel-fullname-input") Họ tên *
+                      input#hotel-fullname-input.form-input(type="text" name="fullName" placeholder="Nhập họ tên" required value=(account && account.fullName ? account.fullName : ""))
+                    .form-group
+                      label(for="hotel-phone-input") Điện thoại *
+                      input#hotel-phone-input.form-input(type="text" name="phone" placeholder="Nhập số điện thoại" required)
+                    .form-group
+                      label(for="hotel-email-input") Email *
+                      input#hotel-email-input.form-input(type="email" name="email" placeholder="Nhập email" required value=(account && account.email ? account.email : ""))
+                    .form-group
+                      label(for="hotel-note-input") Ghi chú
+                      textarea#hotel-note-input.form-input(name="note" rows="3" placeholder="Yêu cầu đặc biệt, giờ nhận phòng dự kiến...")
+
+                  h3.section-title Chọn phương thức thanh toán
+                  .payment-methods
+                    .payment-method-item
+                      input#hotel-methodMoney(type="radio" name="paymentMethod" value="money" checked)
+                      label(for="hotel-methodMoney") Thanh toán tiền mặt tại khách sạn
+                    .payment-method-item
+                      input#hotel-methodVNPay(type="radio" name="paymentMethod" value="vnpay")
+                      label(for="hotel-methodVNPay") VNPay
+                    .payment-method-item
+                      input#hotel-methodBank(type="radio" name="paymentMethod" value="bank")
+                      label(for="hotel-methodBank") Chuyển khoản ngân hàng
+                  .inner-info-bank
+                    .inner-title Thông tin chuyển khoản
+                    .inner-desc
+                      div Ngân hàng : Vietcombank
+                      div Tên tài khoản: Le Van A
+                      div STK: 0123456789
+
+                  .checkout-actions
+                    button.btn-checkout(type="submit")
+                      i.fa-solid.fa-check
+                      |  Tiến hành đặt phòng
+
+                    a.btn-continue-shopping(href="/hotel/search")
+                      i.fa-solid.fa-arrow-left
+                      |  Tiếp tục tìm phòng
+
+              if hotelPolicies
+                .policies-section
+                  h3.policies-title Điều khoản & Chính sách
+
+                  .policy-block
+                    .policy-icon
+                      i.fa-regular.fa-clock
+                    .policy-content
+                      strong Giờ nhận phòng: #{hotelPolicies.checkInTime} | Giờ trả phòng: #{hotelPolicies.checkOutTime}
+
+                  .policy-block
+                    .policy-icon
+                      i.fa-solid.fa-info-circle
+                    .policy-content
+                      strong Chính sách hủy: 
+                      |  #{hotelPolicies.cancellationPolicy}
+
+                  .policy-block
+                    .policy-icon
+                      i.fa-solid.fa-check-circle
+                    .policy-content
+                      strong #{hotelPolicies.paymentRequirement}
+
+                  .policy-block
+                    .policy-icon
+                      i.fa-solid.fa-square-check
+                    div
+                      p
+                        strong  Tôi đã đọc và đồng ý với 
+                        a(href="#") Điều khoản & Điều kiện
+                        |  và 
+                        a(href="#") Chính sách hủy
+                        |  của khách sạn
+

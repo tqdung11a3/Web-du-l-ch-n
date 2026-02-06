@@ -1,0 +1,43 @@
+//- views/admin/pages/hotel-rooms-list-hotels.pug
+extends ../layouts/default.pug
+
+block main
+  .hotel-rooms-list-hotels-page
+    //- Hotel Selector
+    include ../partials/hotel-selector.pug
+    
+    //- Header
+    .page-header
+      .header-left
+        h1.page-title Danh sách phòng
+        p.page-subtitle Quản lý phòng của các khách sạn
+
+    //- Hotels Table
+    .hotels-table-wrapper
+      table.hotels-table
+        thead
+          tr
+            th STT
+            th Tên khách sạn
+            th Địa chỉ
+            th Số phòng
+            th Thao tác
+        tbody
+          if hotelList && hotelList.length > 0
+            each hotel, index in hotelList
+              tr
+                td= index + 1
+                td
+                  .hotel-name= hotel.name
+                td= hotel.address
+                td= hotel.roomCount || 0
+                td
+                  .action-buttons
+                    a.btn-manage-rooms(href=`/${pathAdmin}/hotel/${hotel._id}/rooms/list`)
+                      i.fa-solid.fa-door-open
+                      span Quản lý phòng
+          else
+            tr
+              td(colspan="5" style="text-align: center; padding: 40px;")
+                .empty-message Không có khách sạn nào
+

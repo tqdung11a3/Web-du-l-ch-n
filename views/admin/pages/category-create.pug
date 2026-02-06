@@ -1,0 +1,43 @@
+extends ../layouts/default.pug
+include ../mixins/options.pug
+
+block main
+  
+  h1.box-title Tạo danh mục
+
+  //- Section 8
+  .section-8
+    form(id="category-create-form")
+      .inner-group
+        label(for="name" class="inner-label") Tên danh mục
+        input(type="text" id="name" name="name")
+      .inner-group
+        label(for="parent" class="inner-label") Danh mục cha
+        select(id="parent" name="parent")
+          option(value="") -- Chọn danh mục -- 
+          +options(categoryList, 0)
+      .inner-group
+        label(for="position" class="inner-label") Vị trí
+        input(type="number" id="position" name="position")
+      .inner-group
+        label(for="status" class="inner-label") Trạng thái
+        select(id="status" name="status")
+          option(value="active") Hoạt động
+          option(value="inactive") Tạm dừng
+      .inner-group.inner-two-col
+        label(for="avatar" class="inner-label") Ảnh đại diện
+        .inner-upload-image
+          input(
+            type="file" 
+            id="avatar"
+            name="avatar"
+            filepond-image
+            )
+      .inner-group.inner-two-col
+        label(for="description" class="inner-label") Mô tả
+        textarea(id="description" textarea-mce name="description")
+      .inner-button.inner-two-col
+        button Tạo mới
+    .inner-back
+      a(href=`/${pathAdmin}/category/list`) Quay lại danh sách
+  //- End Section 8

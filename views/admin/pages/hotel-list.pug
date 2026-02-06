@@ -1,0 +1,169 @@
+extends ../layouts/default.pug
+include ../mixins/change-status.pug
+
+block main
+  //- Hotel Selector
+  include ../partials/hotel-selector.pug
+  
+  h1.box-title Quản lý khách sạn
+
+  //- SECTION 4 – BỘ LỌC (UI, xử lý sau bằng JS / query)
+  .section-4
+    .inner-wrap
+      .inner-item
+        i.fa-solid.fa-filter
+        |  Bộ lọc
+      .inner-item
+        select(name="statusFilter")
+          option(value="") Trạng thái
+          option(value="active") Đang hoạt động
+          option(value="inactive") Ngừng hiển thị
+      .inner-item
+        select(name="cityFilter")
+          option(value="") Thành phố
+          if typeof cityList !== 'undefined'
+            each city in cityList
+              option(value=city.id) #{city.name}
+          else
+            option(value="HN") Hà Nội
+            option(value="DN") Đà Nẵng
+      .inner-item
+        input(type="date" name="createdFrom")
+        span -
+        input(type="date" name="createdTo")
+      .inner-item
+        select(name="starFilter")
+          option(value="") Hạng sao
+          option(value="1") 1 sao
+          option(value="2") 2 sao
+          option(value="3") 3 sao
+          option(value="4") 4 sao
+          option(value="5") 5 sao
+      .inner-item.inner-reset
+        i.fa-solid.fa-rotate-left
+        |  Xóa bộ lọc
+
+  //- SECTION 5 – HÀNH ĐỘNG HÀNG LOẠT + TÌM KIẾM + TẠO MỚI
+  .section-5
+    .inner-wrap
+      +change-status(
+        `/${pathAdmin}/hotel/change-multi`,
+        [
+          { label: "Hoạt động",      value: "active" },
+          { label: "Ngừng hiển thị", value: "inactive" },
+          { label: "Xóa",            value: "delete" }
+        ]
+      )
+      .inner-search
+        i.fa-solid.fa-magnifying-glass
+        input(type="text" placeholder="Tìm kiếm theo tên khách sạn..." search)
+      .inner-button-create
+        a(href=`/${pathAdmin}/hotel/create`) + Thêm khách sạn
+      .inner-button-trash
+        a(href=`/${pathAdmin}/hotel/trash`) Thùng rác
+
+  //- SECTION 6 – BẢNG DANH SÁCH
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th
+              input(type="checkbox" class="inner-check" check-all)
+            th Tên khách sạn
+            th(class="inner-center") Ảnh đại diện
+            th Thành phố
+            th(class="inner-center") Hạng sao
+            th Giá từ
+            th(class="inner-center") Đánh giá
+            th(class="inner-center") Trạng thái
+            th Tạo bởi
+            th Cập nhật bởi
+            th Hành động
+        tbody
+          if hotelList && hotelList.length
+            each item in hotelList
+              tr
+                td
+                  input(type="checkbox" class="inner-check" check-item=item.id)
+
+                // Tên khách sạn
+                td
+                  a.hotel-list-name(href=`/${pathAdmin}/hotel/edit/${item.id}`)
+                    | #{item.name}
+
+                // Ảnh đại diện
+                td.inner-center
+                  if item.avatar
+                    img(src=item.avatar class="inner-avatar")
+                  else
+                    span —
+
+                // Thành phố
+                td #{item.cityName || '-'}
+
+                // Hạng sao
+                td.inner-center #{item.starRating || '-'}
+
+                // Giá từ
+                td
+                  - const fmt = (n) => {
+                  -   const v = Number(n);
+                  -   return Number.isFinite(v) ? v.toLocaleString('vi-VN') : '0';
+                  - };
+                  | #{fmt(item.basePrice)} đ
+
+                // Đánh giá
+                td.inner-center
+                  if item.ratingAverage
+                    .hotel-rating-display
+                      span.hotel-rating-score= item.ratingAverage
+                      span.hotel-rating-max /10
+                      if item.ratingCount > 0
+                        .hotel-rating-count (#{item.ratingCount} đánh giá)
+                  else
+                    span.hotel-rating-empty Chưa có đánh giá
+
+                // Trạng thái
+                td.inner-center
+                  if item.status === 'active'
+                    span.badge.badge-green Hoạt động
+                  else if item.status === 'inactive'
+                    span.badge.badge-red Ngừng hiển thị
+                  else
+                    span.badge #{item.status || 'Khác'}
+
+                // Tạo bởi
+                td
+                  div #{item.createdByFullName || ''}
+                  if item.createdAtFormat
+                    div.inner-time #{item.createdAtFormat}
+
+                // Cập nhật bởi
+                td
+                  div #{item.updatedByFullName || ''}
+                  if item.updatedAtFormat
+                    div.inner-time #{item.updatedAtFormat}
+
+                // Hành động
+                td
+                  .inner-buttons
+                    a(href=`/${pathAdmin}/hotel/edit/${item.id}` class="inner-edit")
+                      i.fa-regular.fa-pen-to-square
+                    button(
+                      class="inner-delete"
+                      button-delete
+                      data-api=`/${pathAdmin}/hotel/delete/${item.id}`
+                    )
+                      i.fa-regular.fa-trash-can
+          else
+            tr
+              td(colspan="11") Không có khách sạn nào.
+
+  //- SECTION 7 – PHÂN TRANG (simple)
+  .section-7
+    span.inner-label
+      | Hiển thị 1 - #{hotelList && hotelList.length ? hotelList.length : 0}
+      |  của #{hotelList && hotelList.length ? hotelList.length : 0}
+    select(class="inner-pagination")
+      option(value="1") Trang 1

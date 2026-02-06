@@ -1,0 +1,457 @@
+/* Room Booking Page Styles */
+.section-room-booking {
+  padding: 40px 0;
+  background: #f5f5f5;
+}
+
+.section-room-booking .container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.section-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 24px;
+  color: #1a1a1a;
+}
+
+/* Room Tabs */
+.room-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.room-tab {
+  padding: 10px 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.room-tab:hover {
+  border-color: #0071c2;
+  background: #f0f8ff;
+}
+
+.room-tab.active {
+  border-color: #0071c2;
+  background: #0071c2;
+  color: #fff;
+}
+
+/* Room Booking Grid */
+.room-booking-grid {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .room-booking-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Room Card */
+.room-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.room-card-header {
+  margin-bottom: 20px;
+}
+
+.room-card-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: #1a1a1a;
+}
+
+.room-card-meta {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.room-card-meta i {
+  color: #0071c2;
+}
+
+.room-meta-divider {
+  margin: 0 8px;
+  color: #ccc;
+}
+
+.room-card-description {
+  margin: 16px 0;
+  color: #555;
+  line-height: 1.6;
+}
+
+.room-available {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.room-available-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #e7f5ed;
+  color: #008000;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.room-available-badge i {
+  color: #008000;
+}
+
+/* Room Images */
+.room-card-images {
+  margin: 20px 0;
+  position: relative;
+}
+
+.room-image-carousel {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.room-main-image {
+  width: 100%;
+  height: 400px;
+  object-fit: cover;
+  display: block;
+}
+
+.carousel-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  transition: background 0.3s;
+}
+
+.carousel-btn:hover {
+  background: #fff;
+}
+
+.carousel-btn-prev {
+  left: 12px;
+}
+
+.carousel-btn-next {
+  right: 12px;
+}
+
+/* Room Pricing */
+.room-card-pricing {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.room-price-main {
+  font-size: 24px;
+  font-weight: 700;
+  color: #d32f2f;
+}
+
+.room-price-label {
+  font-size: 14px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.room-policy-link {
+  color: #0071c2;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.room-policy-link:hover {
+  text-decoration: underline;
+}
+
+/* Booking Summary */
+.booking-summary {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 20px;
+}
+
+.summary-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: #1a1a1a;
+}
+
+.summary-section {
+  padding: 16px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.summary-section:last-of-type {
+  border-bottom: none;
+}
+
+.summary-hotel-name {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #1a1a1a;
+}
+
+.summary-room-type {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.summary-location {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.5;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.summary-row:last-child {
+  margin-bottom: 0;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #666;
+}
+
+.summary-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.summary-subtitle {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #1a1a1a;
+}
+
+/* Services */
+.service-item {
+  margin-bottom: 16px;
+}
+
+.service-checkbox-wrapper,
+.service-quantity-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.service-checkbox-wrapper:hover,
+.service-quantity-wrapper:hover {
+  border-color: #0071c2;
+  background: #f8fcff;
+}
+
+.service-info {
+  flex: 1;
+}
+
+.service-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.service-price {
+  font-size: 13px;
+  color: #d32f2f;
+  font-weight: 600;
+}
+
+.service-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.service-quantity-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.3s;
+}
+
+.service-btn:hover {
+  border-color: #0071c2;
+  background: #f0f8ff;
+}
+
+.service-quantity {
+  width: 50px;
+  height: 32px;
+  text-align: center;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* Summary Total */
+.summary-total {
+  padding: 20px 0 0 0;
+  border-top: 2px solid #0071c2;
+  margin-top: 20px;
+}
+
+.summary-row-total {
+  margin-bottom: 20px;
+}
+
+.summary-row-total .summary-label {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.summary-row-total .summary-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #d32f2f;
+}
+
+.btn-book {
+  width: 100%;
+  padding: 16px;
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-book:hover {
+  background: #b71c1c;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4);
+}
+
+/* Policies Section */
+.policies-section {
+  margin-top: 40px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.policies-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 24px;
+  color: #1a1a1a;
+}
+
+.policy-block {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.policy-block:last-child {
+  margin-bottom: 0;
+}
+
+.policy-icon {
+  font-size: 24px;
+  color: #0071c2;
+  flex-shrink: 0;
+}
+
+.policy-content {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #555;
+}
+
+.policy-content strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #1a1a1a;
+}
+
+.policy-content a {
+  color: #0071c2;
+  text-decoration: none;
+}
+
+.policy-content a:hover {
+  text-decoration: underline;
+}
+

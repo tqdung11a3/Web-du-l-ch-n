@@ -1,0 +1,402 @@
+//- views/admin/pages/hotel-room-create.pug
+extends ../layouts/default.pug
+
+block main
+  .room-edit-header
+    h1.box-title= isEditMode ? 'Chỉnh sửa loại phòng' : 'Thêm loại phòng mới'
+    .room-edit-breadcrumb
+      a(href=`/${pathAdmin}/hotel/list`) Danh sách khách sạn
+      span.separator /
+      a(href=`/${pathAdmin}/hotel/edit/${hotel.id}`) #{hotel.name}
+      span.separator /
+      a(href=`/${pathAdmin}/hotel/${hotel.id}/room-types/manage`) Quản lý loại phòng
+      span.separator /
+      span.current= isEditMode ? 'Chỉnh sửa loại phòng' : 'Thêm loại phòng mới'
+
+  form(
+    id="hotel-room-create-form"
+    method="post"
+    action=isEditMode ? `/${pathAdmin}/hotel/${hotelId}/room/${roomTypeId}/edit` : `/${pathAdmin}/hotel/${hotel.id}/room/create`
+    data-edit-mode=isEditMode ? 'true' : 'false'
+  )
+    .room-edit-content
+      .room-edit-section
+        h2.section-title Thông tin cơ bản
+        
+        .inner-group
+          label(for="name" class="inner-label") Tên loại phòng *
+          input#name(
+            type="text"
+            name="name"
+            value=isEditMode && roomType ? roomType.name : ''
+            placeholder="VD: Deluxe City View"
+            required
+          )
+
+        .inner-group
+          label(for="basePrice" class="inner-label") Giá từ (VND) *
+          input#basePrice(
+            type="number"
+            name="basePrice"
+            min="0"
+            value=isEditMode && roomType ? (roomType.basePrice || 0) : ''
+            placeholder="VD: 1200000"
+            required
+          )
+
+        .inner-group.inner-two-col
+          label(for="description" class="inner-label") Mô tả ngắn
+          textarea#description(
+            name="description"
+            placeholder="Mô tả ngắn về loại phòng..."
+            rows="3"
+          )= isEditMode && roomType ? (roomType.description || '') : ''
+
+      //- ===== THIẾT LẬP SỨC CHỨA CHUNG (OCCUPANCY) =====
+      .room-edit-section
+        h2.section-title Thiết lập sức chứa chung (Occupancy)
+        p.section-description Các thông tin này áp dụng chung cho loại phòng. Từng nhóm tuổi (Age Band) sẽ quyết định có áp luật này không.
+        
+        .inner-group-row
+          .inner-group.inner-half
+            label(for="baseOccupancy" class="inner-label") Số người đã bao gồm trong giá *
+            input#baseOccupancy(
+              type="number"
+              name="baseOccupancy"
+              min="1"
+              value=isEditMode && roomType ? (roomType.baseOccupancy || 2) : 2
+              placeholder="VD: 2"
+              required
+            )
+            small.field-hint Số người đã được tính trong giá phòng cơ bản
+          
+          .inner-group.inner-half
+            label(for="maxOccupancy" class="inner-label") Tối đa người *
+            input#maxOccupancy(
+              type="number"
+              name="maxOccupancy"
+              min="1"
+              value=isEditMode && roomType ? (roomType.maxOccupancy || 3) : 3
+              placeholder="VD: 3"
+              required
+            )
+            small.field-hint Số người tối đa có thể ở trong phòng
+        
+        .inner-group-row
+          .inner-group.inner-half
+            label(for="maxExtraBeds" class="inner-label") Tối đa giường phụ *
+            input#maxExtraBeds(
+              type="number"
+              name="maxExtraBeds"
+              min="0"
+              value=isEditMode && roomType ? (roomType.maxExtraBeds || 1) : 1
+              placeholder="VD: 1"
+              required
+            )
+            small.field-hint Số giường phụ tối đa có thể thêm vào phòng
+          
+          .inner-group.inner-half
+            label(for="extraBedFeePerNight" class="inner-label") Phí giường phụ/đêm (VND)
+            input#extraBedFeePerNight(
+              type="number"
+              name="extraBedFeePerNight"
+              min="0"
+              value=isEditMode && roomType ? (roomType.extraBedFeePerNight || 0) : 0
+              placeholder="VD: 200000"
+            )
+            small.field-hint Phí cho mỗi giường phụ thêm trong một đêm
+
+      .room-edit-section
+        h2.section-title Chi tiết phòng
+        
+        .inner-group-row
+          .inner-group.inner-half
+            label(for="sizeM2" class="inner-label") Diện tích phòng (m²)
+            input#sizeM2(
+              type="number"
+              name="sizeM2"
+              min="0"
+              value=isEditMode && roomType ? (roomType.sizeM2 || '') : ''
+              placeholder="VD: 50"
+            )
+          
+          .inner-group.inner-half
+            label(for="bedInfo" class="inner-label") Thông tin giường
+            input#bedInfo(
+              type="text"
+              name="bedInfo"
+              value=isEditMode && roomType ? (roomType.bedInfo || '') : ''
+              placeholder="VD: 2 giường đôi"
+            )
+
+        .inner-group-row
+          .inner-group.inner-half
+            label(for="view" class="inner-label") Tầm nhìn
+            input#view(
+              type="text"
+              name="view"
+              value=isEditMode && roomType ? (roomType.view || '') : ''
+              placeholder="VD: Tầm nhìn ra khung cảnh thành phố"
+            )
+          
+          .inner-group.inner-half
+            label(for="smokingPolicy" class="inner-label") Chính sách hút thuốc
+            input#smokingPolicy(
+              type="text"
+              name="smokingPolicy"
+              value=isEditMode && roomType ? (roomType.smokingPolicy || '') : ''
+              placeholder="VD: Không hút thuốc"
+            )
+
+      .room-edit-section
+        h2.section-title Tiện nghi phòng tắm
+        .room-bathroom-amenities-list
+          if isEditMode && roomType && roomType.bathroomAmenities && roomType.bathroomAmenities.length > 0
+            each amenity in roomType.bathroomAmenities
+              .room-amenity-item
+                .amenity-input-group
+                  textarea.amenity-input(placeholder="VD: Bồn tắm" rows="2")= amenity
+                  button(type="button" class="amenity-remove-btn") Xóa
+          else
+            .room-amenity-item
+              .amenity-input-group
+                textarea.amenity-input(placeholder="VD: Bồn tắm" rows="2")
+                button(type="button" class="amenity-remove-btn") Xóa
+        .amenity-actions
+          button(type="button" id="bathroom-amenity-add-btn") + Thêm tiện nghi phòng tắm
+
+      .room-edit-section
+        h2.section-title Tiện nghi phòng
+        .room-room-amenities-list
+          if isEditMode && roomType && roomType.roomAmenities && roomType.roomAmenities.length > 0
+            each amenity in roomType.roomAmenities
+              .room-amenity-item
+                .amenity-input-group
+                  textarea.amenity-input(placeholder="VD: TV" rows="2")= amenity
+                  button(type="button" class="amenity-remove-btn") Xóa
+          else
+            .room-amenity-item
+              .amenity-input-group
+                textarea.amenity-input(placeholder="VD: TV" rows="2")
+                button(type="button" class="amenity-remove-btn") Xóa
+        .amenity-actions
+          button(type="button" id="room-amenity-add-btn") + Thêm tiện nghi phòng
+
+      .room-edit-section
+        h2.section-title Hình ảnh phòng
+          .inner-group
+          label(class="inner-label") Ảnh phòng (có thể upload nhiều ảnh)
+          - const roomImagesDefault = isEditMode && roomType && roomType.images && roomType.images.length > 0 ? JSON.stringify(roomType.images) : '[]'
+          .inner-upload-image-multi(list-image-default=roomImagesDefault)
+            input(
+              type="file"
+              name="roomImages"
+              filepond-image-multi
+              multiple
+              accept="image/*"
+              data-allow-reorder="true"
+              data-max-files="10"
+            )
+
+    .inner-button.inner-two-col
+      button(type="submit") Lưu loại phòng
+      a.btn-secondary(href=`/${pathAdmin}/hotel/${hotel.id}/room-types/manage`) Hủy
+
+  script.
+    // Xử lý thêm/xóa tiện nghi phòng tắm
+    document.addEventListener('DOMContentLoaded', function() {
+      const bathroomList = document.querySelector('.room-bathroom-amenities-list');
+      const bathroomAddBtn = document.getElementById('bathroom-amenity-add-btn');
+      
+      function createAmenityItem() {
+        const div = document.createElement('div');
+        div.className = 'room-amenity-item';
+        div.innerHTML = `
+          <div class="amenity-input-group">
+            <textarea class="amenity-input" placeholder="VD: Bồn tắm" rows="2"></textarea>
+            <button type="button" class="amenity-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachRemoveHandler(div);
+        return div;
+      }
+      
+      function attachRemoveHandler(item) {
+        const btn = item.querySelector('.amenity-remove-btn');
+        btn.addEventListener('click', () => {
+          if (bathroomList.children.length > 1) {
+            item.remove();
+          } else {
+            item.querySelector('.amenity-input').value = '';
+          }
+        });
+      }
+      
+      bathroomList.querySelectorAll('.room-amenity-item').forEach(item => {
+        attachRemoveHandler(item);
+      });
+      
+      bathroomAddBtn.addEventListener('click', () => {
+        bathroomList.appendChild(createAmenityItem());
+      });
+    });
+    
+    // Xử lý thêm/xóa tiện nghi phòng
+    document.addEventListener('DOMContentLoaded', function() {
+      const roomList = document.querySelector('.room-room-amenities-list');
+      const roomAddBtn = document.getElementById('room-amenity-add-btn');
+      
+      function createAmenityItem() {
+        const div = document.createElement('div');
+        div.className = 'room-amenity-item';
+        div.innerHTML = `
+          <div class="amenity-input-group">
+            <textarea class="amenity-input" placeholder="VD: TV" rows="2"></textarea>
+            <button type="button" class="amenity-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachRemoveHandler(div);
+        return div;
+      }
+      
+      function attachRemoveHandler(item) {
+        const btn = item.querySelector('.amenity-remove-btn');
+        btn.addEventListener('click', () => {
+          if (roomList.children.length > 1) {
+            item.remove();
+          } else {
+            item.querySelector('.amenity-input').value = '';
+          }
+        });
+      }
+      
+      roomList.querySelectorAll('.room-amenity-item').forEach(item => {
+        attachRemoveHandler(item);
+      });
+      
+      roomAddBtn.addEventListener('click', () => {
+        roomList.appendChild(createAmenityItem());
+      });
+    });
+
+    // Xử lý submit form
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.getElementById('hotel-room-create-form');
+      const isEditMode = form.getAttribute('data-edit-mode') === 'true';
+      
+      if (form) {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          
+          // Thu thập dữ liệu từ form
+          const formData = new FormData(form);
+          const data = Object.fromEntries(formData);
+          
+          // Thu thập bathroom amenities từ các textarea riêng
+          const bathroomAmenities = [];
+          form.querySelectorAll('.room-bathroom-amenities-list .amenity-input').forEach(textarea => {
+            const value = textarea.value.trim();
+            if (value) bathroomAmenities.push(value);
+          });
+          
+          // Thu thập room amenities từ các textarea riêng
+          const roomAmenities = [];
+          form.querySelectorAll('.room-room-amenities-list .amenity-input').forEach(textarea => {
+            const value = textarea.value.trim();
+            if (value) roomAmenities.push(value);
+          });
+          
+          // Gửi amenities dưới dạng array thay vì string với \n
+          // Controller sẽ xử lý array này
+          data.bathroomAmenities = bathroomAmenities;
+          data.roomAmenities = roomAmenities;
+          
+          // Xử lý upload ảnh
+          const formDataToSend = new FormData();
+          Object.keys(data).forEach(key => {
+            if (key !== 'roomImages') {
+              if (Array.isArray(data[key])) {
+                data[key].forEach(item => formDataToSend.append(key, item));
+              } else {
+                formDataToSend.append(key, data[key]);
+              }
+            }
+          });
+          
+          // Thu thập tất cả ảnh từ FilePond (cả ảnh cũ và ảnh mới)
+          const roomImagesUrls = [];
+          console.log('=== DEBUG: Thu thập ảnh từ FilePond ===');
+          console.log('window.filePondMulti:', window.filePondMulti);
+          
+          if (window.filePondMulti && window.filePondMulti.roomImages) {
+            const files = window.filePondMulti.roomImages.getFiles();
+            console.log('Số lượng file trong FilePond:', files.length);
+            
+            files.forEach((fileItem, idx) => {
+              console.log(`File ${idx + 1}:`, {
+                serverId: fileItem.serverId,
+                hasFile: !!fileItem.file,
+                source: fileItem.source,
+                filename: fileItem.filename
+              });
+              
+              // Kiểm tra xem file đã được upload lên server chưa (có serverId)
+              if (fileItem.serverId) {
+                // File đã upload, lấy URL từ serverId
+                roomImagesUrls.push(String(fileItem.serverId));
+                console.log(`  → Thêm serverId: ${fileItem.serverId}`);
+              } else if (fileItem.file) {
+                // File mới chưa upload, lấy file gốc để upload
+                formDataToSend.append('roomImages', fileItem.file);
+                console.log(`  → Thêm file mới để upload: ${fileItem.file.name}`);
+              } else if (fileItem.source) {
+                // File đã có từ trước (preview), lấy URL
+                const sourceUrl = typeof fileItem.source === 'string' ? fileItem.source : String(fileItem.source);
+                if (sourceUrl) {
+                  roomImagesUrls.push(sourceUrl);
+                  console.log(`  → Thêm source: ${sourceUrl}`);
+                }
+              }
+            });
+          } else {
+            console.log('KHÔNG tìm thấy filePondMulti.roomImages!');
+          }
+          
+          console.log('Tổng số URL ảnh:', roomImagesUrls.length);
+          console.log('Danh sách URL:', roomImagesUrls);
+          
+          // Gửi tất cả URL ảnh đã có qua formData
+          if (roomImagesUrls.length > 0) {
+            roomImagesUrls.forEach(url => {
+              formDataToSend.append('roomImagesUrls', url);
+            });
+          }
+          
+          console.log('=== KẾT THÚC DEBUG ===');
+          
+          try {
+            const response = await fetch(form.action, {
+              method: isEditMode ? 'PATCH' : 'POST',
+              body: formDataToSend
+            });
+            
+            const result = await response.json();
+            
+            if (result.code === 'success') {
+              notify.success(result.message);
+              if (result.redirectUrl) {
+                setTimeout(() => {
+                  window.location.href = result.redirectUrl;
+                }, 1000);
+              }
+            } else {
+              notify.error(result.message || 'Có lỗi xảy ra!');
+            }
+          } catch (error) {
+            console.error('Error submitting form:', error);
+            notify.error('Có lỗi xảy ra khi lưu thông tin!');
+          }
+        });
+      }
+    });
+    

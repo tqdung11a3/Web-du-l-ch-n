@@ -1,0 +1,98 @@
+extends ../layouts/default.pug
+
+block main
+  // Section 11
+  .section-11(page-cart)
+    .container
+      .inner-wrap
+        .inner-head
+          .inner-title Giỏ Hàng
+          a.inner-back(href="/")
+            | Quay lại mua hàng
+            i.fa-solid.fa-angle-right
+        .inner-tour-list(cart-list)
+        .inner-coupon
+          form#coupon-form(action="")
+            input#coupon-input(
+              name="coupon" 
+              placeholder="Nhập mã giảm giá" 
+              type="text"
+              )
+            button Dùng Mã
+        .inner-list-price
+          .inner-item
+            .inner-label Tạm tính:
+            .inner-price
+              span(cart-sub-total) 0
+              span đ
+          .inner-item
+            .inner-label Giảm:
+            .inner-price -0đ
+          .inner-item
+            .inner-label Thanh toán:
+            .inner-price-hl
+              span(cart-total) 0
+              span đ
+  // End Section 11
+  // Section 12
+  .section-12
+    .container
+      .inner-wrap
+        form#order-form(action="")
+          .inner-info
+            .inner-title-main Thông Tin Khách Hàng
+            .inner-list-group
+              .inner-group
+                input#fullname-input(
+                  placeholder="Họ và tên" 
+                  name="fullName" 
+                  type="text"
+                  value=(account && account.fullName ? account.fullName : "")
+                  )
+              .inner-group
+                input#phone-input(
+                  placeholder="Số điện thoại" 
+                  name="phone" 
+                  type="text"
+                  )
+              .inner-group.inner-two-col
+                textarea(
+                  placeholder="Ghi chú" 
+                  name="note"
+                  )
+          .inner-method
+            .inner-title-main Chọn phương thức thanh toán
+            .inner-list
+              .inner-item
+                input#methodMoney(
+                  checked="" 
+                  value="money" 
+                  name="method" 
+                  type="radio"
+                  )
+                label(for="methodMoney") Thanh toán tiền mặt khi đi tour
+              .inner-item
+                input#methodVNPay(
+                  value="vnpay" 
+                  name="method" 
+                  type="radio"
+                  )
+                label(for="methodMomo") VNPay
+              .inner-item
+                input#methodBank(
+                  value="bank" 
+                  name="method" 
+                  type="radio"
+                  )
+                label(for="methodBank") Chuyển khoản ngân hàng
+            .inner-info-bank
+              .inner-title Thông tin chuyển khoản
+              .inner-desc
+                div Ngân hàng : Vietcombank
+                div Tên tài khoản: Le Van A
+                div STK: 0123456789
+          .inner-button
+            button ĐẶT TOUR
+  // End Section 12
+
+

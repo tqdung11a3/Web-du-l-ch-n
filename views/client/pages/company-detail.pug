@@ -1,0 +1,242 @@
+extends ../layouts/default.pug
+include ../mixins/product.pug
+
+block main
+  // Banner công ty
+  .section-company-detail-banner
+    .container
+      a.back-link(href="/company")
+        i.fa-solid.fa-arrow-left
+        | Quay lại danh sách công ty
+      .company-banner
+        if company.banner
+          .company-banner__image
+            img(src=company.banner alt=company.name)
+        else if company.logo
+          .company-banner__image.company-banner__image--logo
+            img(src=company.logo alt=company.name)
+        else
+          .company-banner__image.company-banner__image--placeholder
+            .placeholder-text= (company.name && company.name[0]) || 'C'
+        .company-banner__overlay
+          h1.company-banner__title= company.name
+          .company-banner__rating
+            if company.rating > 0
+              i.fa-solid.fa-star(style="color: #FFD700; margin-right: 4px;")
+              span.rating-value= company.rating
+            span.badge-partner Đối tác uy tín
+
+  // Thống kê
+  .section-company-stats
+    .container
+      .stats-grid
+        .stat-item
+          .stat-icon
+            i.fa-solid.fa-suitcase
+          .stat-number= stats.tours || 0
+          .stat-label Tours
+        .stat-item
+          .stat-icon
+            i.fa-solid.fa-users
+          .stat-number= (stats.customers || 0).toLocaleString('vi-VN')
+          .stat-label Khách hàng
+        .stat-item
+          .stat-icon
+            i.fa-solid.fa-building
+          .stat-number= stats.hotels || 0
+          .stat-label Khách sạn
+        .stat-item
+          .stat-icon
+            i.fa-solid.fa-plane
+          .stat-number= stats.flights || 0
+          .stat-label Chuyến bay
+
+  // Thông tin công ty + Chính sách
+  .section-company-info
+    .container
+      .company-info-card
+        h2.company-info-title Thông tin công ty
+        if company.overview || company.description
+          p.company-info-desc= company.overview || company.description
+        
+        .company-info-grid
+          .company-info-col
+            if company.address
+              .info-item
+                i.fa-solid.fa-location-dot
+                span
+                  strong Địa chỉ: 
+                  = company.address
+            if company.email
+              .info-item
+                i.fa-solid.fa-envelope
+                span
+                  strong Email: 
+                  = company.email
+            if company.foundedYear
+              .info-item
+                i.fa-regular.fa-calendar
+                span
+                  strong Năm thành lập: 
+                  = company.foundedYear
+          .company-info-col
+            if company.hotline
+              .info-item
+                i.fa-solid.fa-phone
+                span
+                  strong Điện thoại: 
+                  = company.hotline
+            if company.website
+              .info-item
+                i.fa-solid.fa-globe
+                span
+                  strong Website: 
+                  = company.website
+
+        // Chính sách hủy tour
+        if company.cancelPolicyTour
+          .company-policy
+            .policy-title Chính sách hủy tour
+            .policy-content= company.cancelPolicyTour
+
+        // Chính sách hủy đặt phòng khách sạn
+        if company.cancelPolicyHotel
+          .company-policy
+            .policy-title Chính sách hủy đặt phòng khách sạn
+            .policy-content= company.cancelPolicyHotel
+
+  // Tab Navigation
+  .section-company-tabs
+    .container
+      .company-tabs
+        a.tab-item.active(data-tab="tours" href="javascript:void(0)")
+          | Tours 
+          span.tab-count (#{stats.tours || 0})
+        a.tab-item(data-tab="hotels" href="javascript:void(0)")
+          | Khách sạn 
+          span.tab-count (#{stats.hotels || 0})
+
+  // Nội dung tab
+  .section-company-content
+    .container
+      // Tab Tours
+      .tab-content(data-tab-content="tours")
+        if topTours && topTours.length > 0
+          .tab-content-grid
+            each tour in topTours
+              +product-item(tour)
+          .tab-content-more
+            a.btn-view-all(href=`/company/${company.slug}/tours`) Xem tất cả
+        else
+          .tab-content-empty
+            p Chưa có tour nào.
+
+      // Tab Khách sạn - Dùng chung giao diện với /hotel/search
+      .tab-content(data-tab-content="hotels" style="display: none;")
+        if topHotels && topHotels.length > 0
+          .tab-content-list-hotels
+            each hotel in topHotels
+              .hotel-card-search
+                .hotel-card-search__image
+                  a(href=`/hotel/detail/${hotel._id}`)
+                    if hotel.avatar
+                      img(src=hotel.avatar alt=hotel.name)
+                    else if hotel.images && hotel.images.length > 0
+                      img(src=hotel.images[0] alt=hotel.name)
+                    else
+                      img(src="/images/no-image.jpg" alt=hotel.name)
+                .hotel-card-search__content
+                  h3.hotel-card-search__title
+                    a(href=`/hotel/detail/${hotel._id}`)= hotel.name
+                  // Địa chỉ
+                  if hotel.address || (hotel.province && hotel.province.name) || hotel.cityName
+                    p.hotel-card-search__address
+                      i.fa-solid.fa-location-dot
+                      span #{hotel.address || (hotel.province && hotel.province.name) || hotel.cityName || ''}
+                  // Thông tin công ty
+                  if company && company.name
+                    p.hotel-card-search__company
+                      i.fa-solid.fa-building
+                      span= company.name
+                  // Rating và sao
+                  .hotel-card-search__rating-row
+                    if hotel.ratingOverall
+                      .hotel-card-search__rating
+                        span.hotel-card-search__rating-score= hotel.ratingOverall
+                        span.hotel-card-search__rating-text Rất tốt
+                    if hotel.starRating > 0
+                      .hotel-card-search__stars
+                        - for (let i = 0; i < 5; i++)
+                          i.fa-solid.fa-star(class=(i < hotel.starRating ? 'active' : ''))
+                  // Mô tả ngắn
+                  if hotel.shortDescription
+                    p.hotel-card-search__description= hotel.shortDescription
+                  // Amenities
+                  if hotel.amenities && hotel.amenities.length > 0
+                    .hotel-card-search__amenities
+                      each amenity in hotel.amenities.slice(0, 4)
+                        span.hotel-card-search__amenity-tag= amenity
+                .hotel-card-search__price
+                  - const priceStr = Number(hotel.basePrice || 0).toLocaleString('vi-VN')
+                  .hotel-card-search__price-value #{priceStr}
+                  .hotel-card-search__price-unit #{hotel.currency || 'VND'}
+                  .hotel-card-search__price-label mỗi đêm
+                  .hotel-card-search__actions
+                    button.hotel-compare-btn(
+                      type="button"
+                      data-hotel-id=hotel._id
+                      data-hotel-name=hotel.name
+                      data-hotel-slug=hotel._id
+                      data-hotel-avatar=(hotel.avatar || (hotel.images && hotel.images[0]) || '')
+                      data-hotel-price=hotel.basePrice
+                      data-hotel-city=(hotel.cityName || (hotel.province && hotel.province.name) || '')
+                      data-hotel-address=(hotel.address || '')
+                      data-hotel-rating=(hotel.ratingOverall || 0)
+                      data-hotel-star=(hotel.starRating || 0)
+                      data-hotel-company=(company.name || '')
+                      title="So sánh khách sạn"
+                    )
+                      i.fa-solid.fa-code-compare
+                      span.compare-btn-text  So sánh
+                    a.hotel-card-search__button(href=`/hotel/detail/${hotel._id}`)
+                      | Xem chi tiết
+          .tab-content-more
+            a.btn-view-all(href=`/company/${company.slug}/hotels`) Xem tất cả
+        else
+          .tab-content-empty
+            p Chưa có khách sạn nào.
+
+  script.
+    // Tab switching
+    document.addEventListener('DOMContentLoaded', function() {
+      const tabItems = document.querySelectorAll('.tab-item');
+      const tabContents = document.querySelectorAll('.tab-content');
+
+      tabItems.forEach(tab => {
+        tab.addEventListener('click', function(e) {
+          e.preventDefault();
+          const targetTab = this.getAttribute('data-tab');
+
+          // Remove active class from all tabs
+          tabItems.forEach(t => t.classList.remove('active'));
+          // Hide all tab contents
+          tabContents.forEach(c => c.style.display = 'none');
+
+          // Add active class to clicked tab
+          this.classList.add('active');
+          // Show target tab content
+          const targetContent = document.querySelector(`[data-tab-content="${targetTab}"]`);
+          if (targetContent) {
+            targetContent.style.display = 'block';
+          }
+
+          // Nếu chuyển sang tab hotels, cập nhật trạng thái nút so sánh
+          if (targetTab === 'hotels' && typeof updateAllHotelCompareButtons === 'function') {
+            setTimeout(() => {
+              updateAllHotelCompareButtons();
+            }, 100);
+          }
+        });
+      });
+    });
+

@@ -1,0 +1,104 @@
+extends ../layouts/default.pug
+include ../mixins/change-status.pug
+
+block main
+  h1.box-title Thùng rác tour
+
+  //- Section 5
+  .section-5
+    .inner-wrap
+      +change-status(
+        `/${pathAdmin}/tour/change-multi`,
+        [
+          {
+            label: "Khôi phục",
+            value: "undo"
+          },
+          {
+            label: "Xóa vĩnh viễn",
+            value: "destroy"
+          }
+        ]
+      )
+      .inner-search
+        <i class="fa-solid fa-magnifying-glass"></i>
+        input(type="text" placeholder="Tìm kiếm")
+  //- End Section 5
+
+  //- Section 6
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th
+              input(type="checkbox" class="inner-check" check-all)
+            th Tên tour
+            th(class="inner-center") Ảnh đại diện
+            th Giá
+            th Ghế
+            th Tạo bởi
+            th Xóa bởi
+            th Hành động
+        tbody
+          each item in tourList
+            tr
+              td
+                input(type="checkbox" class="inner-check" check-item=item._id || item.id)
+
+              td #{item.name}
+
+              td(class="inner-center")
+                img(src=item.avatar class="inner-avatar")
+
+              // === GIÁ ===
+              td
+                - const fmt = (n) => { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString('vi-VN') : '0'; };
+                div NL: #{fmt(item.priceNewAdult)}đ
+                div TE: #{fmt(item.priceNewChildren)}đ
+                if item.babyPricingMode === 'fixed'
+                  div EB: #{fmt(item.priceNewBaby)}đ
+                else
+                  div(style="display:inline-flex;align-items:center;gap:6px")
+                    span EB:
+                    span.badge.badge-blue Theo bậc
+
+              // === GHẾ ===
+              td
+                - const st = Number(item.seatsTotal || 0);
+                - const sr = Number(item.seatsRemaining || 0);
+                div Tổng: #{st}
+                div Còn lại: #{sr}
+
+              td
+                div #{item.createdByFullName}
+                div.inner-time #{item.createdAtFormat}
+
+              td
+                div #{item.deletedByFullName}
+                div.inner-time #{item.deletedAtFormat}
+
+              td
+                .inner-buttons
+                  button(
+                    class="inner-undo"
+                    button-undo
+                    data-api=`/${pathAdmin}/tour/undo/${item._id}`
+                    )
+                    <i class="fa-solid fa-rotate-left"></i>
+                  button(
+                    class="inner-delete"
+                    button-destroy
+                    data-api=`/${pathAdmin}/tour/destroy/${item._id}`
+                    )
+                    <i class="fa-regular fa-trash-can"></i>
+  //- End Section 6
+
+  //- Section 7
+  .section-7
+    span.inner-label Hiển thị 1 - 9 của 78
+    select(class="inner-pagination")
+      option(value="") Trang 1
+      option(value="") Trang 2
+      option(value="") Trang 3
+  //- End Section 7

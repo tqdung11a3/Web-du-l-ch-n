@@ -1,0 +1,120 @@
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+include ../mixins/product.pug
+
+block main
+  // Breadcrumb (controller truyền biến breadcrumb vào)
+  +box-breadcrumb(breadcrumb)
+  
+  // Tab Navigation (giống company-detail)
+  .section-company-tabs
+    .container
+      .company-tabs
+        a.tab-item.active(href=`/company/${company.slug}/tours`)
+          | Tours 
+          span.tab-count (#{company.toursCount || 0})
+        a.tab-item(href=`/company/${company.slug}/hotels`)
+          | Khách sạn 
+          span.tab-count (#{company.hotelsCount || 0})
+
+  // ==========================
+  // SECTION 2: TOUR ĐANG KHUYẾN MÃI CỦA CÔNG TY
+  // ==========================
+  // Chỉ hiển thị nếu có tour đang giảm giá
+  if discountTourList && discountTourList.length
+    .section-2(
+      data-aos-duration="800"
+      data-aos="fade-up"
+    )
+      .container
+        .inner-wrap
+          .inner-info
+            h2.inner-title
+              | ƯU ĐÃI TỪ
+              br
+              | #{company.name}
+            .inner-desc
+              | Các tour đang trong thời gian giảm giá, số lượng có hạn. Đặt ngay kẻo lỡ!
+
+          .inner-list
+            .swiper.swiper-section-2
+              .swiper-wrapper
+                each item in discountTourList
+                  .swiper-slide
+                    +product-item(item)
+
+        // Nút xem tất cả tour khuyến mãi của riêng công ty này
+        .section-2-more
+          a.btn-view-all(href=`/company/${company.slug}/discount`)
+            | Xem tất cả tour khuyến mãi
+
+  // ==========================
+  // SECTION 9: DANH SÁCH TOÀN BỘ TOUR CỦA CÔNG TY
+  // ==========================
+  .section-9
+    .container
+      .inner-wrap
+        // ==== CỘT TRÁI: BOX FILTER GIỐNG tour-list.pug ====
+        .inner-left
+          include ../partials/box-filter.pug
+
+        // ==== CỘT PHẢI: INFO + SORT + LIST + PHÂN TRANG ====
+        .inner-right
+          .inner-info
+            h2.inner-title #{company.name}
+            if company.description
+              .inner-desc !{company.description}
+            if company.address
+              .inner-desc Địa chỉ: #{company.address}
+            if company.hotline
+              .inner-desc Hotline: #{company.hotline}
+
+          .inner-info-2
+            .inner-sort
+              .inner-label Sắp xếp :
+              a.inner-item(
+                class=(sort === 'price_asc' ? 'active' : '')
+                href=sortHrefs.priceAsc
+              )
+                | Giá tăng dần
+                i.fa-solid.fa-square-caret-up
+              a.inner-item(
+                class=(sort === 'price_desc' ? 'active' : '')
+                href=sortHrefs.priceDesc
+              )
+                | Giá giảm dần
+                i.fa-solid.fa-square-caret-down
+              a.inner-item(
+                class=(sort === 'rating' ? 'active' : '')
+                href=sortHrefs.rating
+              )
+                | Đánh giá
+                i.fa-solid.fa-tag
+            .inner-total-item
+              | Tất cả:
+              b #{pagination.totalRecord} Tour
+
+            button.inner-filter-mobile
+              | Bộ Lọc
+              i.fa-solid.fa-filter
+
+          .inner-product-list
+            if tourList && tourList.length
+              each item in tourList
+                +product-item(item)
+            else
+              div Không có tour nào của công ty này.
+
+          // ==== PHÂN TRANG (Section 7) ====
+          .section-7
+            span.inner-label
+              | Hiển thị #{pagination.skip + 1}
+              | - #{pagination.skip + tourList.length}
+              | của #{pagination.totalRecord}
+            select(class="inner-pagination" box-pagination)
+              - for (let i = 1; i <= pagination.totalPage; i++)
+                option(
+                  value=i
+                  selected=(i === pagination.page)
+                ) Trang #{i}
+          // ==== End Section 7 ====

@@ -1,0 +1,47 @@
+.sider-overlay
+nav.sider
+  //- Menu Tour du lịch
+  ul.inner-menu.menu-tour
+    li
+      a(href=`/${pathAdmin}/dashboard`) <i class="fa-solid fa-gauge-high"></i> Tổng quan
+    li
+      a(href=`/${pathAdmin}/category/view`) <i class="fa-solid fa-table-cells-large"></i> Xem danh mục
+    li
+      a(href=`/${pathAdmin}/tour/list`) <i class="fa-solid fa-table-list"></i> Quản lý tour
+    li
+      a(href=`/${pathAdmin}/order/list`) <i class="fa-solid fa-list-check"></i> Quản lý đơn hàng
+    li
+      a(href=`/${pathAdmin}/user/list`) <i class="fa-solid fa-user"></i> Quản lý người dùng
+    li
+      a(href=`/${pathAdmin}/contact/list`) <i class="fa-solid fa-user-group"></i> Thông tin liên hệ
+    li
+      a(href=`/${pathAdmin}/company/info`) <i class="fa-solid fa-building"></i> Công ty của tôi
+  
+  //- Menu Khách sạn
+  ul.inner-menu.menu-hotel(style="display: none;")
+    li
+      a(href=`/${pathAdmin}/hotel/dashboard`) <i class="fa-solid fa-chart-line"></i> Dashboard
+    li
+      a(href=`/${pathAdmin}/hotel/list`) <i class="fa-solid fa-hotel"></i> Khách sạn
+    li
+      a(href=`/${pathAdmin}/hotel/booking/list`) <i class="fa-solid fa-calendar-check"></i> Đặt phòng
+    li
+      a(href=`/${pathAdmin}/hotel/room-types`) <i class="fa-solid fa-door-open"></i> Quản lý loại phòng
+    li
+      a(href=`/${pathAdmin}/hotel/rooms/list`) <i class="fa-solid fa-list"></i> Danh sách phòng
+    li
+      a(href=`/${pathAdmin}/hotel/customers`) <i class="fa-solid fa-users"></i> Khách hàng
+    li
+      a(href=`/${pathAdmin}/hotel/payments`) <i class="fa-solid fa-money-bill-wave"></i> Thanh toán
+    li
+      a(href=`/${pathAdmin}/hotel/reviews`) <i class="fa-solid fa-star"></i> Bình luận và đánh giá
+  
+  hr
+  //- Menu chung (luôn hiển thị)
+  ul.inner-menu.menu-common
+    li
+      a(href=`/${pathAdmin}/setting/list`) <i class="fa-solid fa-gear"></i> Cài đặt chung
+    li
+      a(href=`/${pathAdmin}/profile/edit`) <i class="fa-solid fa-user-gear"></i> Thông tin cá nhân
+    li
+      a(href="javascript:;" class="inner-logout") <i class="fa-solid fa-power-off"></i> Đăng xuất

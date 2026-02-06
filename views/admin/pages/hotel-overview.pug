@@ -1,0 +1,116 @@
+//- views/admin/pages/hotel-overview.pug
+extends ../layouts/default.pug
+
+block main
+  .hotel-overview
+    //- Header
+    .overview-header
+      .header-left
+        h1.overview-title Tổng quan
+        p.overview-subtitle Tổng quan hoạt động khách sạn của bạn
+      .header-right
+        button.btn-open-calendar
+          i.fa-solid.fa-calendar
+          span Mở lịch phòng
+        a.btn-new-booking(href="#")
+          i.fa-solid.fa-plus
+          span Đặt phòng mới
+
+    //- Summary Cards - Hàng 1
+    .summary-cards-row
+      .summary-card
+        .card-icon.blue-icon
+          i.fa-solid.fa-calendar
+        .card-content
+          .card-label Đặt phòng hôm nay
+          .card-value= overviewData ? overviewData.bookingsToday : 0
+      
+      .summary-card
+        .card-icon.green-icon
+          i.fa-solid.fa-users
+        .card-content
+          .card-label Nhận phòng hôm nay
+          .card-value= overviewData ? overviewData.checkInsToday : 0
+      
+      .summary-card
+        .card-icon.orange-icon
+          i.fa-solid.fa-user-group
+        .card-content
+          .card-label Trả phòng hôm nay
+          .card-value= overviewData ? overviewData.checkOutsToday : 0
+
+    //- Summary Cards - Hàng 2
+    .summary-cards-row
+      .summary-card
+        .card-icon.revenue-icon
+          i.fa-solid.fa-dollar-sign
+        .card-content
+          .card-label Doanh thu hôm nay
+          .card-value= overviewData ? overviewData.revenueToday.toLocaleString('vi-VN') + '₫' : '0₫'
+
+    //- Bottom Sections: Arrivals & Checkouts
+    .overview-bottom
+      //- Khách đến hôm nay
+      .bottom-section.arrivals-section
+        .section-header
+          h2.section-title Khách đến hôm nay
+        .arrivals-list
+          if overviewData && overviewData.arrivalsToday && overviewData.arrivalsToday.length > 0
+            each arrival in overviewData.arrivalsToday
+              .arrival-item
+                .item-top
+                  .booking-id= arrival.bookingId
+                  - const arrivalBadgeClass = `badge-${arrival.statusColor}`
+                  .status-badge(class=arrivalBadgeClass)= arrival.status
+                .item-content
+                  .guest-name= arrival.guestName
+                  .room-info
+                    span Phòng: #{arrival.roomNumber}
+                    span.separator •
+                    span= arrival.roomType
+                .item-time= arrival.arrivalTime
+          else
+            .empty-message Không có khách đến hôm nay
+
+      //- Khách trả phòng hôm nay
+      .bottom-section.checkouts-section
+        .section-header
+          h2.section-title Khách trả phòng hôm nay
+        .checkouts-list
+          if overviewData && overviewData.checkoutsToday && overviewData.checkoutsToday.length > 0
+            each checkout in overviewData.checkoutsToday
+              .checkout-item
+                .item-top
+                  .booking-id= checkout.bookingId
+                  - const checkoutBadgeClass = `badge-${checkout.statusColor}`
+                  .status-badge(class=checkoutBadgeClass)= checkout.status
+                .item-content
+                  .guest-name= checkout.guestName
+                  .room-info
+                    span Phòng: #{checkout.roomNumber}
+                    span.separator •
+                    span= checkout.roomType
+                .item-time= checkout.checkoutTime
+          else
+            .empty-message Không có khách trả phòng hôm nay
+
+    //- Thanh toán chờ xử lý
+    if overviewData && overviewData.pendingPayments && overviewData.pendingPayments.length > 0
+      .payments-section
+        .section-header
+          h2.section-title Thanh toán chờ xử lý
+        .payments-list
+          each payment in overviewData.pendingPayments
+            .payment-item
+              .payment-left
+                .payment-top
+                  .booking-id= payment.bookingId
+                  - const paymentBadgeClass = `badge-${payment.statusColor}`
+                  .status-badge(class=paymentBadgeClass)= payment.status
+                .guest-name= payment.guestName
+                .payment-amounts
+                  .total-amount Tổng: #{payment.totalAmount.toLocaleString('vi-VN')}₫
+                  .remaining-amount Còn lại: #{payment.remainingAmount.toLocaleString('vi-VN')}₫
+              .payment-right
+                button.btn-collect-money Thu tiền
+

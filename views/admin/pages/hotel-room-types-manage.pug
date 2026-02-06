@@ -1,0 +1,113 @@
+//- views/admin/pages/hotel-room-types-manage.pug
+extends ../layouts/default.pug
+
+block main
+  h1.box-title Quản lý loại phòng - #{hotel.name}
+
+  .hotel-info-summary
+    p 
+      strong Khách sạn: 
+      span= hotel.name
+    p 
+      strong Địa chỉ: 
+      span= hotel.address || 'Chưa có thông tin'
+    p 
+      strong Số loại phòng hiện tại: 
+      span= (hotel.roomTypes && hotel.roomTypes.length) || 0
+
+  .room-types-list
+    if hotel.roomTypes && hotel.roomTypes.length > 0
+      each room in hotel.roomTypes
+        .room-type-card
+          .room-type-card-header
+            h3= room.name
+            .room-type-card-actions
+              a.btn-edit(href=`/${pathAdmin}/hotel/${hotel.id}/room/${room._id}/edit`)
+                i.fa-solid.fa-edit
+                |  Chỉnh sửa
+              button.btn-delete(type="button" data-room-id=room._id data-hotel-id=hotel.id)
+                i.fa-solid.fa-trash
+                |  Xóa
+          .room-type-card-body
+            .room-info-row
+              span.label Tối đa người:
+              span.value= room.maxOccupancy || 3
+            .room-info-row
+              span.label Giá từ:
+              span.value= room.basePrice ? room.basePrice.toLocaleString('vi-VN') + ' VND' : '0 VND'
+            if room.sizeM2
+              .room-info-row
+                span.label Diện tích:
+                span.value= room.sizeM2 + ' m²'
+            if room.bedInfo
+              .room-info-row
+                span.label Thông tin giường:
+                span.value= room.bedInfo
+            if room.view
+              .room-info-row
+                span.label Tầm nhìn:
+                span.value= room.view
+            if room.smokingPolicy
+              .room-info-row
+                span.label Chính sách hút thuốc:
+                span.value= room.smokingPolicy
+            if room.description
+              .room-info-row
+                span.label Mô tả:
+                span.value= room.description
+    else
+      .room-types-empty
+        i.fa-solid.fa-bed-front
+        p Chưa có loại phòng nào cho khách sạn này.
+        p.subtext Hãy thêm loại phòng đầu tiên để khách hàng có thể đặt phòng.
+
+  .room-types-actions
+    a.btn-add-room(href=`/${pathAdmin}/hotel/${hotel.id}/room/create`)
+      i.fa-solid.fa-plus
+      |  Thêm loại phòng mới
+    a.btn-back(href=`/${pathAdmin}/hotel/edit/${hotel.id}`)
+      i.fa-solid.fa-arrow-left
+      |  Quay lại chỉnh sửa khách sạn
+
+  script.
+    // Xử lý xóa room type
+    document.addEventListener('DOMContentLoaded', function() {
+      const deleteButtons = document.querySelectorAll('.btn-delete');
+      
+      deleteButtons.forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const roomId = this.getAttribute('data-room-id');
+          const hotelId = this.getAttribute('data-hotel-id');
+          const roomName = this.closest('.room-type-card').querySelector('h3').textContent;
+          
+          if (!confirm(`Bạn có chắc chắn muốn xóa loại phòng "${roomName}"?`)) {
+            return;
+          }
+          
+          try {
+            const response = await fetch(`/#{pathAdmin}/hotel/${hotelId}/room/${roomId}/delete`, {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            const data = await response.json();
+            
+            if (data.code === 'success') {
+              notify.success(data.message || 'Xóa loại phòng thành công!');
+              // Reload trang để cập nhật danh sách
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              notify.error(data.message || 'Có lỗi xảy ra khi xóa loại phòng!');
+            }
+          } catch (error) {
+            console.error('Error deleting room type:', error);
+            notify.error('Có lỗi xảy ra khi xóa loại phòng!');
+          }
+        });
+      });
+    });
+

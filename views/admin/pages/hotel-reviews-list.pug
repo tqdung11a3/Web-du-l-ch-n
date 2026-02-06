@@ -1,0 +1,99 @@
+//- views/admin/pages/hotel-reviews-list.pug
+extends ../layouts/default.pug
+
+block main
+  .box-head
+    h1.box-title Bình luận và đánh giá của khách hàng
+    .inner-buttons
+      a.button.button-outline(href=`/${pathAdmin}/hotel/list`)
+        <i class="fa-solid fa-arrow-left"></i> Quay lại
+
+  .section-8.hotel-reviews-page
+    if reviews && reviews.length > 0
+      .reviews-table-container
+        table.table.table-striped
+          thead
+            tr
+              th STT
+              th Khách sạn
+              th Tên khách hàng
+              th Điểm tổng thể
+              th Điểm chi tiết
+              th Nội dung
+              th Ngày đánh giá
+          tbody
+            each review, index in reviews
+              tr
+                td= index + 1
+                td
+                  strong= review.hotelName
+                td= review.userName
+                td
+                  strong(style="color: #10b981; font-size: 18px;")= review.ratingOverall
+                  | /10
+                td
+                  .review-details-inline
+                    if review.ratingLocation
+                      span.review-detail-badge
+                        | Vị trí: 
+                        strong= review.ratingLocation
+                    if review.ratingCleanliness
+                      span.review-detail-badge
+                        | Sạch sẽ: 
+                        strong= review.ratingCleanliness
+                    if review.ratingFacilities
+                      span.review-detail-badge
+                        | Cơ sở vật chất: 
+                        strong= review.ratingFacilities
+                    if review.ratingService
+                      span.review-detail-badge
+                        | Dịch vụ: 
+                        strong= review.ratingService
+                    if review.ratingValue
+                      span.review-detail-badge
+                        | Đáng giá tiền: 
+                        strong= review.ratingValue
+                    if !review.ratingLocation && !review.ratingCleanliness && !review.ratingFacilities && !review.ratingService && !review.ratingValue
+                      span(style="color: #9ca3af; font-style: italic;") Không có
+                td(style="max-width: 300px; word-wrap: break-word;")= review.content || 'Không có nội dung'
+                td= review.createdAtFormat
+    else
+      .empty-state
+        p(style="text-align: center; color: #6b7280; padding: 40px; font-size: 16px;")
+          i.fa-solid.fa-comment-slash(style="font-size: 48px; color: #d1d5db; margin-bottom: 16px; display: block;")
+          | Chưa có đánh giá nào từ khách hàng.
+
+  style.
+    .reviews-table-container {
+      overflow-x: auto;
+    }
+    .review-details-inline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .review-detail-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #f3f4f6;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #374151;
+    }
+    .review-detail-badge strong {
+      color: #10b981;
+      font-weight: 600;
+    }
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+    }
+    @media (max-width: 767.98px) {
+      .reviews-table-container {
+        font-size: 13px;
+      }
+      .review-details-inline {
+        flex-direction: column;
+      }
+    }
+

@@ -1,0 +1,54 @@
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+
+block main
+  // Breadcrumb
+  +box-breadcrumb(breadcrumb)
+  
+  // Tab Navigation
+  .section-company-tabs
+    .container
+      .company-tabs
+        a.tab-item(href=`/company/${company.slug}/tours`)
+          | Tours 
+          span.tab-count (#{company.toursCount || 0})
+        a.tab-item(href=`/company/${company.slug}/hotels`)
+          | Khách sạn 
+          span.tab-count (#{company.hotelsCount || 0})
+        a.tab-item.active(href=`/company/${company.slug}/flights`)
+          | Vé máy bay 
+          span.tab-count (#{company.flightsCount || 0})
+
+  // ==========================
+  // SECTION 9: DANH SÁCH VÉ MÁY BAY CỦA CÔNG TY
+  // ==========================
+  .section-9
+    .container
+      .inner-wrap
+        .inner-right
+          .inner-info
+            h2.inner-title #{company.name}
+            if company.description
+              .inner-desc !{company.description}
+            if company.address
+              .inner-desc Địa chỉ: #{company.address}
+            if company.hotline
+              .inner-desc Hotline: #{company.hotline}
+
+          .inner-info-2
+            .inner-total-item
+              | Tất cả:
+              b #{flightList.length} Chuyến bay
+
+          .inner-product-list
+            if flightList && flightList.length > 0
+              each flight in flightList
+                .flight-card(style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px;")
+                  .flight-card__info
+                    h3(style="margin: 0 0 10px 0; font-size: 20px;")= flight.name || 'Chuyến bay'
+                    p(style="color: #666;") Thông tin chuyến bay sẽ được cập nhật sau.
+            else
+              .empty-state(style="text-align: center; padding: 60px 20px; color: #999;")
+                p(style="font-size: 18px; margin-bottom: 10px;") Chưa có chuyến bay nào.
+                p(style="color: #999;") Tính năng vé máy bay đang được phát triển.
+

@@ -1,0 +1,181 @@
+extends ../../layouts/default.pug
+
+block main
+  
+  .box-head
+    h1.box-title Tổng quan hệ thống
+    span.company-badge(style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 16px; border-radius: 6px; font-weight: 600;")
+      i.fa-solid.fa-crown(style="margin-right: 6px;")
+      | Super Admin
+
+  //- Section 1
+  .section-1
+    .inner-item
+      .inner-icon
+        img(src="/admin/assets/images/section-1-icon-1.svg", alt="")
+      .inner-content
+        .inner-title Tổng số công ty
+        .inner-number #{stats.totalCompanies}
+        small(style="color: #666;") #{stats.activeCompanies} đang hoạt động
+    
+    .inner-item
+      .inner-icon
+        img(src="/admin/assets/images/section-1-icon-1.svg", alt="")
+      .inner-content
+        .inner-title Company Admins
+        .inner-number #{stats.totalCompanyAdmins}
+        small(style="color: #666;") #{stats.activeCompanyAdmins} active, 
+          span(style="color: #f39c12; font-weight: 600;") #{stats.pendingCompanyAdmins} chờ duyệt
+
+    .inner-item
+      .inner-icon
+        img(src="/admin/assets/images/section-1-icon-2.svg", alt="")
+      .inner-content
+        .inner-title Tổng đơn hàng
+        .inner-number #{stats.totalOrders}
+        small(style="color: #666;") #{stats.completedOrders} đã hoàn thành
+
+    .inner-item
+      .inner-icon
+        img(src="/admin/assets/images/section-1-icon-3.svg", alt="")
+      .inner-content
+        .inner-title Tổng doanh thu
+        .inner-number #{stats.totalRevenue.toLocaleString('vi-VN')}đ
+        small(style="color: #666;") Từ tất cả đơn hàng đã hoàn thành
+
+  //- Section 1 Row 2
+  .section-1(style="margin-top: 20px;")
+    .inner-item
+      .inner-icon
+        img(src="/admin/assets/images/section-1-icon-2.svg", alt="")
+      .inner-content
+        .inner-title Tổng số Tours
+        .inner-number #{stats.totalTours}
+        small(style="color: #666;") #{stats.activeTours} đang active
+
+    .inner-item
+      .inner-icon
+        img(src="/admin/assets/images/section-1-icon-2.svg", alt="")
+      .inner-content
+        .inner-title Tổng số Hotels
+        .inner-number #{stats.totalHotels}
+        small(style="color: #666;") #{stats.activeHotels} đang active
+
+    .inner-item
+      .inner-icon
+        img(src="/admin/assets/images/section-1-icon-1.svg", alt="")
+      .inner-content
+        .inner-title Tổng khách hàng
+        .inner-number #{stats.totalCustomers}
+        small(style="color: #666;") Người dùng đã đăng ký
+  //- End Section 1
+
+  //- Doanh thu theo công ty
+  if revenueByCompany && revenueByCompany.length
+    .section-3(style="margin-top: 30px;")
+      .box-title Doanh thu theo từng công ty
+      .table-1
+        table
+          thead
+            tr
+              th STT
+              th Công ty
+              th Doanh thu
+              th Số đơn hàng
+          tbody
+            each company, index in revenueByCompany
+              tr
+                td= index + 1
+                td
+                  if company.companyLogo
+                    img(src=company.companyLogo alt=company.companyName style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; vertical-align: middle;")
+                  = company.companyName || 'N/A'
+                td
+                  strong(style="color: #27ae60; font-size: 15px;")= company.revenue.toLocaleString('vi-VN') + ' đ'
+                td.text-center= company.orderCount
+  else
+    .section-3(style="margin-top: 30px;")
+      .box-title Doanh thu theo từng công ty
+      p(style="padding: 20px; text-align: center; color: #999;") Chưa có doanh thu từ các công ty
+
+  //- Pending Admins
+  if pendingAdmins && pendingAdmins.length
+    .section-3(style="margin-top: 30px;")
+      .inner-title
+        | Company Admin chờ phê duyệt 
+        span.badge.badge-orange(style="margin-left: 10px;")= pendingAdmins.length
+      .table-1
+        table
+          thead
+            tr
+              th Họ tên
+              th Email
+              th Công ty
+              th Ngày đăng ký
+              th Hành động
+          tbody
+            each admin in pendingAdmins
+              tr
+                td= admin.fullName
+                td= admin.email
+                td
+                  if admin.companyId
+                    = admin.companyId.name
+                  else
+                    | N/A
+                td= new Date(admin.createdAt).toLocaleDateString('vi-VN')
+                td
+                  button.button.button-green(
+                    onclick=`approveAdmin('${admin._id}')`
+                    style="margin-right: 8px;"
+                  ) 
+                    i.fa-solid.fa-check
+                    |  Phê duyệt
+                  button.button.button-red(
+                    onclick=`rejectAdmin('${admin._id}')`
+                  )
+                    i.fa-solid.fa-times
+                    |  Từ chối
+
+  script.
+    function approveAdmin(id) {
+      if (!confirm('Phê duyệt tài khoản này?')) return;
+      
+      fetch(`/${pathAdmin}/super-admin/admin/approve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.code === 'success') {
+          drawNotify('success', data.message);
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          drawNotify('error', data.message);
+        }
+      })
+      .catch(err => drawNotify('error', 'Có lỗi xảy ra!'));
+    }
+
+    function rejectAdmin(id) {
+      if (!confirm('Từ chối tài khoản này?')) return;
+      
+      fetch(`/${pathAdmin}/super-admin/admin/reject`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.code === 'success') {
+          drawNotify('success', data.message);
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          drawNotify('error', data.message);
+        }
+      })
+      .catch(err => drawNotify('error', 'Có lỗi xảy ra!'));
+    }
+
+

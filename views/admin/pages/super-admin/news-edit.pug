@@ -1,0 +1,129 @@
+extends ../../layouts/default.pug
+
+block main
+  
+  .box-head
+    h1.box-title Chỉnh sửa tin tức
+    .inner-buttons
+      a.button.button-outline(href=`/${pathAdmin}/super-admin/news`)
+        <i class="fa-solid fa-arrow-left"></i> Quay lại
+
+  //- Section 8
+  .section-8
+    form(id="news-edit-form")
+      input(type="hidden" id="newsId" name="id" value=news._id)
+      
+      .inner-group
+        label(for="title" class="inner-label") Tiêu đề *
+        input(type="text" id="title" name="title" value=news.title placeholder="Nhập tiêu đề..." required)
+      
+      .inner-group
+        label(for="shortDescription" class="inner-label") Mô tả ngắn
+        textarea(id="shortDescription" name="shortDescription" rows="3" placeholder="Nhập mô tả ngắn...")= news.shortDescription || ""
+      
+      .inner-group
+        label(for="content" class="inner-label") Nội dung *
+        textarea(id="content" name="content" rows="10" placeholder="Nhập nội dung..." required)= news.content || ""
+      
+      .inner-group
+        label(for="avatar" class="inner-label") Ảnh đại diện
+        input(type="file" id="avatar" name="avatar" accept="image/*")
+        #preview(style="margin-top: 10px;")
+          if news.avatar
+            img(src=news.avatar style="max-width: 300px; border-radius: 8px;")
+      
+      .inner-group
+        label(for="publishedAt" class="inner-label") Ngày xuất bản
+        input(type="date" id="publishedAt" name="publishedAt" value=news.publishedAtFormat)
+      
+      .inner-group
+        label(for="status" class="inner-label") Trạng thái *
+        select(id="status" name="status" required)
+          option(value="active" selected=news.status === "active") Hoạt động
+          option(value="inactive" selected=news.status === "inactive") Dừng hoạt động
+      
+      .inner-group
+        label(class="inner-label") Nổi bật
+        .inner-checkbox
+          input(type="checkbox" id="isFeatured" name="isFeatured" value="true" checked=news.isFeatured)
+          label(for="isFeatured") Đánh dấu là tin tức nổi bật
+      
+      .inner-group
+        button(type="submit" class="button button-primary")
+          <i class="fa-solid fa-save"></i> Cập nhật
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.querySelector('#news-edit-form');
+      const avatarInput = document.querySelector('#avatar');
+      const preview = document.querySelector('#preview');
+      const newsIdInput = document.querySelector('#newsId');
+      
+      const newsId = newsIdInput ? newsIdInput.value : null;
+      
+      if (!newsId) {
+        console.error('News ID not found!');
+        if (typeof drawNotify === 'function') {
+          drawNotify('error', 'Không tìm thấy ID tin tức!');
+        } else {
+          alert('Không tìm thấy ID tin tức!');
+        }
+      }
+      
+      // Preview image
+      if (avatarInput) {
+        avatarInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              preview.innerHTML = `<img src="${event.target.result}" style="max-width: 300px; border-radius: 8px;">`;
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+      }
+      
+      if (form) {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          
+          const formData = new FormData(form);
+          
+          try {
+            const res = await fetch(`/${pathAdmin}/super-admin/news/edit/${newsId}`, {
+              method: 'PATCH',
+              body: formData
+            });
+            
+            const data = await res.json();
+            
+            if (data.code === 'success') {
+              if (typeof drawNotify === 'function') {
+                drawNotify('success', data.message);
+                setTimeout(() => {
+                  window.location.href = `/${pathAdmin}/super-admin/news`;
+                }, 1000);
+              } else {
+                alert(data.message);
+                window.location.href = `/${pathAdmin}/super-admin/news`;
+              }
+            } else {
+              if (typeof drawNotify === 'function') {
+                drawNotify('error', data.message);
+              } else {
+                alert(data.message);
+              }
+            }
+          } catch (error) {
+            console.error(error);
+            if (typeof drawNotify === 'function') {
+              drawNotify('error', 'Có lỗi xảy ra!');
+            } else {
+              alert('Có lỗi xảy ra!');
+            }
+          }
+        });
+      }
+    });
+

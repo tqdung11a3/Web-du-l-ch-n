@@ -1,0 +1,532 @@
+extends ../layouts/default.pug
+include ../mixins/options.pug
+
+block main
+  
+  h1.box-title Tạo tour
+
+  //- Section 8
+  .section-8
+    form(id="tour-create-form")
+      .inner-group
+        label(for="name" class="inner-label") Tên tour
+        input(type="text" id="name" name="name")
+
+      .inner-group
+        label(for="category" class="inner-label") Danh mục
+        select(id="category" name="category")
+          option(value="") -- Chọn danh mục -- 
+          +options(categoryList, 0)
+
+      .inner-group
+        label(class="inner-label") Tags (Loại hình trải nghiệm)
+        .tags-wrapper
+          .tag-item
+            input(type="checkbox" id="tag-adventure" name="tags")
+            label(for="tag-adventure") Phiêu lưu
+          .tag-item
+            input(type="checkbox" id="tag-beach" name="tags")
+            label(for="tag-beach") Biển
+          .tag-item
+            input(type="checkbox" id="tag-culture" name="tags")
+            label(for="tag-culture") Văn hóa
+          .tag-item
+            input(type="checkbox" id="tag-mountain" name="tags")
+            label(for="tag-mountain") Leo núi
+          .tag-item
+            input(type="checkbox" id="tag-city" name="tags")
+            label(for="tag-city") Tham quan thành phố
+
+      .inner-group
+        label(for="position" class="inner-label") Vị trí
+        input(type="number" id="position" name="position")
+
+      .inner-group
+        label(for="status" class="inner-label") Trạng thái
+        select(id="status" name="status")
+          option(value="active") Hoạt động
+          option(value="inactive") Tạm dừng
+
+      .inner-group.inner-two-col
+        label(for="avatar" class="inner-label") Ảnh đại diện
+        .inner-upload-image
+          input(
+            type="file" 
+            id="avatar"
+            name="avatar"
+            filepond-image
+          )
+
+      .inner-group.inner-two-col
+        label(for="images" class="inner-label") Danh sách ảnh
+        .inner-upload-image-multi
+          input(
+            type="file" 
+            id="images"
+            name="images"
+            filepond-image-multi
+            multiple
+            data-allow-reorder="true"
+            data-max-files="10"
+          )
+
+      .inner-group
+        label(class="inner-label") Giá cũ
+        .inner-input-list
+          .inner-input-item
+            label(for="priceAdult") Người lớn
+            input(type="number" id="priceAdult" name="priceAdult")
+          .inner-input-item
+            label(for="priceChildren") Trẻ em (3-11 tuổi)
+            input(type="number" id="priceChildren" name="priceChildren")
+          .inner-input-item
+            label(for="priceBaby") Em bé (0-2 tuổi)
+            input(type="number" id="priceBaby" name="priceBaby")
+
+      .inner-group
+        label(class="inner-label") Giá mới
+        .inner-input-list
+          .inner-input-item
+            label(for="priceNewAdult") Người lớn
+            input(type="number" id="priceNewAdult" name="priceNewAdult")
+          .inner-input-item
+            label(for="priceNewChildren") Trẻ em (3-11 tuổi)
+            input(type="number" id="priceNewChildren" name="priceNewChildren")
+          .inner-input-item
+            label(for="priceNewBaby") Em bé (0-2 tuổi)
+            input(type="number" id="priceNewBaby" name="priceNewBaby")
+
+      //- ==== KHUNG THỜI HẠN KHUYẾN MÃI (giảm theo số tiền cố định) ====
+      .inner-group.inner-two-col#manual-discount-group(style="display:none")
+        label(class="inner-label") Thời hạn khuyến mãi
+        .inner-input-list
+          .inner-input-item
+            label(for="discountFrom") Từ ngày
+            input(type="date" id="discountFrom" name="discountFrom")
+          .inner-input-item
+            label(for="discountTo") Đến ngày
+            input(type="date" id="discountTo" name="discountTo")
+        .inner-desc
+          | Khung này chỉ dùng khi đã nhập ít nhất một giá cũ (Người lớn / Trẻ em / Em bé).
+          br
+          | Nếu không muốn khuyến mãi theo thời hạn, hãy xóa hết giá cũ hoặc để 0.  
+
+      //- ==== CÁCH TÍNH GIÁ EM BÉ ====
+      .inner-group
+        label(class="inner-label") Cách tính giá Em bé
+        .inner-input-list
+          .inner-input-item
+            label(for="babyPricingMode") Chế độ
+            select(id="babyPricingMode" name="babyPricingMode")
+              option(value="fixed" selected) Cố định (dùng ô Giá mới - Em bé)
+              option(value="tiered") Theo bậc (nhiều em bé, nhiều mức %)
+
+      //- Khối cấu hình bậc giá Em bé (chỉ hiện khi chọn "tiered")
+      .inner-group#baby-pricing-rules-wrapper(style="display:none")
+        label(class="inner-label") Quy tắc bậc giá Em bé
+        .inner-desc
+          | Ví dụ: Bé 1–2 miễn phí, bé 3–4 = 50% giá Trẻ em, từ bé 5 trở lên = 75% giá Trẻ em.
+          br
+          | Mỗi dòng tương ứng một khoảng số lượng Em bé.
+        .baby-rules-table
+          .baby-rules-header
+            .baby-rules-cell Bé từ (thứ mấy)
+            .baby-rules-cell đến (thứ mấy)
+            .baby-rules-cell % so với giá
+            .baby-rules-cell Giá tham chiếu
+            .baby-rules-cell Thao tác
+          .baby-rules-body#baby-rules-body
+            //- Hàng mẫu ban đầu
+            .baby-rule-row
+              .baby-rules-cell
+                input.rule-from(type="number" min="1" value="1")
+              .baby-rules-cell
+                input.rule-to(type="number" min="1" placeholder="VD: 2 (hoặc bỏ trống = trở lên)")
+              .baby-rules-cell
+                input.rule-percent(type="number" min="0" max="100" value="0")
+              .baby-rules-cell
+                select.rule-ref
+                  option(value="children" selected) Giá Trẻ em
+                  option(value="adult") Giá Người lớn
+              .baby-rules-cell
+                button.type-button.baby-rule-remove(type="button") Xóa
+        .baby-rules-actions
+          button#baby-rule-add(type="button") + Thêm dòng quy tắc
+        //- Input ẩn: nơi JS sẽ ghi JSON để gửi lên server
+        input(type="hidden" id="babyPricingRulesJson" name="babyPricingRulesJson")
+
+      //- Còn lại (quản lý ghế)
+      .inner-group
+        label(class="inner-label") Tổng số ghế (seatsTotal)
+        input(type="number" name="seatsTotal" min="0" placeholder="VD: 40" class="inner-control")
+
+      .inner-group
+        label(class="inner-label") Số ghế còn lại (seatsRemaining)
+        input(type="number" name="seatsRemaining" min="0" placeholder="VD: 40" class="inner-control")
+        .inner-desc
+          | Lưu ý: Người lớn 1 ghế, Trẻ em 1 ghế, Em bé không tốn ghế.
+
+      //- ĐIỂM KHỞI HÀNH
+      .inner-group
+        label(for="departureCity" class="inner-label") Điểm khởi hành
+        select(id="departureCity" name="departureCity")
+          option(value="") -- Chọn điểm khởi hành --
+          each item in cityList
+            option(value=item.id) #{item.name}
+
+      //- ĐỊA ĐIỂM CÓ TRONG TOUR
+      .inner-group
+        label(class="inner-label") Những địa điểm có trong tour
+        
+        //- Tour trong nước: Hiển thị các tỉnh thành Việt Nam
+        .inner-group#vietnam-locations-group
+          label(class="inner-label") Địa điểm trong nước (Việt Nam)
+          .tour-locations-wrapper#tour-locations-wrapper
+            .tour-location-item(data-index="0")
+              .inner-input-list
+                .inner-input-item
+                  label Điểm đến
+                  select.location-city
+                    option(value="") -- Chọn tỉnh/thành --
+                    each city in cityList
+                      option(value=city.id) #{city.name}
+                .inner-input-item
+                  label Các địa điểm nổi tiếng
+                  .location-spots-list
+                    .location-spot-item
+                      .spot-input-group
+                        textarea.spot-input(placeholder="VD: Chùa Linh Ứng" rows="2")
+                        button(type="button" class="spot-remove-btn") Xóa
+                  .spot-actions
+                    button(type="button" class="spot-add-btn") + Thêm địa điểm
+              .location-actions
+                button(type="button" class="location-remove-btn") Xóa điểm đến
+          .location-global-actions
+            button(type="button" id="location-add-btn") + Thêm điểm đến
+
+        //- Tour nước ngoài: Hiển thị các quốc gia Châu Âu với khối riêng cho mỗi quốc gia
+        .inner-group#tour-countries-group(style="display:none")
+          label(class="inner-label") Địa điểm nước ngoài (Châu Âu)
+          .inner-desc Chọn các quốc gia Châu Âu có trong tour. Mỗi quốc gia sẽ có khối địa điểm riêng.
+          .countries-wrapper
+            each country in europeanCountries
+              - const countryIdStr = String(country._id)
+              .country-item(data-country-id=countryIdStr)
+                .country-header
+                  input(
+                    type="checkbox"
+                    id=`country-${countryIdStr}`
+                    name="tourCountries"
+                    value=countryIdStr
+                    class="tour-country-checkbox"
+                    data-country-id=countryIdStr
+                  )
+                  label(for=`country-${country._id}` class="country-label")= country.name
+                .country-locations-wrapper(style="display:none" data-country-id=countryIdStr)
+                  .tour-location-item(data-index="0" data-country-id=countryIdStr)
+                    .inner-input-list
+                      .inner-input-item
+                        label Điểm đến
+                        select.location-city(data-country-id=countryIdStr)
+                          option(value="") -- Chọn thành phố --
+                      .inner-input-item
+                        label Các địa điểm nổi tiếng
+                        .location-spots-list
+                          .location-spot-item
+                            .spot-input-group
+                              textarea.spot-input(placeholder="VD: Tháp Eiffel" rows="2")
+                              button(type="button" class="spot-remove-btn") Xóa
+                        .spot-actions
+                          button(type="button" class="spot-add-btn") + Thêm địa điểm
+                    .location-actions
+                      button(type="button" class="location-remove-btn") Xóa điểm đến
+                  .location-global-actions
+                    button(type="button" class="country-location-add-btn" data-country-id=countryIdStr) + Thêm điểm đến
+
+        //- Input ẩn: JS sẽ ghi JSON locations trước khi submit
+        input(type="hidden" id="locationsJson" name="locations")
+
+      .inner-group
+        label(for="time" class="inner-label") Thời gian
+        input(type="text" id="time" name="time")
+
+      .inner-group
+        label(for="vehicle" class="inner-label") Phương tiện
+        input(type="text" id="vehicle" name="vehicle")
+
+      .inner-group
+        label(class="inner-label") Ngày khởi hành
+        .departure-dates-wrapper#departure-dates-wrapper
+          .departure-date-item(data-index="0")
+            input(type="date" class="departure-date-input")
+            button(type="button" class="departure-date-remove-btn") Xóa
+        .departure-dates-actions
+          button(type="button" id="departure-date-add-btn") + Thêm ngày khởi hành
+        //- Input ẩn: JS sẽ ghi JSON departureDates trước khi submit
+        input(type="hidden" id="departureDatesJson" name="departureDates")
+
+      .inner-group.inner-two-col
+        label(for="information" class="inner-label") Thông tin tour
+        textarea(id="information" textarea-mce name="information")
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Điểm nổi bật
+        .tour-highlights-list
+          .tour-highlight-item
+            .highlight-input-group
+              textarea.highlight-input(placeholder="VD: Tham quan cố đô Huế" rows="2")
+              button(type="button" class="highlight-remove-btn") Xóa
+        .highlight-actions
+          button(type="button" id="highlight-add-btn") + Thêm điểm nổi bật
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Bao gồm
+        .tour-includes-list
+          .tour-include-item
+            .include-input-group
+              textarea.include-input(placeholder="VD: Vé tham quan các điểm du lịch" rows="2")
+              button(type="button" class="include-remove-btn") Xóa
+        .include-actions
+          button(type="button" id="include-add-btn") + Thêm mục bao gồm
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Không bao gồm
+        .tour-excludes-list
+          .tour-exclude-item
+            .exclude-input-group
+              textarea.exclude-input(placeholder="VD: Chi phí cá nhân" rows="2")
+              button(type="button" class="exclude-remove-btn") Xóa
+        .exclude-actions
+          button(type="button" id="exclude-add-btn") + Thêm mục không bao gồm
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Lịch trình tour
+        .inner-schedule
+          .inner-schedule-list
+            .inner-schedule-item
+              .inner-schedule-head
+                span(class="inner-schedule-button inner-move")
+                  <i class="fa-solid fa-up-down-left-right"></i>
+                input(type="text")
+                span(class="inner-schedule-button inner-remove")
+                  <i class="fa-regular fa-trash-can"></i>
+                span(class="inner-schedule-button inner-more")
+                  <i class="fa-solid fa-angle-down"></i>
+              .inner-schedule-body
+                textarea(textarea-mce)
+          .inner-schedule-create + Thêm lịch trình
+
+      .inner-button.inner-two-col
+        button Tạo mới
+
+    .inner-back
+      a(href=`/${pathAdmin}/tour/list`) Quay lại danh sách
+  //- End Section 8
+
+  script.
+    window.europeanCountries = !{JSON.stringify(europeanCountries || [])};
+    window.europeanCities = !{JSON.stringify(europeanCities || [])};
+    window.vietnamCities = !{JSON.stringify(cityList || [])};
+    window.isInternationalTour = !{isInternationalTour ? 'true' : 'false'};
+    
+    console.log("Tour Create - isInternationalTour:", window.isInternationalTour);
+    console.log("Tour Create - europeanCountries:", window.europeanCountries);
+    console.log("Tour Create - europeanCities:", window.europeanCities);
+    console.log("Tour Create - europeanCities length:", window.europeanCities?.length);
+    
+    if (window.europeanCountries && window.europeanCountries.length > 0) {
+      console.log("Tour Create - First country:", window.europeanCountries[0]);
+      console.log("Tour Create - First country _id:", window.europeanCountries[0]._id, "type:", typeof window.europeanCountries[0]._id);
+    }
+    if (window.europeanCities && window.europeanCities.length > 0) {
+      console.log("Tour Create - Sample city:", window.europeanCities[0]);
+      console.log("Tour Create - Sample city countryId:", window.europeanCities[0].countryId, "type:", typeof window.europeanCities[0].countryId);
+      // Test match
+      if (window.europeanCountries && window.europeanCountries.length > 0 && window.europeanCities.length > 0) {
+        const testCountryId = window.europeanCountries[0]._id;
+        const testCity = window.europeanCities.find(c => String(c.countryId) === String(testCountryId));
+        console.log("Tour Create - Test match - Country:", testCountryId, "Found city:", testCity ? testCity.name : "NONE");
+      }
+    }
+    
+    // Hiển thị đúng khối địa điểm dựa trên loại tour
+    document.addEventListener('DOMContentLoaded', function() {
+      const vietnamGroup = document.getElementById('vietnam-locations-group');
+      const countriesGroup = document.getElementById('tour-countries-group');
+      
+      if (window.isInternationalTour) {
+        // Tour nước ngoài: hiển thị khối quốc gia, ẩn khối Việt Nam
+        if (vietnamGroup) vietnamGroup.style.display = 'none';
+        if (countriesGroup) countriesGroup.style.display = '';
+        console.log("Tour Create - Showing international tour form");
+      } else {
+        // Tour trong nước: hiển thị khối Việt Nam, ẩn khối quốc gia
+        if (vietnamGroup) vietnamGroup.style.display = '';
+        if (countriesGroup) countriesGroup.style.display = 'none';
+        console.log("Tour Create - Showing domestic tour form");
+      }
+    });
+    
+    // Xử lý thêm/xóa địa điểm nổi tiếng trong locations
+    document.addEventListener('DOMContentLoaded', function() {
+      // Helper function để tạo spot item
+      function createSpotItem() {
+        const div = document.createElement('div');
+        div.className = 'location-spot-item';
+        div.innerHTML = `
+          <div class="spot-input-group">
+            <textarea class="spot-input" placeholder="VD: Chùa Linh Ứng" rows="2"></textarea>
+            <button type="button" class="spot-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachSpotRemoveHandler(div);
+        return div;
+      }
+      
+      function attachSpotRemoveHandler(spotItem) {
+        const btn = spotItem.querySelector('.spot-remove-btn');
+        btn.addEventListener('click', () => {
+          const spotsList = spotItem.closest('.location-spots-list');
+          if (spotsList.children.length > 1) {
+            spotItem.remove();
+          } else {
+            spotItem.querySelector('.spot-input').value = '';
+          }
+        });
+      }
+      
+      // Gắn handlers cho tất cả spot items hiện có
+      document.querySelectorAll('.location-spot-item').forEach(item => {
+        attachSpotRemoveHandler(item);
+      });
+      
+      // Gắn handlers cho nút thêm spot
+      document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('spot-add-btn')) {
+          const spotsList = e.target.closest('.inner-input-item').querySelector('.location-spots-list');
+          if (spotsList) {
+            spotsList.appendChild(createSpotItem());
+          }
+        }
+      });
+    });
+    
+    // Xử lý thêm/xóa Điểm nổi bật
+    document.addEventListener('DOMContentLoaded', function() {
+      const highlightsList = document.querySelector('.tour-highlights-list');
+      const addBtn = document.getElementById('highlight-add-btn');
+      
+      if (!highlightsList || !addBtn) return;
+      
+      function createHighlightItem() {
+        const div = document.createElement('div');
+        div.className = 'tour-highlight-item';
+        div.innerHTML = `
+          <div class="highlight-input-group">
+            <textarea class="highlight-input" placeholder="VD: Tham quan cố đô Huế" rows="2"></textarea>
+            <button type="button" class="highlight-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachHighlightRemoveHandler(div);
+        return div;
+      }
+      
+      function attachHighlightRemoveHandler(item) {
+        const btn = item.querySelector('.highlight-remove-btn');
+        btn.addEventListener('click', () => {
+          if (highlightsList.children.length > 1) {
+            item.remove();
+          } else {
+            item.querySelector('.highlight-input').value = '';
+          }
+        });
+      }
+      
+      highlightsList.querySelectorAll('.tour-highlight-item').forEach(item => {
+        attachHighlightRemoveHandler(item);
+      });
+      
+      addBtn.addEventListener('click', () => {
+        highlightsList.appendChild(createHighlightItem());
+      });
+    });
+    
+    // Xử lý thêm/xóa Bao gồm
+    document.addEventListener('DOMContentLoaded', function() {
+      const includesList = document.querySelector('.tour-includes-list');
+      const addBtn = document.getElementById('include-add-btn');
+      
+      if (!includesList || !addBtn) return;
+      
+      function createIncludeItem() {
+        const div = document.createElement('div');
+        div.className = 'tour-include-item';
+        div.innerHTML = `
+          <div class="include-input-group">
+            <textarea class="include-input" placeholder="VD: Vé tham quan các điểm du lịch" rows="2"></textarea>
+            <button type="button" class="include-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachIncludeRemoveHandler(div);
+        return div;
+      }
+      
+      function attachIncludeRemoveHandler(item) {
+        const btn = item.querySelector('.include-remove-btn');
+        btn.addEventListener('click', () => {
+          if (includesList.children.length > 1) {
+            item.remove();
+          } else {
+            item.querySelector('.include-input').value = '';
+          }
+        });
+      }
+      
+      includesList.querySelectorAll('.tour-include-item').forEach(item => {
+        attachIncludeRemoveHandler(item);
+      });
+      
+      addBtn.addEventListener('click', () => {
+        includesList.appendChild(createIncludeItem());
+      });
+    });
+    
+    // Xử lý thêm/xóa Không bao gồm
+    document.addEventListener('DOMContentLoaded', function() {
+      const excludesList = document.querySelector('.tour-excludes-list');
+      const addBtn = document.getElementById('exclude-add-btn');
+      
+      if (!excludesList || !addBtn) return;
+      
+      function createExcludeItem() {
+        const div = document.createElement('div');
+        div.className = 'tour-exclude-item';
+        div.innerHTML = `
+          <div class="exclude-input-group">
+            <textarea class="exclude-input" placeholder="VD: Chi phí cá nhân" rows="2"></textarea>
+            <button type="button" class="exclude-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachExcludeRemoveHandler(div);
+        return div;
+      }
+      
+      function attachExcludeRemoveHandler(item) {
+        const btn = item.querySelector('.exclude-remove-btn');
+        btn.addEventListener('click', () => {
+          if (excludesList.children.length > 1) {
+            item.remove();
+          } else {
+            item.querySelector('.exclude-input').value = '';
+          }
+        });
+      }
+      
+      excludesList.querySelectorAll('.tour-exclude-item').forEach(item => {
+        attachExcludeRemoveHandler(item);
+      });
+      
+      addBtn.addEventListener('click', () => {
+        excludesList.appendChild(createExcludeItem());
+      });
+    });

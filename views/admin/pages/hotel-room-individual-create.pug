@@ -1,0 +1,231 @@
+//- views/admin/pages/hotel-room-individual-create.pug
+extends ../layouts/default.pug
+
+block main
+  .room-individual-create-page
+    .page-header
+      h1.page-title Thêm phòng mới
+      p.page-subtitle Thêm phòng cụ thể vào khách sạn
+
+    .section-8
+      form(id="hotel-room-individual-create-form")
+        // Chọn hotel (nếu chưa chọn từ hotel selector)
+        if !hotelId || hotelId === 'all'
+          .inner-group
+            label(for="hotelSelect" class="inner-label") Chọn khách sạn *
+            select#hotelSelect(name="hotelId" required)
+              option(value="") -- Chọn khách sạn --
+              if hotelList && hotelList.length > 0
+                each hotel in hotelList
+                  option(value=hotel._id)= hotel.name
+        else
+          input(type="hidden" name="hotelId" id="hotelId" value=hotelId)
+
+        // Bước 1: Chọn tầng
+        .inner-group
+          label(for="floor" class="inner-label") Tầng *
+          input#floor(
+            type="text"
+            name="floor"
+            placeholder="VD: Tầng 1, Tầng 2..."
+            required
+          )
+
+        // Bước 2: Chọn loại phòng
+        .inner-group
+          label(for="roomType" class="inner-label") Loại phòng *
+          select#roomType(name="roomTypeId" required)
+            option(value="") -- Chọn loại phòng --
+            if roomTypes && roomTypes.length > 0
+              each rt in roomTypes
+                option(value=rt._id)= rt.name
+            else
+              option(value="" disabled) Chưa có loại phòng (vui lòng chọn khách sạn)
+
+        // Bước 3: Thêm nhiều phòng
+        .inner-group#roomsTableGroup(style="display: none;")
+          label(class="inner-label") Danh sách phòng
+          .rooms-table-container
+            table.rooms-input-table
+              thead
+                tr
+                  th Số phòng *
+                  th Trạng thái *
+                  th Thao tác
+              tbody#roomsTableBody
+                tr.room-row
+                  td
+                    input.room-number-input(
+                      type="text"
+                      placeholder="VD: 101, 201, 301..."
+                      required
+                    )
+                  td
+                    select.room-status-select(required)
+                      option(value="vacant") Trống
+                      option(value="occupied") Đang sử dụng
+                      option(value="cleaning") Đang dọn
+                      option(value="out_of_service") Ngừng hoạt động
+                  td
+                    button(type="button" class="btn-remove-room") Xóa
+            .rooms-table-actions
+              button(type="button" id="btn-add-room-row") + Thêm phòng
+
+        .inner-button.inner-two-col
+          button(type="submit" id="btn-submit" disabled) Lưu phòng
+          a.btn-secondary(href=`/${pathAdmin}/hotel/rooms/list${hotelId && hotelId !== 'all' ? '?hotelId=' + hotelId : ''}`) Hủy
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const floorInput = document.getElementById('floor');
+      const roomTypeSelect = document.getElementById('roomType');
+      const roomsTableGroup = document.getElementById('roomsTableGroup');
+      const roomsTableBody = document.getElementById('roomsTableBody');
+      const btnAddRoomRow = document.getElementById('btn-add-room-row');
+      const btnSubmit = document.getElementById('btn-submit');
+      const form = document.getElementById('hotel-room-individual-create-form');
+      const hotelSelect = document.getElementById('hotelSelect');
+
+      // Xử lý khi chọn hotel (nếu có dropdown chọn hotel)
+      if (hotelSelect) {
+        hotelSelect.addEventListener('change', function() {
+          const selectedHotelId = this.value;
+          if (selectedHotelId) {
+            window.location.href = `/${pathAdmin}/hotel/rooms/create?hotelId=${selectedHotelId}`;
+          }
+        });
+      }
+
+      // Kiểm tra và hiển thị bảng phòng khi đã chọn tầng và loại phòng
+      function checkAndShowRoomsTable() {
+        const floor = floorInput.value.trim();
+        const roomType = roomTypeSelect.value;
+        
+        if (floor && roomType) {
+          roomsTableGroup.style.display = '';
+          btnSubmit.disabled = false;
+          
+          // Nếu bảng chưa có hàng nào, thêm một hàng mặc định
+          if (roomsTableBody.children.length === 0) {
+            addRoomRow();
+          }
+        } else {
+          roomsTableGroup.style.display = 'none';
+          btnSubmit.disabled = true;
+        }
+      }
+
+      // Thêm hàng mới vào bảng
+      function addRoomRow() {
+        const row = document.createElement('tr');
+        row.className = 'room-row';
+        row.innerHTML = `
+          <td>
+            <input class="room-number-input" type="text" placeholder="VD: 101, 201, 301..." required>
+          </td>
+          <td>
+            <select class="room-status-select" required>
+              <option value="vacant">Trống</option>
+              <option value="occupied">Đang sử dụng</option>
+              <option value="cleaning">Đang dọn</option>
+              <option value="out_of_service">Ngừng hoạt động</option>
+            </select>
+          </td>
+          <td>
+            <button type="button" class="btn-remove-room">Xóa</button>
+          </td>
+        `;
+        
+        // Xử lý nút xóa
+        const removeBtn = row.querySelector('.btn-remove-room');
+        removeBtn.addEventListener('click', function() {
+          if (roomsTableBody.children.length > 1) {
+            row.remove();
+          } else {
+            // Nếu chỉ còn 1 hàng, xóa dữ liệu thay vì xóa hàng
+            row.querySelector('.room-number-input').value = '';
+            row.querySelector('.room-status-select').value = 'vacant';
+          }
+        });
+        
+        roomsTableBody.appendChild(row);
+      }
+
+      // Event listeners
+      floorInput.addEventListener('input', checkAndShowRoomsTable);
+      roomTypeSelect.addEventListener('change', checkAndShowRoomsTable);
+      
+      btnAddRoomRow.addEventListener('click', addRoomRow);
+
+      // Form submit handler
+      if (form) {
+        form.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          
+          const hotelId = document.getElementById('hotelId')?.value || hotelSelect?.value;
+          if (!hotelId) {
+            alert('Vui lòng chọn khách sạn!');
+            return;
+          }
+
+          const floor = floorInput.value.trim();
+          const roomTypeId = roomTypeSelect.value;
+          
+          if (!floor || !roomTypeId) {
+            alert('Vui lòng điền đầy đủ thông tin tầng và loại phòng!');
+            return;
+          }
+
+          // Thu thập dữ liệu từ bảng phòng
+          const rooms = [];
+          const roomRows = roomsTableBody.querySelectorAll('.room-row');
+          
+          roomRows.forEach(row => {
+            const roomNumber = row.querySelector('.room-number-input').value.trim();
+            const status = row.querySelector('.room-status-select').value;
+            
+            if (roomNumber) {
+              rooms.push({
+                roomNumber: roomNumber,
+                status: status
+              });
+            }
+          });
+
+          if (rooms.length === 0) {
+            alert('Vui lòng thêm ít nhất một phòng!');
+            return;
+          }
+
+          // Gửi dữ liệu lên server
+          try {
+            const response = await fetch(`/${pathAdmin}/hotel/rooms/create`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                hotelId: hotelId,
+                floor: floor,
+                roomTypeId: roomTypeId,
+                rooms: rooms
+              })
+            });
+
+            const result = await response.json();
+
+            if (result.code === 'success') {
+              notify.success(result.message);
+              setTimeout(() => {
+                window.location.href = `/${pathAdmin}/hotel/${hotelId}/rooms/list`;
+              }, 1000);
+            } else {
+              notify.error(result.message || 'Có lỗi xảy ra!');
+            }
+          } catch (error) {
+            console.error('Error submitting form:', error);
+            notify.error('Có lỗi xảy ra khi lưu thông tin!');
+          }
+        });
+      }
+    });

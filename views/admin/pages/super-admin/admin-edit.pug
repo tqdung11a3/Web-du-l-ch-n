@@ -1,0 +1,173 @@
+extends ../../layouts/super-admin.pug
+
+block main
+  h1.box-title= pageTitle
+
+  //- Section 8: Form
+  .section-8
+    form#admin-edit-form(enctype="multipart/form-data")
+      input(type="hidden" name="adminId" value=admin._id)
+
+      .inner-group
+        label.inner-label(for="fullName") Họ tên *
+        input#fullName.inner-control(
+          type="text"
+          name="fullName"
+          placeholder="Nhập họ tên..."
+          value=admin.fullName
+          required
+        )
+
+      .inner-group
+        label.inner-label(for="email") Email *
+        input#email.inner-control(
+          type="email"
+          name="email"
+          placeholder="Nhập email..."
+          value=admin.email
+          required
+        )
+
+      .inner-group
+        label.inner-label(for="phone") Số điện thoại
+        input#phone.inner-control(
+          type="text"
+          name="phone"
+          placeholder="Nhập số điện thoại..."
+          value=admin.phone || ''
+        )
+
+      .inner-group
+        label.inner-label(for="companyId") Công ty *
+        select#companyId.inner-control(name="companyId" required)
+          option(value="") -- Chọn công ty --
+          each company in companies
+            option(
+              value=company._id
+              selected=admin.companyId && admin.companyId._id.toString() === company._id.toString()
+            )= company.name
+
+      .inner-group
+        label.inner-label(for="positionCompany") Chức vụ
+        input#positionCompany.inner-control(
+          type="text"
+          name="positionCompany"
+          placeholder="VD: Giám đốc, Quản lý..."
+          value=admin.positionCompany || ''
+        )
+
+      .inner-group
+        label.inner-label(for="role") Nhóm quyền
+        select#role.inner-control(name="role")
+          option(value="") -- Chọn nhóm quyền --
+          each roleItem in roles
+            option(
+              value=roleItem._id
+              selected=admin.role === roleItem._id.toString()
+            )= roleItem.name
+
+      .inner-group
+        label.inner-label(for="password") Mật khẩu mới
+        input#password.inner-control(
+          type="password"
+          name="password"
+          placeholder="Để trống nếu không đổi..."
+        )
+        small(style="color: #666; font-size: 12px;") Chỉ nhập nếu muốn thay đổi mật khẩu
+
+      .inner-group
+        label.inner-label(for="confirmPassword") Xác nhận mật khẩu mới
+        input#confirmPassword.inner-control(
+          type="password"
+          name="confirmPassword"
+          placeholder="Nhập lại mật khẩu mới..."
+        )
+
+      .inner-group
+        label.inner-label(for="status") Trạng thái *
+        select#status.inner-control(name="status" required)
+          option(value="active" selected=admin.status==='active') Hoạt động
+          option(value="inactive" selected=admin.status==='inactive') Tạm dừng
+          option(value="initial" selected=admin.status==='initial') Chờ duyệt
+
+      .inner-group(image-default=admin.avatar || '')
+        label.inner-label Avatar
+        input#avatar.inner-control(
+          type="file"
+          name="avatar"
+          accept="image/*"
+          filepond-image
+        )
+
+      .inner-two-col
+        .inner-button
+          button(type="submit") Cập nhật
+        .inner-back
+          a(href=`/${pathAdmin}/super-admin/admin`) ← Quay lại danh sách
+  //- End Section 8
+
+  script.
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.querySelector('#admin-edit-form');
+      if (form) {
+        const validator = new JustValidate('#admin-edit-form');
+
+        validator
+          .addField('#fullName', [
+            { rule: 'required', errorMessage: 'Vui lòng nhập họ tên!' },
+            { rule: 'minLength', value: 5, errorMessage: 'Họ tên phải có ít nhất 5 ký tự!' }
+          ])
+          .addField('#email', [
+            { rule: 'required', errorMessage: 'Vui lòng nhập email!' },
+            { rule: 'email', errorMessage: 'Email không đúng định dạng!' }
+          ])
+          .addField('#companyId', [
+            { rule: 'required', errorMessage: 'Vui lòng chọn công ty!' }
+          ])
+          .onSuccess((event) => {
+            event.preventDefault(); // Ngăn form submit mặc định
+            
+            const adminId = event.target.adminId.value;
+            const formData = new FormData(event.target);
+            
+            const avatarFile = window.filePond?.avatar?.getFile?.()?.file;
+            if (avatarFile) {
+              formData.set('avatar', avatarFile);
+            }
+
+            fetch(`/${pathAdmin}/super-admin/admin/edit/${adminId}`, {
+              method: 'PATCH',
+              body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.code === 'error') {
+                if (typeof notify?.error === 'function') {
+                  notify.error(data.message);
+                } else {
+                  alert(data.message);
+                }
+              } else {
+                if (typeof drawNotify === 'function') {
+                  drawNotify(data.code, data.message);
+                } else {
+                  alert(data.message);
+                }
+                // Reload sau 1 giây để thấy thông báo
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              }
+            })
+            .catch(err => {
+              console.error(err);
+              if (typeof notify?.error === 'function') {
+                notify.error('Có lỗi xảy ra!');
+              } else {
+                alert('Có lỗi xảy ra!');
+              }
+            });
+          });
+      }
+    });
+

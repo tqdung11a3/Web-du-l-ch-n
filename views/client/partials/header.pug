@@ -1,0 +1,60 @@
+header.header
+  .container
+    .inner-wrap
+      // Menu Mobile
+      button.inner-menu-mobile
+        i.fa-solid.fa-bars
+      // Logo
+      .inner-logo
+        a(href="/")
+          img(
+            alt=settingWebsiteInfo.websiteName
+            src=settingWebsiteInfo.logo
+            )
+      // Menu
+      nav.inner-menu
+        .inner-overlay
+        ul
+          li
+            a.active(href="/") Trang Chủ
+          each item in categoryList
+            li
+              a(href=`/category/${item.slug}`) #{item.name}
+              if (item.children && item.children.length > 0)
+                i.fa-solid.fa-caret-down
+                ul
+                  each itemChild in item.children
+                    li
+                      a(href=`/category/${itemChild.slug}`) #{itemChild.name}
+          li
+            a(href="/news") Tin Tức
+          li
+            a(href="/hotel/search") Khách Sạn
+          li
+            a(href="/company") Công Ty
+      // Account & Cart
+      .inner-user
+        // Cart Icon
+        a.cart-icon-wrapper(href="/cart" title="Giỏ hàng")
+          i.fa-solid.fa-cart-shopping.cart-icon
+          span.cart-badge(style="display: none") 0
+        
+        if account
+          .user-menu
+            // dùng button để dễ bắt focus/click trên mobile
+            button.user-trigger(type="button" aria-haspopup="true" aria-expanded="false")
+              // có thể thay bằng avatar nếu sau này có
+              span.user-name #{account.fullName}
+              i.fa-solid.fa-chevron-down
+            ul.user-dropdown
+              li
+                a(href="/account/profile")
+                  i.fa-regular.fa-user
+                  span Thông tin tài khoản
+              li
+                a(href="javascript:;" class="inner-logout")
+                  i.fa-solid.fa-right-from-bracket
+                  span Đăng xuất
+        else
+          a(href="/account/login" class="user-login")
+            i.fa-regular.fa-circle-user(aria-label="Tài khoản" title="Tài khoản")

@@ -1,0 +1,110 @@
+mixin product-item(item)
+  - const tourDetailUrl = item.company && item.company.slug ? `/company/${item.company.slug}/tour/detail/${item.slug}` : `/tour/detail/${item.slug}`
+  .product-item(data-tour-id=item._id)
+    .inner-image
+      a(href=tourDetailUrl)
+        img(alt=item.name src=item.avatar)
+      // Tags (bên trái nút So sánh)
+      if item.tags && item.tags.length
+        .inner-tags
+          each tag in item.tags
+            span.tag-badge= tag
+      button.inner-compare-btn(
+        type="button"
+        data-tour-id=item._id
+        data-tour-name=item.name
+        data-tour-slug=item.slug
+        data-tour-avatar=item.avatar
+        data-tour-price=item.priceNewAdult || item.priceAdult || 0
+        data-tour-price-old=item.priceAdult || 0
+        data-tour-discount=item.discount || 0
+        data-tour-company=item.company ? JSON.stringify(item.company) : '{}'
+        title="So sánh tour"
+      )
+        i.fa-solid.fa-code-compare
+        span.compare-btn-text So sánh
+
+    // ===== NHÃN GIẢM GIÁ =====
+    if item.discount && item.discount > 0
+      .inner-discount
+        i.fa-solid.fa-bolt
+        | Giảm -#{item.discount}%
+    else
+      .inner-discount
+        // có thể ẩn bằng CSS nếu muốn
+
+    .inner-content
+      h3.inner-title
+        a(href=tourDetailUrl) #{item.name}
+
+      // ===== GIÁ =====
+      .inner-prices
+        if item.discount && item.discount > 0
+          .inner-price-old
+            | #{Number(item.priceAdult || 0).toLocaleString("vi-VN")}
+            span.inner-unit đ
+          .inner-price-new
+            | #{Number(item.priceNewAdult || 0).toLocaleString("vi-VN")}
+            span.inner-unit đ
+        else
+          .inner-price-new
+            | #{Number(item.priceNewAdult || item.priceAdult || 0).toLocaleString("vi-VN")}
+            span.inner-unit đ
+
+      // ===== THÔNG TIN CƠ BẢN =====
+      .inner-desc
+        if item.departureDateFormat
+          .inner-desc-item
+            | Ngày Khởi Hành:
+            b #{item.departureDateFormat}
+        if item.time
+          .inner-desc-item
+            | Thời Gian:
+            b #{item.time}
+        // Khởi hành từ (tên tỉnh/thành)
+        if item.departureCityName
+          .inner-desc-item
+            | Khởi hành từ:
+            b #{item.departureCityName}
+
+      // ===== COUNTDOWN: CÒN LẠI BAO LÂU (JS sẽ tự đếm) =====
+      if item.discountExpireISO
+        .inner-countdown(data-expire=item.discountExpireISO)
+          .inner-countdown-label-row
+            i.fa-regular.fa-clock
+            span.inner-countdown-label Còn lại:
+          .inner-countdown-row
+            .inner-countdown-col
+              span.inner-countdown-number(data-role="days") 00
+              span.inner-countdown-unit Ngày
+            .inner-countdown-col
+              span.inner-countdown-number(data-role="hours") 00
+              span.inner-countdown-unit Giờ
+            .inner-countdown-col
+              span.inner-countdown-number(data-role="minutes") 00
+              span.inner-countdown-unit Phút
+            .inner-countdown-col
+              span.inner-countdown-number(data-role="seconds") 00
+              span.inner-countdown-unit Giây
+
+      // ===== META: SAO, SỐ CHỖ, CÔNG TY =====
+      .inner-meta
+        // === XẾP HẠNG SAO ===
+        - const avg = Number(item.ratingAvg || 0);
+        - const cnt = Number(item.ratingCount || 0);
+        - const pct = Math.max(0, Math.min(100, Math.round((avg / 5) * 100)));
+        .inner-rating(title=`${avg.toFixed(1)} / 5 (${cnt} đánh giá)`)
+          .stars
+            .stars-base ★★★★★
+            .stars-fill(style=`width:${pct}%`) ★★★★★
+          span.inner-number #{avg.toFixed(1)}
+          if cnt > 0
+            span.inner-count &nbsp;(#{cnt})
+        .inner-stock
+          .inner-label Số chỗ còn:
+          .inner-number #{(Number(item.seatsRemaining) || 0).toLocaleString('vi-VN')}
+
+        // === THÔNG TIN CÔNG TY ===
+        if item.company
+          .inner-company(style="margin-top:6px")
+            a(href=`/company/${item.company.slug}` style="font-weight:600") #{item.company.name}

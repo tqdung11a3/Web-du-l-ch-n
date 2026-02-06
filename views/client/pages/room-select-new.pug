@@ -1,0 +1,273 @@
+//- views/client/pages/room-select-new.pug
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+
+block main
+  - const b = booking || {};
+  - const h = b.hotel || {};
+  - const room = b.roomType || {};
+  - const safe = (n)=> Number(n||0).toLocaleString('vi-VN');
+  - const nights = b.nights || 1;
+  - const roomsQty = b.rooms || 1;
+
+  +box-breadcrumb(breadcrumb || [])
+
+  .section-room-booking
+    .container
+      h1.section-title Các lựa chọn phòng
+
+      //- Tabs
+      .room-tabs
+        .room-tab.active Hủy miễn phí (nếu có)
+        .room-tab Bao gồm bữa sáng
+        .room-tab WiFi miễn phí
+
+      //- Room Card
+      .room-booking-grid
+        .room-booking-left
+          .room-card
+            .room-card-header
+              h2.room-card-title= room.name || "Deluxe City View"
+              .room-card-meta
+                span
+                  i.fa-regular.fa-user
+                  |  Tối đa #{room.maxOccupancy || 3} khách
+
+                if room.sizeM2
+                  span
+                    i.fa-regular.fa-square
+                    |  Diện tích: #{room.sizeM2} m²
+
+                if room.bedInfo
+                  span
+                    i.fa-solid.fa-bed
+                    |  #{room.bedInfo}
+
+                if room.view
+                  span
+                    i.fa-regular.fa-eye
+                    |  Tầm nhìn: #{room.view}
+
+                if room.smokingPolicy
+                  span
+                    i.fa-solid.fa-ban-smoking
+                    |  Chính sách hút thuốc: #{room.smokingPolicy}
+
+              if b.additionalServices && b.additionalServices.length > 0
+                .room-card-description
+                  p Đây là phòng #{room.name}
+
+              .room-available
+                .room-available-badge
+                  i.fa-solid.fa-bed
+                  |  Còn phòng trống
+                span  #{b.availableCount || roomsQty} phòng
+
+            .room-card-images
+              if room.images && room.images.length > 0
+                .room-image-carousel
+                  button.carousel-btn.carousel-btn-prev(type="button")
+                    i.fa-solid.fa-chevron-left
+                  img.room-main-image(src=room.images[0], alt=room.name)
+                  button.carousel-btn.carousel-btn-next(type="button")
+                    i.fa-solid.fa-chevron-right
+              else
+                img.room-main-image(src="/images/no-image.jpg", alt="Room")
+
+            .room-card-pricing
+              .room-price
+                .room-price-main #{safe(b.pricePerNight)} #{b.currency === 'VND' ? 'VND' : b.currency}
+                .room-price-label / 1 đêm
+              a.room-policy-link(href="#policies") Quy định hủy phòng
+
+        .room-booking-right
+          .booking-summary
+            h3.summary-title Chi tiết đặt phòng
+
+            .summary-section
+              .summary-hotel-name= h.name || "Grand Palace Hotel"
+              .summary-room-type= room.name || "Deluxe Room"
+              if h.province || h.address
+                .summary-location
+                  if h.province
+                    div= h.province
+                  if h.address
+                    div= h.address
+
+            .summary-section
+              .summary-row
+                .summary-label Nhận phòng:
+                .summary-value #{b.checkInLabel}
+              .summary-row
+                .summary-label Trả phòng:
+                .summary-value #{b.checkOutLabel}
+              .summary-row
+                .summary-label Số đêm:
+                .summary-value #{nights} đêm
+
+            .summary-section.summary-pricing
+              .summary-row
+                .summary-label Giá phòng (#{nights} đêm)
+                .summary-value #{safe(b.roomSubtotal)}đ
+              .summary-row
+                .summary-label Thuế VAT (#{b.taxPercent}%)
+                .summary-value #{safe(b.tax)}đ
+              .summary-row
+                .summary-label Phí dịch vụ (#{b.feePercent}%)
+                .summary-value #{safe(b.fee)}đ
+
+            if b.additionalServices && b.additionalServices.length > 0
+              .summary-section
+                h4.summary-subtitle + Dịch vụ thêm
+                
+                each service in b.additionalServices
+                  .service-item(data-service-id=service.id)
+                    if service.isCheckbox
+                      .service-checkbox-wrapper
+                        .service-info
+                          .service-name= service.name
+                          .service-price #{safe(service.price)}đ
+                        input.service-checkbox(type="checkbox" data-price=service.price data-service-id=service.id)
+                    else
+                      .service-quantity-wrapper
+                        .service-info
+                          .service-name= service.name
+                          .service-price #{safe(service.price)}đ / #{service.unit}
+                        .service-quantity-controls
+                          button.service-btn.service-btn-minus(type="button" data-service-id=service.id) −
+                          input.service-quantity(type="number" value="0" min="0" max=service.maxQuantity data-price=service.price data-service-id=service.id readonly)
+                          button.service-btn.service-btn-plus(type="button" data-service-id=service.id data-max=service.maxQuantity) +
+
+            .summary-total
+              .summary-row.summary-row-total
+                .summary-label Tổng cộng
+                .summary-value#totalPrice #{safe(b.roomSubtotal + b.tax + b.fee)}đ
+
+            button.btn-book(type="button" onclick="proceedToBooking()") CHỌN PHÒNG
+
+      //- Policies Section
+      #policies.policies-section
+        h3.policies-title Điều khoản & Chính sách
+
+        .policy-block
+          .policy-icon
+            i.fa-regular.fa-clock
+          .policy-content
+            strong Giờ nhận phòng: #{b.policies.checkInTime} | Giờ trả phòng: #{b.policies.checkOutTime}
+
+        .policy-block
+          .policy-icon
+            i.fa-solid.fa-info-circle
+          .policy-content
+            strong Chính sách hủy: 
+            |  #{b.policies.cancellationPolicy}
+
+        .policy-block
+          .policy-icon
+            i.fa-solid.fa-check-circle
+          .policy-content
+            strong Vui lòng xuất trình CMND/CCCD khi check-in
+
+        .policy-block
+          .policy-icon
+            i.fa-solid.fa-square-check
+          div
+            p
+              strong  Tôi đã đọc và đồng ý với 
+              a(href="#") Điều khoản & Điều kiện
+              |  và 
+              a(href="#") Chính sách hủy
+              |  của khách sạn
+
+  script.
+    // Calculate total price with services
+    function calculateTotal() {
+      const baseTotal = #{b.roomSubtotal + b.tax + b.fee};
+      let servicesTotal = 0;
+
+      // Checkboxes
+      document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
+        servicesTotal += parseFloat(cb.dataset.price || 0);
+      });
+
+      // Quantities
+      document.querySelectorAll('.service-quantity').forEach(input => {
+        const qty = parseInt(input.value || 0);
+        const price = parseFloat(input.dataset.price || 0);
+        servicesTotal += qty * price;
+      });
+
+      const total = baseTotal + servicesTotal;
+      document.getElementById('totalPrice').textContent = total.toLocaleString('vi-VN') + 'đ';
+    }
+
+    // Service checkbox handlers
+    document.querySelectorAll('.service-checkbox').forEach(cb => {
+      cb.addEventListener('change', calculateTotal);
+    });
+
+    // Service quantity handlers
+    document.querySelectorAll('.service-btn-plus').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const serviceId = this.dataset.serviceId;
+        const max = parseInt(this.dataset.max || 999);
+        const input = document.querySelector(`.service-quantity[data-service-id="${serviceId}"]`);
+        const current = parseInt(input.value || 0);
+        if (current < max) {
+          input.value = current + 1;
+          calculateTotal();
+        }
+      });
+    });
+
+    document.querySelectorAll('.service-btn-minus').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const serviceId = this.dataset.serviceId;
+        const input = document.querySelector(`.service-quantity[data-service-id="${serviceId}"]`);
+        const current = parseInt(input.value || 0);
+        if (current > 0) {
+          input.value = current - 1;
+          calculateTotal();
+        }
+      });
+    });
+
+    // Proceed to booking
+    function proceedToBooking() {
+      const services = [];
+      
+      // Collect checkbox services
+      document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
+        services.push({
+          id: cb.dataset.serviceId,
+          quantity: 1
+        });
+      });
+
+      // Collect quantity services
+      document.querySelectorAll('.service-quantity').forEach(input => {
+        const qty = parseInt(input.value || 0);
+        if (qty > 0) {
+          services.push({
+            id: input.dataset.serviceId,
+            quantity: qty
+          });
+        }
+      });
+
+      // Build URL
+      const params = new URLSearchParams({
+        hotelId: '#{h.id}',
+        roomTypeId: '#{room.id}',
+        checkInDate: '#{b.checkInDate}',
+        checkOutDate: '#{b.checkOutDate}',
+        rooms: '#{roomsQty}',
+        adults: '#{b.adults}',
+        children: '#{b.children}',
+        roomsData: '#{b.roomsData}',
+        services: JSON.stringify(services)
+      });
+
+      window.location.href = `/hotel/booking?${params.toString()}`;
+    }
+

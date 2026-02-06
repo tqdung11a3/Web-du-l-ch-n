@@ -1,0 +1,463 @@
+//- views/admin/pages/hotel-booking.pug
+extends ../layouts/default.pug
+
+block main
+  .hotel-booking
+    //- Sub-sidebar cho tab con
+    .booking-sub-sidebar
+      - const isListActive = bookingsData && bookingsData.activeTab === 'list'
+      - const isRoomManagementActive = bookingsData && bookingsData.activeTab === 'room-management'
+      - const isCalendarActive = bookingsData && bookingsData.activeTab === 'calendar'
+      - const isGuestListActive = bookingsData && bookingsData.activeTab === 'guest-list'
+      - const currentHotelId = selectedHotelId || ''
+      if isListActive
+        a.sub-menu-item.active(href=`/${pathAdmin}/hotel/booking/list?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-list
+          span Danh sách
+      else
+        a.sub-menu-item(href=`/${pathAdmin}/hotel/booking/list?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-list
+          span Danh sách
+      if isRoomManagementActive
+        a.sub-menu-item.active(href=`/${pathAdmin}/hotel/booking/room-management?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-door-open
+          span Quản lý số phòng
+      else
+        a.sub-menu-item(href=`/${pathAdmin}/hotel/booking/room-management?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-door-open
+          span Quản lý số phòng
+      if isCalendarActive
+        a.sub-menu-item.active(href=`/${pathAdmin}/hotel/booking/calendar?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-calendar
+          span Lịch phòng
+      else
+        a.sub-menu-item(href=`/${pathAdmin}/hotel/booking/calendar?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-calendar
+          span Lịch phòng
+      if isGuestListActive
+        a.sub-menu-item.active(href=`/${pathAdmin}/hotel/booking/guest-list?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-users
+          span Khách hàng
+      else
+        a.sub-menu-item(href=`/${pathAdmin}/hotel/booking/guest-list?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-users
+          span Khách hàng
+
+    //- Main Content
+    .booking-main-content
+      //- Tab: Danh sách
+      if bookingsData.activeTab === 'list'
+        .booking-list-page
+          //- Header
+          .page-header
+            .header-left
+              h1.page-title Đặt phòng
+              p.page-subtitle Quản lý tất cả đặt phòng
+
+          //- Search and Filters
+          .search-filters
+            .search-bar
+              input#bookingSearchInput(
+                type="text" 
+                placeholder="Tìm theo mã booking, tên khách hàng hoặc email..."
+                value=bookingsData.searchQuery || ""
+              )
+              button#searchBtn.search-btn(type="button")
+                i.fa-solid.fa-search
+
+          //- Status Tabs
+          .status-tabs
+            button.status-tab.active Tất cả
+            button.status-tab Chờ xác nhận
+            button.status-tab Đã xác nhận
+            button.status-tab Đã nhận phòng
+            button.status-tab Đã trả phòng
+            button.status-tab Đã hủy
+
+          //- Bookings Table
+          .bookings-table-wrapper
+            table.bookings-table
+              thead
+                tr
+                  th Mã
+                  th Khách hàng
+                  th Lưu trú
+                  th Loại phòng
+                  th Người
+                  th Số tiền
+                  th Trạng thái thanh toán
+                  th Trạng thái booking
+                  th Phương thức thanh toán
+                  th Thao tác
+              tbody
+                if bookingsData.bookings && bookingsData.bookings.length > 0
+                  each booking in bookingsData.bookings
+                    tr
+                      td
+                        .booking-code= booking.bookingId
+                      td
+                        .customer-info
+                          .customer-name= booking.customerName
+                          .customer-email= booking.customerEmail
+                      td
+                        .stay-info
+                          .check-in= booking.checkIn
+                          .nights= booking.nights + ' đêm'
+                      td
+                        .room-info
+                          .room-type= booking.roomType
+                          .room-count Tổng: #{booking.roomCount} phòng
+                      td
+                        .people-info
+                          if booking.children > 0
+                            = booking.adults + ' NL ' + booking.children + ' TE'
+                          else
+                            = booking.adults + ' NL'
+                      td
+                        .amount-info
+                          .total-amount Tổng: #{(booking.totalAmount / 1000).toFixed(0)}K
+                          if booking.paidAmount > 0
+                            .paid-amount Đã TT: #{(booking.paidAmount / 1000).toFixed(0)}K
+                          if booking.remainingAmount > 0
+                            .remaining-amount Còn: #{(booking.remainingAmount / 1000).toFixed(0)}K
+                      td
+                        - const paymentBadgeClass = `badge-${booking.paymentStatusColor}`
+                        .status-badge(class=paymentBadgeClass)= booking.paymentStatus
+                      td
+                        - const statusBadgeClass = `badge-${booking.statusColor}`
+                        .status-badge(class=statusBadgeClass)= booking.status
+                      td
+                        .payment-method= booking.paymentMethod
+                      td
+                        .action-buttons
+                          a.action-btn.view-btn(href=`/${pathAdmin}/hotel/booking/detail/${booking.bookingId}` title="Xem chi tiết")
+                            i.fa-solid.fa-eye
+                          button.action-btn.edit-btn(data-booking-id=booking._id data-status=booking.statusValue data-payment-status=booking.paymentStatusValue title="Chỉnh sửa trạng thái")
+                            i.fa-solid.fa-pencil
+                else
+                  tr
+                    td(colspan="10" style="text-align: center; padding: 40px;")
+                      .empty-message Không có đặt phòng nào
+          
+          //- Modal chỉnh sửa trạng thái booking
+          #editBookingStatusModal.modal(style="display: none;")
+            .modal-overlay
+            .modal-content
+              .modal-header
+                h3 Chỉnh sửa trạng thái booking
+                button.modal-close(type="button") ×
+              .modal-body
+                form#editBookingStatusForm
+                  input(type="hidden" name="bookingId" id="editBookingId")
+                  
+                  .form-group
+                    label Trạng thái thanh toán
+                    select.form-control(name="paymentStatus" id="editPaymentStatus")
+                      option(value="unpaid") Chưa thanh toán
+                      option(value="paid") Đã thanh toán
+                  
+                  .form-group
+                    label Trạng thái booking
+                    select.form-control(name="status" id="editStatus")
+                      option(value="pending") Chờ xác nhận
+                      option(value="confirmed") Đã xác nhận
+                      option(value="checked_in") Đã nhận phòng
+                      option(value="checked_out") Đã trả phòng
+                      option(value="cancelled") Đã hủy
+                  
+                  .form-actions
+                    button.btn-cancel(type="button") Hủy
+                    button.btn-save(type="submit") Lưu thay đổi
+
+      //- Tab: Quản lý số phòng
+      else if bookingsData.activeTab === 'room-management'
+        .room-management-page
+          //- Header
+          .page-header
+            .header-left
+              h1.page-title Quản lý số phòng
+              p.page-subtitle Xếp phòng cho booking và xem tình trạng phòng
+
+          //- Pending Bookings Section
+          .pending-bookings-section
+            h2.section-title Booking cần xếp phòng (#{bookingsData.pendingBookings ? bookingsData.pendingBookings.length : 0})
+            
+            if bookingsData.pendingBookings && bookingsData.pendingBookings.length > 0
+              .pending-bookings-list
+                each booking in bookingsData.pendingBookings
+                  .pending-booking-card(data-booking-id=booking.bookingId data-room-type-id=booking.roomTypeId)
+                    .booking-info
+                      .booking-code= booking.code + ' - ' + booking.customerName
+                      .booking-details
+                        span.room-type= booking.roomType + ' × ' + booking.roomCount + ' phòng'
+                      .booking-dates
+                        span Check-in: #{booking.checkInDisplay} | Check-out: #{booking.checkOutDisplay}
+                    button.btn-assign-room(type="button" data-booking-id=booking.bookingId data-room-type-id=booking.roomTypeId)
+                      i.fa-solid.fa-door-open
+                      span Xếp phòng
+            else
+              .empty-message Không có booking nào cần xếp phòng
+
+          //- Room Status Section
+          .room-status-section
+            h2.section-title Tình trạng phòng
+            
+            if bookingsData.rooms && bookingsData.rooms.length > 0
+              .rooms-table-wrapper
+                table.rooms-table
+                  thead
+                    tr
+                      th Số phòng
+                      th Loại phòng
+                      th Tầng
+                      th Tình trạng
+                      th Booking hiện tại
+                  tbody
+                    each room in bookingsData.rooms
+                      tr(class=`room-row ${room.statusClass}` data-room-id=room._id data-room-type-id=room.roomTypeId)
+                        td
+                          .room-number= room.number
+                        td
+                          .room-type= room.roomType
+                        td
+                          .room-floor= room.floor
+                        td
+                          - const badgeClass = room.statusClass === 'available' ? 'badge-green' : (room.statusClass === 'occupied' ? 'badge-red' : 'badge-yellow')
+                          .status-badge(class=badgeClass)= room.status
+                        td
+                          if room.bookingCount && room.bookingCount > 0
+                            .booking-info-cell
+                              .booking-count-badge= room.bookingCount + ' booking'
+                              button.btn-view-bookings(type="button" data-room-id=room._id data-room-number=room.number data-bookings=JSON.stringify(room.bookings))
+                                i.fa-solid.fa-eye
+                                span Xem chi tiết
+                          else
+                            | —
+            else
+              .empty-message Chưa có phòng nào
+
+      //- Tab: Lịch phòng
+      else if bookingsData.activeTab === 'calendar'
+        .booking-calendar-page
+          //- Header
+          .page-header
+            .header-left
+              h1.page-title Lịch phòng
+              p.page-subtitle Xem tổng quan đặt phòng theo phòng
+            .header-right
+              .calendar-navigation
+                button.nav-btn.prev-btn
+                  i.fa-solid.fa-chevron-left
+                span.current-month= bookingsData.currentMonth || 'Tháng 1, 2026'
+                button.nav-btn.next-btn
+                  i.fa-solid.fa-chevron-right
+
+          //- Calendar Grid
+          .calendar-grid-wrapper
+            .calendar-grid
+              //- Header row với dates
+              .calendar-header
+                .room-header Phòng
+                .dates-header
+                  //- Render dates động dựa trên tháng/năm
+                  - const year = bookingsData.currentYear || new Date().getFullYear()
+                  - const month = bookingsData.currentMonthNum || (new Date().getMonth() + 1)
+                  - const daysInMonth = moment(`${year}-${month}`, "YYYY-M").daysInMonth()
+                  - const firstDayOfMonth = moment(`${year}-${month}-01`, "YYYY-M-DD").day()
+                  - const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+                  - const today = moment()
+                  - const currentMonthMoment = moment(`${year}-${month}`, "YYYY-M")
+                  
+                  //- Render các ngày trong tháng
+                  - for (let day = 1; day <= daysInMonth; day++)
+                    - const dateMoment = moment(`${year}-${month}-${day}`, "YYYY-M-DD")
+                    - const dayName = dayNames[dateMoment.day()]
+                    .date-cell
+                      = dayName + ' ' + day
+              
+              //- Room rows
+              if bookingsData.rooms && bookingsData.rooms.length > 0
+                each room in bookingsData.rooms
+                  .calendar-row
+                    .room-cell
+                      .room-number= 'Phòng ' + room.roomNumber
+                      .room-type= room.roomType
+                    .dates-cell
+                      //- Render dates cells với bookings
+                      - const year = bookingsData.currentYear || new Date().getFullYear()
+                      - const month = bookingsData.currentMonthNum || (new Date().getMonth() + 1)
+                      - const daysInMonth = moment(`${year}-${month}`, "YYYY-M").daysInMonth()
+                      - for (let day = 1; day <= daysInMonth; day++)
+                        .date-cell
+                          if room.bookings && room.bookings.length > 0
+                            each booking in room.bookings
+                              - const bookingStart = moment(booking.startDate)
+                              - const bookingEnd = moment(booking.endDate)
+                              - const currentDate = moment(`${year}-${month}-${day}`, "YYYY-M-DD")
+                              - const isInRange = currentDate.isSameOrAfter(bookingStart, 'day') && currentDate.isBefore(bookingEnd, 'day')
+                              if isInRange
+                                - const guestName = booking.guestName || (booking.guest && booking.guest.fullName) || 'N/A'
+                                - const bookingCode = booking.bookingId || booking.code || 'N/A'
+                                .booking-bar(class=booking.status === 'confirmed' ? 'booked-color' : booking.status === 'checked_in' ? 'checked-in-color' : 'booked-color')
+                                  span= guestName + ' (' + bookingCode + ')'
+              else
+                .calendar-row.empty-state
+                  .room-cell(colspan="2" style="text-align: center; padding: 40px;")
+                    p Không có phòng nào
+
+          //- Legend
+          .calendar-legend
+            .legend-item
+              .legend-color.booked-color
+              span Đã xác nhận
+            .legend-item
+              .legend-color.checked-in-color
+              span Đã nhận phòng
+            .legend-item
+              .legend-color.available-color
+              span Còn trống
+
+      //- Tab: Khách hàng
+      else if bookingsData.activeTab === 'guest-list'
+        .guest-list-page
+          //- Header
+          .page-header
+            .header-left
+              h1.page-title Danh sách khách hàng
+              p.page-subtitle Khách hàng đã được xếp phòng cụ thể
+
+          //- Search and Filters
+          .search-filters
+            form#guestSearchForm.guest-search-form(method="GET" action=`/${pathAdmin}/hotel/booking/guest-list`)
+              input(type="hidden" name="hotelId" value=selectedHotelId || "")
+              .search-row
+                .search-group
+                  label Tên khách hàng
+                  input#guestNameInput(
+                    type="text" 
+                    name="guestName"
+                    placeholder="Nhập tên khách hàng..."
+                    value=bookingsData.searchGuestName || ""
+                  )
+                .search-group
+                  label Ngày check-in
+                  input#checkInDateInput(
+                    type="date" 
+                    name="checkInDate"
+                    value=bookingsData.searchCheckInDate || ""
+                  )
+                .search-group
+                  label Ngày check-out
+                  input#checkOutDateInput(
+                    type="date" 
+                    name="checkOutDate"
+                    value=bookingsData.searchCheckOutDate || ""
+                  )
+                .search-actions
+                  button#guestSearchBtn.search-btn(type="submit")
+                    i.fa-solid.fa-search
+                    span Tìm kiếm
+                  if bookingsData.searchGuestName || bookingsData.searchCheckInDate || bookingsData.searchCheckOutDate
+                    a.clear-search-btn(href=`/${pathAdmin}/hotel/booking/guest-list?hotelId=${selectedHotelId || ""}`)
+                      i.fa-solid.fa-times
+                      span Xóa bộ lọc
+
+          //- Guests Table
+          .guests-table-wrapper
+            table.guests-table
+              thead
+                tr
+                  th Tên khách hàng
+                  th Email
+                  th Số điện thoại
+                  th Check-in
+                  th Check-out
+                  th Loại phòng
+                  th Số phòng
+                  th Người lớn
+                  th Trẻ em
+                  th Chi tiết trẻ em
+                  th Mã booking
+              tbody
+                if bookingsData.guests && bookingsData.guests.length > 0
+                  each guest in bookingsData.guests
+                    tr
+                      td
+                        .guest-name= guest.guestName
+                      td
+                        .guest-email= guest.guestEmail
+                      td
+                        .guest-phone= guest.guestPhone || '—'
+                      td
+                        .check-in-date= guest.checkInDisplay
+                      td
+                        .check-out-date= guest.checkOutDisplay
+                      td
+                        .room-type= guest.roomType
+                      td
+                        .room-number= guest.roomNumber
+                      td
+                        .adults-count= guest.adults
+                      td
+                        .children-count= guest.children
+                      td
+                        if guest.childrenDetails && guest.childrenDetails.length > 0
+                          .children-details
+                            each child, idx in guest.childrenDetails
+                              span.child-age= 'Trẻ ' + (idx + 1) + ': ' + child.age + ' tuổi'
+                              if idx < guest.childrenDetails.length - 1
+                                br
+                        else
+                          | —
+                      td
+                        .booking-code= guest.bookingCode
+                else
+                  tr
+                    td(colspan="11" style="text-align: center; padding: 40px;")
+                      .empty-message Chưa có khách hàng nào được xếp phòng
+
+    //- JavaScript cho calendar navigation
+    - const defaultYear = bookingsData.currentYear || new Date().getFullYear()
+    - const defaultMonth = bookingsData.currentMonthNum || (new Date().getMonth() + 1)
+    script.
+      document.addEventListener('DOMContentLoaded', function() {
+        const prevBtn = document.querySelector('.prev-btn');
+        const nextBtn = document.querySelector('.next-btn');
+        
+        if (prevBtn && nextBtn) {
+          // Lấy tháng/năm hiện tại từ URL hoặc data
+          const urlParams = new URLSearchParams(window.location.search);
+          const currentYear = parseInt(urlParams.get('year')) || #{defaultYear};
+          const currentMonth = parseInt(urlParams.get('month')) || #{defaultMonth};
+          const currentHotelId = urlParams.get('hotelId') || '';
+          
+          // Xử lý nút Previous
+          prevBtn.addEventListener('click', function() {
+            let newYear = currentYear;
+            let newMonth = currentMonth - 1;
+            
+            if (newMonth < 1) {
+              newMonth = 12;
+              newYear = currentYear - 1;
+            }
+            
+            const newUrl = `/${pathAdmin}/hotel/booking/calendar?year=${newYear}&month=${newMonth}&hotelId=${currentHotelId}`;
+            window.location.href = newUrl;
+          });
+          
+          // Xử lý nút Next
+          nextBtn.addEventListener('click', function() {
+            let newYear = currentYear;
+            let newMonth = currentMonth + 1;
+            
+            if (newMonth > 12) {
+              newMonth = 1;
+              newYear = currentYear + 1;
+            }
+            
+            const newUrl = `/${pathAdmin}/hotel/booking/calendar?year=${newYear}&month=${newMonth}&hotelId=${currentHotelId}`;
+            window.location.href = newUrl;
+          });
+        }
+      });
+

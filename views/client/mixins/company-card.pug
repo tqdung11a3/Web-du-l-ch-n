@@ -1,0 +1,32 @@
+mixin company-card(c)
+  a.company-card(href=`/company/${c.slug}`)
+    .company-card__media
+      if c.logo
+        img(src=c.logo alt=c.name)
+      else
+        - var __initial = (c && c.name && c.name.charAt(0)) || 'C'
+        .company-card__placeholder= __initial
+    .company-card__body
+      h3.company-card__title= c.name
+      if c.description
+        p.company-card__desc= c.description
+      .company-card__meta
+        if c.hotline
+          .meta-item
+            i.fa-solid.fa-phone
+            span= c.hotline
+        if c.email
+          .meta-item
+            i.fa-solid.fa-envelope
+            span= c.email
+        if c.website
+          .meta-item
+            i.fa-solid.fa-globe
+            span= c.website
+        if c.address
+          .meta-item
+            i.fa-solid.fa-location-dot
+            span= c.address
+      if typeof c.toursCount !== 'undefined'
+        .company-card__foot
+          span #{c.toursCount} tour hiện có

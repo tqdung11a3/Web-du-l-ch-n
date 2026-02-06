@@ -1,0 +1,104 @@
+extends ../../layouts/default.pug
+
+block main
+  .box-head
+    h1.box-title Chi tiết Khách hàng
+    .inner-buttons
+      a.button.button-outline(href=`/${pathAdmin}/super-admin/customers`)
+        <i class="fa-solid fa-arrow-left"></i> Quay lại
+
+  .section-6(style="margin-top: 20px;")
+    .box-detail
+      .detail-row
+        .detail-label Họ tên:
+        .detail-value
+          strong(style="font-size: 18px;")= customer.fullName || "N/A"
+      
+      .detail-row
+        .detail-label Email:
+        .detail-value= customer.email || "N/A"
+      
+      .detail-row
+        .detail-label Số điện thoại:
+        .detail-value= customer.phone || "N/A"
+      
+      .detail-row
+        .detail-label Ngày đăng ký:
+        .detail-value
+          if customer.createdAt
+            = new Date(customer.createdAt).toLocaleDateString('vi-VN') + ' ' + new Date(customer.createdAt).toLocaleTimeString('vi-VN')
+          else
+            span(style="color: #999;") N/A
+
+  //- Lịch sử đơn hàng
+  if orders && orders.length > 0
+    .section-6(style="margin-top: 30px;")
+      .box-title(style="margin-bottom: 20px;") Lịch sử đơn hàng
+      .table-2
+        table
+          thead
+            tr
+              th STT
+              th Mã đơn
+              th Tổng tiền
+              th Phương thức thanh toán
+              th Trạng thái thanh toán
+              th Trạng thái đơn hàng
+              th Ngày tạo
+              th Hành động
+          tbody
+            each order, index in orders
+              tr
+                td= index + 1
+                td
+                  code(style="background: #f5f5f5; padding: 4px 8px; border-radius: 4px;")= order.code || "N/A"
+                td
+                  strong(style="color: #27ae60;")= (order.total || 0).toLocaleString('vi-VN') + ' đ'
+                td= order.paymentMethod || "N/A"
+                td.text-center
+                  if order.paymentStatus === "paid"
+                    span.badge.badge-green Đã thanh toán
+                  else
+                    span.badge.badge-red Chưa thanh toán
+                td.text-center
+                  if order.status === "done"
+                    span.badge.badge-green Hoàn thành
+                  else if order.status === "cancel"
+                    span.badge.badge-red Đã hủy
+                  else
+                    span.badge.badge-yellow Đang xử lý
+                td= new Date(order.createdAt).toLocaleDateString('vi-VN')
+                td
+                  .inner-buttons
+                    a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/orders/${order._id}`, title="Xem chi tiết")
+                      <i class="fa-solid fa-eye"></i>
+  else
+    .section-6(style="margin-top: 30px;")
+      .box-title(style="margin-bottom: 20px;") Lịch sử đơn hàng
+      p(style="text-align: center; padding: 30px; color: #999;") Khách hàng chưa có đơn hàng nào
+
+  style.
+    .box-detail {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .detail-row {
+      display: flex;
+      padding: 15px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      font-weight: 600;
+      width: 200px;
+      color: #333;
+    }
+    .detail-value {
+      flex: 1;
+      color: #666;
+    }
+

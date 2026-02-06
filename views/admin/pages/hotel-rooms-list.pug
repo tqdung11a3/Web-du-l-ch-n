@@ -1,0 +1,116 @@
+//- views/admin/pages/hotel-rooms-list.pug
+extends ../layouts/default.pug
+
+block main
+  .rooms-list-page
+    //- Header
+    .page-header
+      .header-left
+        h1.page-title Danh sách phòng
+        p.page-subtitle Quản lý từng phòng cụ thể
+      .header-right
+        - const currentHotelId = typeof hotelId !== 'undefined' ? hotelId : ''
+        - const createRoomUrl = currentHotelId && currentHotelId !== 'all' ? `/${pathAdmin}/hotel/rooms/create?hotelId=${currentHotelId}` : `/${pathAdmin}/hotel/rooms/create`
+        a.btn-add-room(href=createRoomUrl)
+          i.fa-solid.fa-plus
+          span Thêm phòng
+
+    //- Filter Tabs
+    .filter-tabs
+      button.filter-tab.active Tất cả
+      button.filter-tab Trống
+      button.filter-tab Đang sử dụng
+      button.filter-tab Đang dọn
+      button.filter-tab Ngừng hoạt động
+
+    //- Rooms Table
+    .rooms-table-wrapper
+      table.rooms-table
+        thead
+          tr
+            th Số phòng
+            th Tầng
+            th Loại
+            th Trạng thái
+            th Thao tác
+        tbody
+          if roomsData.rooms && roomsData.rooms.length > 0
+            each room in roomsData.rooms
+              tr
+                td
+                  .room-number= room.roomNumber
+                td= room.floor
+                td= room.roomType
+                td
+                  - const badgeClass = `badge-${room.statusColor}`
+                  .status-badge(class=badgeClass)= room.status
+                td
+                  .action-buttons
+                    a.action-btn.edit-btn(href=`/${pathAdmin}/hotel/${hotelId}/rooms/${room._id}/edit`)
+                      i.fa-solid.fa-pencil
+                    button.action-btn.delete-btn(data-room-id=room._id)
+                      i.fa-solid.fa-trash
+          else
+            tr
+              td(colspan="5" style="text-align: center; padding: 40px;")
+                .empty-message Không có phòng nào
+
+    //- Summary Cards
+    .summary-cards
+      .summary-card
+        .card-label Tổng số phòng
+        .card-value= roomsData.summary ? roomsData.summary.total : 0
+      .summary-card
+        .card-label Còn trống
+        .card-value= roomsData.summary ? roomsData.summary.vacant : 0
+      .summary-card
+        .card-label Đang sử dụng
+        .card-value= roomsData.summary ? roomsData.summary.inUse : 0
+      .summary-card
+        .card-label Ngừng hoạt động
+        .card-value= roomsData.summary ? roomsData.summary.outOfService : 0
+
+  script.
+    // Filter tabs functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const filterTabs = document.querySelectorAll('.filter-tab');
+      const tableRows = document.querySelectorAll('.rooms-table tbody tr');
+      
+      filterTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+          // Remove active class from all tabs
+          filterTabs.forEach(t => t.classList.remove('active'));
+          // Add active class to clicked tab
+          this.classList.add('active');
+          
+          const filterText = this.textContent.trim();
+          
+          // Filter rows
+          tableRows.forEach(row => {
+            if (row.querySelector('.empty-message')) {
+              return; // Skip empty message row
+            }
+            
+            const statusBadge = row.querySelector('.status-badge');
+            if (!statusBadge) return;
+            
+            const statusText = statusBadge.textContent.trim();
+            
+            if (filterText === 'Tất cả') {
+              row.style.display = '';
+            } else if (filterText === 'Trống' && statusText === 'Trống') {
+              row.style.display = '';
+            } else if (filterText === 'Đang sử dụng' && statusText === 'Đang sử dụng') {
+              row.style.display = '';
+            } else if (filterText === 'Đang dọn' && statusText === 'Đang dọn') {
+              row.style.display = '';
+            } else if (filterText === 'Ngừng hoạt động' && statusText === 'Ngừng hoạt động') {
+              row.style.display = '';
+            } else {
+              row.style.display = 'none';
+            }
+          });
+        });
+      });
+    });
+

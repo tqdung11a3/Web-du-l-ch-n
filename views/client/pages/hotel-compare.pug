@@ -1,0 +1,341 @@
+extends ../layouts/default.pug
+
+block main
+
+  .section-tour-compare
+    .container
+      .compare-header
+        .compare-header__left
+          h1.compare-title So sánh khách sạn
+          if hotels && hotels.length > 0
+            p.compare-subtitle Đang so sánh #{hotels.length} khách sạn
+        .compare-header__right
+          if hotels && hotels.length > 0
+            button.btn-clear-all(
+              type="button"
+              onclick="clearHotelCompareListAndRedirect();"
+            ) Xóa tất cả
+            a.btn-back(href="/hotel/search") ← Quay lại
+
+      if hotels && hotels.length > 0
+        .compare-table-wrapper
+          table.compare-table
+            thead
+              tr
+                th.compare-th
+                each hotel in hotels
+                  th.compare-th
+                    .compare-tour-card
+                      button.compare-remove(
+                        type="button"
+                        data-hotel-id=hotel._id
+                        onclick=`removeFromHotelCompare('${hotel._id}');`
+                        title="Xóa khỏi danh sách so sánh"
+                      ) ×
+                      if hotel.avatar
+                        .compare-tour-image
+                          img(src=hotel.avatar alt=hotel.name)
+                      else if hotel.images && hotel.images.length > 0
+                        .compare-tour-image
+                          img(src=hotel.images[0] alt=hotel.name)
+                      else
+                        .compare-tour-image.compare-tour-image--placeholder
+                          i.fa-solid.fa-image
+                      h3.compare-tour-name= hotel.name
+                      if hotel.company && hotel.company.name
+                        p.compare-tour-company= hotel.company.name
+                      .compare-tour-price
+                        span.compare-price-new= hotel.basePriceFormatted + '₫'
+                        small / đêm
+                      a.compare-tour-link(
+                        href=`/hotel/detail/${hotel._id}`
+                      ) Xem chi tiết
+
+            tbody
+              tr
+                td.compare-label
+                  i.fa-solid.fa-location-dot
+                  | Địa chỉ
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.provinceName
+                      div
+                        strong= hotel.provinceName
+                    if hotel.address
+                      div= hotel.address
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-star
+                  | Xếp hạng sao
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.starRating > 0
+                      .compare-rating
+                        - for (let i = 0; i < hotel.starRating; i++)
+                          span.compare-rating-stars ★
+                    else
+                      | Chưa có xếp hạng
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-star
+                  | Đánh giá
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.ratingAvg > 0
+                      .compare-rating
+                        span.compare-rating-value= hotel.ratingAvg.toFixed(1)
+                        if hotel.ratingCount > 0
+                          span.compare-rating-count (#{hotel.ratingCount})
+                    else
+                      | Chưa có đánh giá
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-door-open
+                  | Số loại phòng
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.roomTypes && hotel.roomTypes.length > 0
+                      | #{hotel.roomTypes.length} loại phòng
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-bed
+                  | Tổng số phòng
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.rooms && hotel.rooms.length > 0
+                      | #{hotel.rooms.length} phòng
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-check-circle
+                  | Tiện nghi
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.amenitiesList && hotel.amenitiesList.length > 0
+                      ul.compare-includes
+                        each item in hotel.amenitiesList.slice(0, 5)
+                          li ✓ #{item}
+                        if hotel.amenitiesList.length > 5
+                          li.compare-more ... và #{hotel.amenitiesList.length - 5} tiện nghi khác
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-utensils
+                  | Nhà hàng
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.usefulInfo && hotel.usefulInfo.numberOfRestaurants > 0
+                      | #{hotel.usefulInfo.numberOfRestaurants} nhà hàng
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-wifi
+                  | WiFi
+                each hotel in hotels
+                  td.compare-value
+                    if hotel.usefulInfo && hotel.usefulInfo.wifiFee === 0
+                      span(style="color: #16a34a;") ✓ Miễn phí
+                    else if hotel.usefulInfo && hotel.usefulInfo.wifiFee > 0
+                      | #{hotel.usefulInfo.wifiFee.toLocaleString('vi-VN')} VND/ngày
+                    else
+                      | N/A
+
+              tr
+                td.compare-label
+                  i.fa-solid.fa-clock
+                  | Giờ nhận/trả phòng
+                each hotel in hotels
+                  td.compare-value
+                    - let hasTime = false
+                    if hotel.checkinTimeFrom
+                      div Nhận: #{hotel.checkinTimeFrom}
+                      - hasTime = true
+                    if hotel.checkoutTimeTo
+                      div Trả: #{hotel.checkoutTimeTo}
+                      - hasTime = true
+                    if !hasTime
+                      | N/A
+
+              // Chi tiết các loại phòng
+              if hotels.some(h => h.roomTypes && h.roomTypes.length > 0)
+                tr.compare-section-header
+                  td(colspan=hotels.length + 1)
+                    h3 Chi tiết các loại phòng
+
+                // Lấy số lượng loại phòng tối đa
+                - const maxRoomTypes = Math.max(...hotels.map(h => (h.roomTypes && h.roomTypes.length) || 0))
+                
+                each _, roomIndex in Array(maxRoomTypes)
+                  tr.compare-room-row
+                    td.compare-label
+                      i.fa-solid.fa-bed
+                      | Loại phòng #{roomIndex + 1}
+                    each hotel in hotels
+                      td.compare-value
+                        if hotel.roomTypes && hotel.roomTypes[roomIndex]
+                          - const rt = hotel.roomTypes[roomIndex]
+                          .compare-room-detail
+                            strong= rt.name
+                            div
+                              span.compare-room-price= rt.priceFormatted + '₫'
+                              small  / đêm
+                            if rt.sizeM2
+                              div
+                                i.fa-regular.fa-square
+                                |  #{rt.sizeM2}m²
+                            if rt.bedInfo
+                              div
+                                i.fa-solid.fa-bed
+                                |  #{rt.bedInfo}
+                            if rt.view
+                              div
+                                i.fa-regular.fa-eye
+                                |  #{rt.view}
+                        else
+                          | -
+
+                  // Thiết lập sức chứa cho loại phòng này
+                  tr.compare-room-occupancy
+                    td.compare-label(style="padding-left: 30px;")
+                      i.fa-solid.fa-users
+                      | Sức chứa
+                    each hotel in hotels
+                      td.compare-value
+                        if hotel.roomTypes && hotel.roomTypes[roomIndex]
+                          - const rt = hotel.roomTypes[roomIndex]
+                          .compare-room-occupancy-detail
+                            if rt.baseOccupancy
+                              div
+                                i.fa-solid.fa-check-circle(style="color: #16a34a;")
+                                |  Base: #{rt.baseOccupancy} người
+                            if rt.maxOccupancy
+                              div
+                                i.fa-solid.fa-users
+                                |  Tối đa: #{rt.maxOccupancy} người
+                            if rt.maxExtraBeds && rt.maxExtraBeds > 0
+                              div
+                                i.fa-solid.fa-bed
+                                |  Giường phụ: #{rt.maxExtraBeds}
+                            if rt.extraBedFeePerNight && rt.extraBedFeePerNight > 0
+                              div(style="color: #1a56db;")
+                                i.fa-solid.fa-money-bill
+                                |  +#{rt.extraBedFeePerNight.toLocaleString('vi-VN')}₫/đêm
+                        else
+                          | -
+
+                  // Hình ảnh phòng
+                  tr.compare-room-images
+                    td.compare-label(style="padding-left: 30px;")
+                      i.fa-solid.fa-image
+                      | Hình ảnh
+                    each hotel in hotels
+                      td.compare-value
+                        if hotel.roomTypes && hotel.roomTypes[roomIndex]
+                          - const rt = hotel.roomTypes[roomIndex]
+                          if rt.images && rt.images.length > 0
+                            .compare-room-images-grid
+                              each img, imgIdx in rt.images
+                                .compare-room-image
+                                  img(src=img alt=`${rt.name} - Ảnh ${imgIdx + 1}` title=`Click để phóng to`)
+                          else
+                            | Chưa có ảnh
+                        else
+                          | -
+
+      else
+        .compare-empty
+          .compare-empty__icon
+            i.fa-solid.fa-code-compare
+          h2.compare-empty__title Chưa có khách sạn nào để so sánh
+          p.compare-empty__desc
+            | Hãy thêm các khách sạn bạn muốn so sánh bằng cách bấm nút "So sánh" trên từng khách sạn.
+          a.btn-primary(href="/hotel/search") Tiếp tục tìm khách sạn
+
+  script.
+    // Tự động load hotel từ localStorage nếu không có ids trong URL
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ids = urlParams.get('ids');
+      
+      // Nếu không có ids trong URL và trang đang hiển thị empty state
+      if (!ids && document.querySelector('.compare-empty')) {
+        try {
+          const stored = localStorage.getItem('hotel_compare_list');
+          const compareList = stored ? JSON.parse(stored) : [];
+          
+          if (compareList.length > 0) {
+            // Lọc các hotel có _id hợp lệ
+            const validHotels = compareList.filter((hotel) => hotel._id && hotel._id.length > 0);
+            
+            if (validHotels.length > 0) {
+              // Redirect đến URL có ids
+              const hotelIds = validHotels.map((hotel) => hotel._id).join(',');
+              window.location.href = `/hotel/compare?ids=${hotelIds}`;
+            }
+          }
+        } catch (e) {
+          console.error('Error loading compare list from localStorage:', e);
+        }
+      }
+    })();
+
+    // Hàm xóa tất cả và redirect
+    function clearHotelCompareListAndRedirect() {
+      try {
+        localStorage.removeItem('hotel_compare_list');
+        if (typeof notify !== 'undefined' && notify) {
+          notify.success('Đã xóa tất cả khách sạn khỏi danh sách so sánh!');
+        }
+        if (window.location.pathname === '/hotel/compare') {
+          window.history.replaceState({}, '', '/hotel/compare');
+          window.location.reload();
+        }
+      } catch (e) {
+        console.error('Error clearing hotel compare list:', e);
+      }
+    }
+
+    // Xử lý xóa từng hotel
+    function removeFromHotelCompare(hotelId) {
+      try {
+        const stored = localStorage.getItem('hotel_compare_list');
+        let compareList = stored ? JSON.parse(stored) : [];
+        
+        compareList = compareList.filter((h) => h._id !== String(hotelId).trim());
+        localStorage.setItem('hotel_compare_list', JSON.stringify(compareList));
+        
+        if (typeof notify !== 'undefined' && notify) {
+          notify.success('Đã xóa khỏi danh sách so sánh');
+        }
+        
+        // Nếu đang ở trang so sánh, cập nhật URL
+        if (window.location.pathname === '/hotel/compare') {
+          if (compareList.length > 0) {
+            const hotelIds = compareList.map((h) => h._id).join(',');
+            const newUrl = `/hotel/compare?ids=${hotelIds}`;
+            window.history.replaceState({}, '', newUrl);
+            window.location.reload();
+          } else {
+            window.history.replaceState({}, '', '/hotel/compare');
+            window.location.reload();
+          }
+        }
+      } catch (e) {
+        console.error('Error removing from hotel compare:', e);
+      }
+    }
+

@@ -1,0 +1,1386 @@
+//- views/admin/pages/hotel-edit.pug
+extends ../layouts/default.pug
+
+block main
+  h1.box-title Chỉnh sửa khách sạn
+
+  .section-8.hotel-section
+    form(id="hotel-edit-form")
+      // Id ẩn
+      .inner-group(style="display:none;")
+        label(for="id" class="inner-label") Id
+        input(type="text" id="id" name="id" value=hotelDetail.id)
+
+      // ===== Tên khách sạn + Thành phố =====
+      .inner-group
+        label(for="name" class="inner-label") Tên khách sạn
+        input(
+          type="text"
+          id="name"
+          name="name"
+          placeholder="Nhập tên khách sạn"
+          value=hotelDetail.name || ''
+        )
+
+      .inner-group
+        label(for="province" class="inner-label") Tỉnh thành
+        select(id="province" name="province")
+          option(value="") -- Chọn tỉnh thành --
+          each city in cityList
+            - const isSelected = hotelDetail.province && (hotelDetail.province.toString() === city._id.toString() || (hotelDetail.province._id && hotelDetail.province._id.toString() === city._id.toString()))
+            option(value=city._id selected=isSelected) #{city.name}
+
+      // ===== Địa chỉ =====
+      .inner-group.inner-two-col
+        label(for="address" class="inner-label") Địa chỉ
+        input(
+          type="text"
+          id="address"
+          name="address"
+          placeholder="Số nhà, đường, quận/huyện..."
+          value=hotelDetail.address || ''
+        )
+
+      // ===== Số điện thoại + Link Google Maps =====
+      .inner-group
+        label(for="phone" class="inner-label") Số điện thoại
+        input(
+          type="text"
+          id="phone"
+          name="phone"
+          placeholder="VD: 0123456789, 0987654321..."
+          value=hotelDetail.phone || ''
+        )
+
+      .inner-group.inner-two-col
+        label(for="googleMapsLink" class="inner-label") Link Google Maps
+        input(
+          type="text"
+          id="googleMapsLink"
+          name="googleMapsLink"
+          placeholder="Dán link Google Maps (embed hoặc share link)"
+          value=hotelDetail.googleMapsLink || ''
+        )
+
+      // ===== Hạng sao + Giá từ + Số phòng =====
+      .inner-group
+        label(for="starRating" class="inner-label") Hạng sao
+        input(
+          type="number"
+          id="starRating"
+          name="starRating"
+          min="1"
+          max="5"
+          placeholder="VD: 3, 4, 5"
+          value=hotelDetail.starRating || ''
+        )
+
+      .inner-group
+        label(for="basePrice" class="inner-label") Giá từ
+        input(
+          type="number"
+          id="basePrice"
+          name="basePrice"
+          min="0"
+          placeholder="Giá cơ bản từ (theo loại phòng rẻ nhất)"
+          value=hotelDetail.basePrice || ''
+        )
+
+      .inner-group
+        label(for="numberOfRooms" class="inner-label") Tổng số phòng
+        input(
+          type="number"
+          id="numberOfRooms"
+          name="numberOfRooms"
+          min="0"
+          placeholder="VD: 50, 100, 200..."
+          value=hotelDetail.numberOfRooms || ''
+        )
+
+      // ===== Loại tiền + Trạng thái =====
+      .inner-group
+        label(for="currency" class="inner-label") Loại tiền
+        input(
+          type="text"
+          id="currency"
+          value="VND"
+          readonly
+          disabled
+          style="background-color: #f3f4f6; cursor: not-allowed;"
+        )
+        input(type="hidden" name="currency" value="VND")
+
+      .inner-group
+        label(for="status" class="inner-label") Trạng thái
+        - const stt = hotelDetail.status || 'active';
+        select(id="status" name="status")
+          option(value="active" selected=(stt === 'active')) Hoạt động
+          option(value="inactive" selected=(stt === 'inactive')) Tạm dừng
+
+      // ===== Ảnh đại diện + Danh sách ảnh =====
+      .inner-group.inner-two-col
+        label(for="avatar" class="inner-label") Ảnh đại diện
+        .inner-upload-image(image-default=hotelDetail.avatar)
+          input(
+            type="file"
+            id="avatar"
+            name="avatar"
+            filepond-image
+          )
+
+      .inner-group.inner-two-col
+        label(for="images" class="inner-label") Danh sách ảnh
+        .inner-upload-image-multi(list-image-default=hotelDetail.images)
+          input(
+            type="file"
+            id="images"
+            name="images"
+            filepond-image-multi
+            multiple
+            data-allow-reorder="true"
+            data-max-files="10"
+          )
+
+      // ===== Tiện nghi =====
+      .inner-group.inner-two-col
+        label(class="inner-label") Tiện nghi
+        .hotel-amenities
+          .hotel-amenities-list#amenities-list
+            if hotelDetail.amenities && hotelDetail.amenities.length > 0
+              each amenity, index in hotelDetail.amenities
+                .hotel-amenity-item(data-amenity-index=index)
+                  .hotel-amenity-header
+                    .hotel-amenity-name-group
+                      label Tên tiện nghi *
+                      input(
+                        type="text"
+                        class="amenity-name-input"
+                        placeholder="VD: Ăn và Uống, Hồ bơi, Gym..."
+                        value=amenity.name || ''
+                        required
+                      )
+                    button(type="button" class="amenity-remove-btn") Xóa tiện nghi
+                  .hotel-amenity-features-list
+                    if amenity.features && amenity.features.length > 0
+                      each feature, fIndex in amenity.features
+                        .hotel-amenity-feature-item
+                          label Đặc điểm #{fIndex + 1}
+                          .feature-input-group
+                            textarea(
+                              class="feature-input"
+                              placeholder="VD: Dịch vụ phòng [24 giờ]"
+                              rows="2"
+                            ) #{feature}
+                            button(type="button" class="feature-remove-btn") Xóa
+                    else
+                      .hotel-amenity-feature-item
+                        label Đặc điểm 1
+                        .feature-input-group
+                          textarea(
+                            class="feature-input"
+                            placeholder="VD: Dịch vụ phòng [24 giờ]"
+                            rows="2"
+                          )
+                          button(type="button" class="feature-remove-btn") Xóa
+                  .hotel-amenity-feature-actions
+                    button(type="button" class="feature-add-btn") + Thêm đặc điểm
+            else
+              .hotel-amenity-item(data-amenity-index="0")
+                .hotel-amenity-header
+                  .hotel-amenity-name-group
+                    label Tên tiện nghi *
+                    input(
+                      type="text"
+                      class="amenity-name-input"
+                      placeholder="VD: Ăn và Uống, Hồ bơi, Gym..."
+                      required
+                    )
+                  button(type="button" class="amenity-remove-btn") Xóa tiện nghi
+                .hotel-amenity-features-list
+                  .hotel-amenity-feature-item
+                    label Đặc điểm 1
+                    .feature-input-group
+                      textarea(
+                        class="feature-input"
+                        placeholder="VD: Dịch vụ phòng [24 giờ]"
+                        rows="2"
+                      )
+                      button(type="button" class="feature-remove-btn") Xóa
+                .hotel-amenity-feature-actions
+                  button(type="button" class="feature-add-btn") + Thêm đặc điểm
+          .hotel-amenities-actions
+            button(type="button" id="amenity-add-btn") + Thêm tiện nghi
+
+      // ===== Cơ sở vật chất =====
+      .inner-group.inner-two-col
+        label(class="inner-label") Cơ sở vật chất
+        .hotel-facilities
+          .hotel-facilities-list#facilities-list
+            if hotelDetail.facilities && hotelDetail.facilities.length > 0
+              each facility, index in hotelDetail.facilities
+                - const standardCategories = ['internet', 'relaxation', 'services', 'safety', 'food', 'children', 'accessibility', 'transport', 'language'];
+                - const isCustomCategory = facility.category && !standardCategories.includes(facility.category);
+                .hotel-facility-item(data-index=index)
+                  .hotel-facility-header
+                    .hotel-facility-name-group
+                      label Tên cơ sở vật chất *
+                      input(
+                        type="text"
+                        name="facilityNames"
+                        placeholder="VD: Bể bơi, Phòng tập, Nhà hàng..."
+                        value=facility.name || ''
+                        required
+                      )
+                    .hotel-facility-category-group
+                      label Danh mục
+                      select(name="facilityCategories" data-custom-value=(isCustomCategory ? facility.category : ''))
+                        option(value="internet" selected=(facility.category === 'internet')) Truy cập Internet
+                        option(value="relaxation" selected=(facility.category === 'relaxation')) Thư giãn & Vui chơi giải trí
+                        option(value="services" selected=(facility.category === 'services')) Dịch vụ và tiện nghi
+                        option(value="safety" selected=(facility.category === 'safety')) Độ sạch sẽ và an toàn
+                        option(value="food" selected=(facility.category === 'food')) Ăn uống
+                        option(value="children" selected=(facility.category === 'children')) Dành cho trẻ em
+                        option(value="accessibility" selected=(facility.category === 'accessibility')) Dễ dàng tiếp cận
+                        option(value="transport" selected=(facility.category === 'transport')) Đi lại
+                        option(value="language" selected=(facility.category === 'language')) Ngôn ngữ được sử dụng
+                        option(value="other" selected=(isCustomCategory || facility.category === 'other' || !facility.category)) Khác
+                      if isCustomCategory
+                        input(
+                          type="text"
+                          name="facilityCategories"
+                          class="facility-category-custom-input"
+                          placeholder="Nhập tên danh mục tùy chỉnh"
+                          value=facility.category || ''
+                          style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; margin-top: 8px;"
+                          required
+                        )
+                  .hotel-facility-image-group
+                    label Ảnh minh họa (cho carousel - tùy chọn)
+                    if facility.image
+                      img(src=facility.image alt="Facility image" style="max-width: 200px; max-height: 150px; object-fit: cover; border-radius: 4px; margin-bottom: 8px; display: block;")
+                    input(
+                      type="file"
+                      name="facilityImages"
+                      accept="image/*"
+                      class="facility-image-input"
+                    )
+                  .hotel-facility-actions
+                    button(type="button" class="facility-remove-btn") Xóa
+            else
+              .hotel-facility-item(data-index="0")
+                .hotel-facility-header
+                  .hotel-facility-name-group
+                    label Tên cơ sở vật chất *
+                    input(
+                      type="text"
+                      name="facilityNames"
+                      placeholder="VD: Bể bơi, Phòng tập, Nhà hàng..."
+                      required
+                    )
+                  .hotel-facility-category-group
+                    label Danh mục
+                    select(name="facilityCategories")
+                      option(value="internet") Truy cập Internet
+                      option(value="relaxation") Thư giãn & Vui chơi giải trí
+                      option(value="services") Dịch vụ và tiện nghi
+                      option(value="safety") Độ sạch sẽ và an toàn
+                      option(value="food") Ăn uống
+                      option(value="children") Dành cho trẻ em
+                      option(value="accessibility") Dễ dàng tiếp cận
+                      option(value="transport") Đi lại
+                      option(value="language") Ngôn ngữ được sử dụng
+                      option(value="other" selected) Khác
+                .hotel-facility-image-group
+                  label Ảnh minh họa (cho carousel - tùy chọn)
+                  input(
+                    type="file"
+                    name="facilityImages"
+                    accept="image/*"
+                    class="facility-image-input"
+                  )
+                .hotel-facility-actions
+                  button(type="button" class="facility-remove-btn") Xóa
+          .hotel-facilities-actions
+            button(type="button" id="facility-add-btn") + Thêm cơ sở vật chất
+
+      // ===== Điểm nổi bật =====
+      .inner-group.inner-two-col
+        label(class="inner-label") Điểm nổi bật
+        .hotel-highlights
+          .hotel-highlights-list#highlights-list
+            if hotelDetail.highlights && hotelDetail.highlights.length > 0
+              each highlight, index in hotelDetail.highlights
+                .hotel-highlight-item(data-index=index)
+                  .hotel-highlight-image
+                    if highlight.image
+                      img(src=highlight.image alt="Highlight image" style="max-width: 150px; max-height: 100px; object-fit: cover; border-radius: 4px;")
+                    input(
+                      type="file"
+                      name="highlightImages"
+                      accept="image/*"
+                      class="highlight-image-input"
+                      style="margin-top: 8px;"
+                    )
+                  .hotel-highlight-info
+                    input(
+                      type="text"
+                      name="highlightTitles"
+                      placeholder="Nhập tiêu đề điểm nổi bật"
+                      value=highlight.title || ''
+                      class="highlight-title-input"
+                    )
+                  .hotel-highlight-actions
+                    button(type="button" class="highlight-remove-btn") Xóa
+            else
+              .hotel-highlight-item(data-index="0")
+                .hotel-highlight-image
+                  input(
+                    type="file"
+                    name="highlightImages"
+                    accept="image/*"
+                    class="highlight-image-input"
+                  )
+                .hotel-highlight-info
+                  input(
+                    type="text"
+                    name="highlightTitles"
+                    placeholder="Nhập tiêu đề điểm nổi bật"
+                    class="highlight-title-input"
+                  )
+                .hotel-highlight-actions
+                  button(type="button" class="highlight-remove-btn") Xóa
+          .hotel-highlights-actions
+            button(type="button" id="highlight-add-btn") + Thêm điểm nổi bật
+
+      // ===== Quy định chỗ nghỉ =====
+      .inner-group.inner-two-col
+        label(class="inner-label") Quy định chỗ nghỉ
+        .hotel-rules
+          .hotel-rules-row
+            label(for="checkinTimeFrom") Nhận phòng từ
+            input(
+              type="text"
+              id="checkinTimeFrom"
+              name="checkinTimeFrom"
+              placeholder="VD: 14:00"
+              value=hotelDetail.checkinTimeFrom || ''
+            )
+          .hotel-rules-row
+            label(for="checkoutTimeTo") Trả phòng đến
+            input(
+              type="text"
+              id="checkoutTimeTo"
+              name="checkoutTimeTo"
+              placeholder="VD: 12:00"
+              value=hotelDetail.checkoutTimeTo || ''
+            )
+          .hotel-rules-row
+            label Nhận phòng sớm
+            .hotel-rules-early-late
+              .hotel-rules-input-group
+                label(for="earlyCheckinTime" style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;") Giờ nhận phòng sớm
+                input(
+                  type="text"
+                  id="earlyCheckinTime"
+                  name="earlyCheckinTime"
+                  placeholder="VD: 10:00"
+                  value=hotelDetail.earlyCheckinTime || ''
+                  style="width: 120px;"
+                )
+              .hotel-rules-input-group
+                label(for="earlyCheckinFee" style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;") Phí phải trả thêm (VND)
+                input(
+                  type="number"
+                  id="earlyCheckinFee"
+                  name="earlyCheckinFee"
+                  placeholder="VD: 200000"
+                  min="0"
+                  value=hotelDetail.earlyCheckinFee || 0
+                  style="width: 180px;"
+                )
+          .hotel-rules-row
+            label Trả phòng muộn
+            .hotel-rules-early-late
+              .hotel-rules-input-group
+                label(for="lateCheckoutTime" style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;") Giờ trả phòng muộn
+              input(
+                type="text"
+                  id="lateCheckoutTime"
+                  name="lateCheckoutTime"
+                  placeholder="VD: 14:00"
+                  value=hotelDetail.lateCheckoutTime || ''
+                  style="width: 120px;"
+                )
+              .hotel-rules-input-group
+                label(for="lateCheckoutFee" style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;") Phí phải trả thêm (VND)
+                input(
+                  type="number"
+                  id="lateCheckoutFee"
+                  name="lateCheckoutFee"
+                  placeholder="VD: 200000"
+                  min="0"
+                  value=hotelDetail.lateCheckoutFee || 0
+                  style="width: 180px;"
+                )
+
+      // ===== MỨC TUỔI (AGE BANDS) - PHIÊN BẢN MỚI =====
+      .inner-group.inner-two-col
+        label(class="inner-label") Mức tuổi (Age Bands)
+        p.section-description Tạo các mức tuổi linh hoạt để áp dụng chính sách giá khác nhau. Mỗi mức tuổi sẽ có cấu hình chi tiết riêng.
+        .hotel-age-bands
+          .age-bands-list#ageBandsList
+            if hotelDetail.ageBands && hotelDetail.ageBands.length > 0
+              each band, index in hotelDetail.ageBands
+                .age-band-item(data-band-index=index)
+                  .age-band-header
+                    .age-band-basic-info
+                      .inner-group
+                        label Tên mức tuổi *
+                        input.age-band-name(
+                          type="text"
+                          placeholder="VD: Trẻ nhỏ, Trẻ em, Người lớn"
+                          value=band.bandName || ''
+                          required
+                        )
+                      .inner-group
+                        label Tuổi bé nhất *
+                        input.age-band-min(
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                          value=band.minAge || 0
+                          required
+                        )
+                      .inner-group
+                        label Tuổi lớn nhất
+                        input.age-band-max(
+                          type="number"
+                          min="0"
+                          placeholder="Để trống = không giới hạn"
+                          value=band.maxAge || ''
+                        )
+                      .inner-group
+                        label Loại
+                        select.age-band-type
+                          option(value="infant" selected=(band.bandType === 'infant')) Infant (Trẻ sơ sinh)
+                          option(value="child" selected=(band.bandType === 'child')) Child (Trẻ em)
+                          option(value="adult" selected=(band.bandType === 'adult')) Adult (Người lớn)
+                          option(value="other" selected=(band.bandType === 'other' || !band.bandType)) Khác
+                    button.age-band-remove-btn(type="button") Xóa mức tuổi
+                  
+                  //- Cấu hình chi tiết theo từng mức tuổi
+                  .age-band-config
+                    button.age-band-config-toggle(type="button") 
+                      i.fa-solid.fa-chevron-down
+                      span Cấu hình chi tiết
+                    
+                    .age-band-config-content(style="display: none;")
+                      //- C.1: Tính vào sức chứa
+                      .config-section
+                        .config-header
+                          label.config-checkbox
+                            input.config-count-occupancy(type="checkbox" checked=band.countInOccupancy !== false)
+                            span Tính vào số người (occupancy)?
+                        
+                        .config-body.count-occupancy-body(style=band.countInOccupancy === false ? 'display: none;' : '')
+                          .inner-group
+                            label Trọng số tính sức chứa
+                            - const occupancyWeight = (band.occupancyWeight === 0 || !band.occupancyWeight) ? 1 : band.occupancyWeight
+                            select.config-occupancy-weight
+                              option(value="0.5" selected=(occupancyWeight === 0.5)) 0.5 (tính nửa người)
+                              option(value="1" selected=(occupancyWeight === 1)) 1 (tính đủ 1 người)
+                            small.field-hint VD: Trẻ 6-11 = 1, Người lớn = 1
+                      
+                      //- C.2: Ăn sáng (Khách hàng tự chọn đăng ký, admin chỉ cấu hình phí)
+                      .config-section
+                        .config-header
+                          label.inner-label Cấu hình ăn sáng cho nhóm tuổi này
+                          small.field-hint(style="display: block; margin-top: 4px;") Khách hàng sẽ tự chọn đăng ký ăn sáng khi đặt phòng. Admin chỉ cấu hình phí.
+                        
+                        .config-body
+                          - const breakfastIsFree = band.breakfastIsFree !== false
+                          .inner-group
+                            label Loại ăn sáng
+                            .radio-group
+                              label.radio-option
+                                input.config-breakfast-free(type="radio" name=`breakfastType_${index}` value="free" checked=breakfastIsFree)
+                                span Miễn phí
+                              label.radio-option
+                                input.config-breakfast-paid(type="radio" name=`breakfastType_${index}` value="paid" checked=!breakfastIsFree)
+                                span Tính tiền
+                          
+                          .inner-group.breakfast-fee-input(style=breakfastIsFree ? 'display: none;' : '')
+                            label Phí ăn sáng / người / bữa (VND)
+                            input.config-breakfast-fee(type="number" min="0" value=band.breakfastFeePerPersonPerMeal || 0 placeholder="VD: 100000")
+                            small.field-hint VD: 100,000 VND/người/bữa
+                      
+                      //- C.3: Extra person charge (chỉ hiện khi countInOccupancy = true)
+                      - const showExtraPerson = band.countInOccupancy !== false
+                      .config-section.extra-person-section(style=showExtraPerson ? '' : 'display: none;')
+                        .config-header
+                          label.inner-label Áp dụng phụ thu vượt base occupancy
+                        
+                        .config-body
+                          .inner-group
+                            label Phụ thu / đêm / người cho nhóm tuổi này (VND)
+                            input.config-extra-person-fee(type="number" min="0" value=band.extraPersonFeePerNight || 0 placeholder="VD: 200000")
+                            small.field-hint VD: 200,000 VND/đêm/người cho nhóm tuổi này
+            else
+              .age-band-item(data-band-index="0")
+                .age-band-header
+                  .age-band-basic-info
+                    .inner-group
+                      label Tên mức tuổi *
+                      input.age-band-name(
+                        type="text"
+                        placeholder="VD: Trẻ nhỏ, Trẻ em, Người lớn"
+                        required
+                      )
+                    .inner-group
+                      label Tuổi bé nhất *
+                      input.age-band-min(
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                        value="0"
+                        required
+                      )
+                    .inner-group
+                      label Tuổi lớn nhất
+                      input.age-band-max(
+                        type="number"
+                        min="0"
+                        placeholder="Để trống = không giới hạn"
+                      )
+                    .inner-group
+                      label Loại
+                      select.age-band-type
+                        option(value="infant") Infant (Trẻ sơ sinh)
+                        option(value="child") Child (Trẻ em)
+                        option(value="adult") Adult (Người lớn)
+                        option(value="other" selected) Khác
+                  button.age-band-remove-btn(type="button") Xóa mức tuổi
+                
+                //- Cấu hình chi tiết theo từng mức tuổi
+                .age-band-config
+                  button.age-band-config-toggle(type="button") 
+                    i.fa-solid.fa-chevron-down
+                    span Cấu hình chi tiết
+                  
+                  .age-band-config-content(style="display: none;")
+                    //- C.1: Tính vào sức chứa
+                    .config-section
+                      .config-header
+                        label.config-checkbox
+                          input.config-count-occupancy(type="checkbox" checked)
+                          span Tính vào số người (occupancy)?
+                      
+                      .config-body.count-occupancy-body
+                        .inner-group
+                          label Trọng số tính sức chứa
+                          select.config-occupancy-weight
+                            option(value="0.5") 0.5 (tính nửa người)
+                            option(value="1" selected) 1 (tính đủ 1 người)
+                          small.field-hint VD: Trẻ 6-11 = 1, Người lớn = 1
+                    
+                    //- C.2: Miễn phí
+                    .config-section
+                      .config-header
+                        label.config-checkbox
+                          input.config-is-free(type="checkbox")
+                          span Miễn phí theo nhóm tuổi?
+                      
+                      .config-body.is-free-body(style="display: none;")
+                        .inner-group
+                          label Miễn phí tối đa mỗi phòng
+                          input.config-free-limit(type="number" min="0" value="1" placeholder="VD: 1")
+                          small.field-hint VD: Trẻ 0-5 tuổi miễn phí tối đa 1 bé/phòng
+                        
+                        .inner-group
+                          label Phí/đêm cho trẻ vượt quá free limit (VND)
+                          input.config-fee-exceeding-free(type="number" min="0" value="0" placeholder="Để trống = dùng extraPersonFee")
+                          small.field-hint VD: Nếu có 2 trẻ 0-5 tuổi, trẻ thứ 2 sẽ tính phí này. Để trống = dùng phí từ phần Extra person charge
+                    
+                    //- C.3: Ăn sáng (Khách hàng tự chọn đăng ký, admin chỉ cấu hình phí)
+                    .config-section
+                      .config-header
+                        label.inner-label Cấu hình ăn sáng cho nhóm tuổi này
+                        small.field-hint(style="display: block; margin-top: 4px;") Khách hàng sẽ tự chọn đăng ký ăn sáng khi đặt phòng. Admin chỉ cấu hình phí.
+                      
+                      .config-body
+                        .inner-group
+                          label Loại ăn sáng
+                          .radio-group
+                            label.radio-option
+                              input.config-breakfast-free(type="radio" name=`breakfastType_0` value="free" checked)
+                              span Miễn phí
+                            label.radio-option
+                              input.config-breakfast-paid(type="radio" name=`breakfastType_0` value="paid")
+                              span Tính tiền
+                        
+                        .inner-group.breakfast-fee-input(style="display: none;")
+                          label Phí ăn sáng / người / bữa (VND)
+                          input.config-breakfast-fee(type="number" min="0" value="0" placeholder="VD: 100000")
+                          small.field-hint VD: 100,000 VND/người/bữa
+                    
+                    //- C.3: Extra person charge (chỉ hiện khi countInOccupancy = true)
+                    .config-section.extra-person-section(style="display: none;")
+                      .config-header
+                        label.inner-label Áp dụng phụ thu vượt base occupancy
+                      
+                      .config-body
+                        .inner-group
+                          label Phụ thu / đêm / người cho nhóm tuổi này (VND)
+                          input.config-extra-person-fee(type="number" min="0" value="0" placeholder="VD: 200000")
+                          small.field-hint VD: 200,000 VND/đêm/người cho nhóm tuổi này
+          
+          .age-bands-actions
+            button(type="button" id="ageBandAddBtn") + Thêm mức tuổi
+            p.validation-hint 
+              i.fa-solid.fa-info-circle
+              |  Lưu ý: Các mức tuổi không được chồng lấn (VD: 0-5 và 6-11 OK, nhưng 0-6 và 6-11 là chồng lấn tại 6)
+
+      // ===== Thông tin hữu ích =====
+      .inner-group.inner-two-col
+        label(class="inner-label") Thông tin hữu ích
+        .hotel-useful-info
+          .hotel-info-section
+            label(class="hotel-info-section-title") Về khách sạn
+            .hotel-info-row
+              label(for="builtYear") Năm xây dựng
+              input(
+                type="number"
+                id="builtYear"
+                name="builtYear"
+                min="1900"
+                max="2100"
+                placeholder="VD: 2019"
+                value=(hotelDetail.usefulInfo && hotelDetail.usefulInfo.builtYear) || 0
+              )
+            .hotel-info-row
+              label(for="numberOfFloors") Số tầng
+              input(
+                type="number"
+                id="numberOfFloors"
+                name="numberOfFloors"
+                min="0"
+                placeholder="0"
+                value=(hotelDetail.usefulInfo && hotelDetail.usefulInfo.numberOfFloors) || 0
+              )
+            .hotel-info-row
+              label(for="inRoomVoltage") Điện áp trong phòng
+              input(
+                type="text"
+                id="inRoomVoltage"
+                name="inRoomVoltage"
+                placeholder="VD: 220"
+                value=(hotelDetail.usefulInfo && hotelDetail.usefulInfo.inRoomVoltage) || ''
+              )
+            .hotel-info-row
+              label(for="nonSmokingRooms") Phòng không hút thuốc
+              input(
+                type="checkbox"
+                id="nonSmokingRooms"
+                name="nonSmokingRooms"
+                checked=!!(hotelDetail.usefulInfo && hotelDetail.usefulInfo.nonSmokingRooms)
+              )
+              span Có
+            .hotel-info-row
+              label(for="numberOfRestaurants") Số nhà hàng
+              input(
+                type="number"
+                id="numberOfRestaurants"
+                name="numberOfRestaurants"
+                min="0"
+                placeholder="0"
+                value=(hotelDetail.usefulInfo && hotelDetail.usefulInfo.numberOfRestaurants) || 0
+              )
+            .hotel-info-row
+              label(for="numberOfBars") Số quán bar/phòng lounge
+              input(
+                type="number"
+                id="numberOfBars"
+                name="numberOfBars"
+                min="0"
+                placeholder="0"
+                value=(hotelDetail.usefulInfo && hotelDetail.usefulInfo.numberOfBars) || 0
+              )
+            .hotel-info-row
+              label(for="licenseNumber") Số giấy phép / Mã số thuế / Tên cơ quan
+              input(
+                type="text"
+                id="licenseNumber"
+                name="licenseNumber"
+                placeholder="VD: 0315419806"
+                value=(hotelDetail.usefulInfo && hotelDetail.usefulInfo.licenseNumber) || ''
+              )
+
+      // ===== FAQ =====
+      - const faqs = hotelDetail.faqs || [];
+      - const faq1 = faqs[0] || {};
+      - const faq2 = faqs[1] || {};
+      - const faq3 = faqs[2] || {};
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Câu hỏi thường gặp (FAQ)
+        .hotel-faq-row
+          input(type="text" name="faqQuestions" placeholder="Câu hỏi 1" value=faq1.question || '')
+          textarea(name="faqAnswers" placeholder="Trả lời 1") #{faq1.answer || ''}
+        .hotel-faq-row
+          input(type="text" name="faqQuestions" placeholder="Câu hỏi 2" value=faq2.question || '')
+          textarea(name="faqAnswers" placeholder="Trả lời 2") #{faq2.answer || ''}
+        .hotel-faq-row
+          input(type="text" name="faqQuestions" placeholder="Câu hỏi 3" value=faq3.question || '')
+          textarea(name="faqAnswers" placeholder="Trả lời 3") #{faq3.answer || ''}
+
+      // ===== Loại phòng =====
+      // ===== Nút cập nhật =====
+      .inner-button.inner-two-col
+        button(type="submit") Cập nhật
+
+  .inner-back
+    a(href=`/${pathAdmin}/hotel/list`) Quay lại danh sách
+
+  script.
+    // Xử lý thêm/xóa điểm nổi bật
+    document.addEventListener('DOMContentLoaded', function() {
+      const highlightsList = document.getElementById('highlights-list');
+      const addBtn = document.getElementById('highlight-add-btn');
+      
+      if (!highlightsList || !addBtn) return;
+      
+      function attachRemoveHandler(item) {
+        const btn = item.querySelector('.highlight-remove-btn');
+        if (!btn) return;
+        
+        btn.addEventListener('click', () => {
+          if (highlightsList.children.length > 1) {
+            item.remove();
+          } else {
+            // Nếu chỉ còn 1 item, chỉ clear dữ liệu
+            item.querySelectorAll('input').forEach(inp => {
+              if (inp.type === 'file') {
+                inp.value = '';
+              } else {
+                inp.value = '';
+              }
+            });
+            // Xóa ảnh preview nếu có
+            const img = item.querySelector('img');
+            if (img) img.remove();
+          }
+        });
+      }
+      
+      function attachImagePreview(input) {
+        input.addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const container = input.closest('.hotel-highlight-image');
+            let img = container.querySelector('img');
+            if (!img) {
+              img = document.createElement('img');
+              img.style.cssText = 'max-width: 150px; max-height: 100px; object-fit: cover; border-radius: 4px; margin-bottom: 8px; display: block;';
+              container.insertBefore(img, input);
+            }
+            img.src = e.target.result;
+            img.alt = 'Highlight preview';
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+      
+      function createEmptyHighlightItem() {
+        const item = document.createElement('div');
+        item.className = 'hotel-highlight-item';
+        item.innerHTML = `
+          <div class="hotel-highlight-image">
+            <input type="file" name="highlightImages" accept="image/*" class="highlight-image-input" />
+          </div>
+          <div class="hotel-highlight-info">
+            <input type="text" name="highlightTitles" placeholder="Nhập tiêu đề điểm nổi bật" class="highlight-title-input" />
+          </div>
+          <div class="hotel-highlight-actions">
+            <button type="button" class="highlight-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachRemoveHandler(item);
+        const imageInput = item.querySelector('.highlight-image-input');
+        if (imageInput) attachImagePreview(imageInput);
+        return item;
+      }
+      
+      // Gắn handler cho các item đã có
+      highlightsList.querySelectorAll('.hotel-highlight-item').forEach(item => {
+        attachRemoveHandler(item);
+        const imageInput = item.querySelector('.highlight-image-input');
+        if (imageInput) attachImagePreview(imageInput);
+      });
+      
+      // Nút thêm điểm nổi bật
+      addBtn.addEventListener('click', () => {
+        const newItem = createEmptyHighlightItem();
+        highlightsList.appendChild(newItem);
+      });
+    });
+    
+    // Xử lý thêm/xóa tiện nghi
+    document.addEventListener('DOMContentLoaded', function() {
+      const amenitiesList = document.getElementById('amenities-list');
+      const addBtn = document.getElementById('amenity-add-btn');
+      
+      if (!amenitiesList || !addBtn) return;
+      
+      // Hàm tạo feature item mới
+      function createFeatureItem() {
+        const featureItem = document.createElement('div');
+        featureItem.className = 'hotel-amenity-feature-item';
+        featureItem.innerHTML = `
+          <label>Đặc điểm</label>
+          <div class="feature-input-group">
+            <textarea class="feature-input" placeholder="VD: Dịch vụ phòng [24 giờ]" rows="2"></textarea>
+            <button type="button" class="feature-remove-btn">Xóa</button>
+          </div>
+        `;
+        
+        // Gắn handler xóa feature
+        const removeBtn = featureItem.querySelector('.feature-remove-btn');
+        removeBtn.addEventListener('click', () => {
+          const featuresList = featureItem.closest('.hotel-amenity-features-list');
+          if (featuresList.children.length > 1) {
+            featureItem.remove();
+            updateFeatureLabels(featuresList);
+          } else {
+            featureItem.querySelector('.feature-input').value = '';
+          }
+        });
+        
+        return featureItem;
+      }
+      
+      // Cập nhật label số thứ tự cho các đặc điểm
+      function updateFeatureLabels(featuresList) {
+        const items = featuresList.querySelectorAll('.hotel-amenity-feature-item');
+        items.forEach((item, index) => {
+          const label = item.querySelector('label');
+          if (label) label.textContent = `Đặc điểm ${index + 1}`;
+        });
+      }
+      
+      // Hàm tạo amenity item mới
+      function createEmptyAmenityItem() {
+        const item = document.createElement('div');
+        item.className = 'hotel-amenity-item';
+        item.innerHTML = `
+          <div class="hotel-amenity-header">
+            <div class="hotel-amenity-name-group">
+              <label>Tên tiện nghi *</label>
+              <input type="text" class="amenity-name-input" placeholder="VD: Ăn và Uống, Hồ bơi, Gym..." required />
+            </div>
+            <button type="button" class="amenity-remove-btn">Xóa tiện nghi</button>
+          </div>
+          <div class="hotel-amenity-features-list">
+            <div class="hotel-amenity-feature-item">
+              <label>Đặc điểm 1</label>
+              <div class="feature-input-group">
+                <textarea class="feature-input" placeholder="VD: Dịch vụ phòng [24 giờ]" rows="2"></textarea>
+                <button type="button" class="feature-remove-btn">Xóa</button>
+              </div>
+            </div>
+          </div>
+          <div class="hotel-amenity-feature-actions">
+            <button type="button" class="feature-add-btn">+ Thêm đặc điểm</button>
+          </div>
+        `;
+        
+        attachAmenityHandlers(item);
+        return item;
+      }
+      
+      // Gắn các event handlers cho một amenity item
+      function attachAmenityHandlers(item) {
+        // Handler xóa amenity
+        const removeAmenityBtn = item.querySelector('.amenity-remove-btn');
+        removeAmenityBtn.addEventListener('click', () => {
+          if (amenitiesList.children.length > 1) {
+            item.remove();
+          } else {
+            item.querySelectorAll('input, textarea').forEach(inp => inp.value = '');
+          }
+        });
+        
+        // Handler thêm feature
+        const addFeatureBtn = item.querySelector('.feature-add-btn');
+        addFeatureBtn.addEventListener('click', () => {
+          const featuresList = item.querySelector('.hotel-amenity-features-list');
+          const newFeature = createFeatureItem();
+          featuresList.appendChild(newFeature);
+          updateFeatureLabels(featuresList);
+        });
+        
+        // Handler xóa feature cho các feature items hiện có
+        const featureItems = item.querySelectorAll('.hotel-amenity-feature-item');
+        featureItems.forEach(featureItem => {
+          const removeBtn = featureItem.querySelector('.feature-remove-btn');
+          removeBtn.addEventListener('click', () => {
+            const featuresList = featureItem.closest('.hotel-amenity-features-list');
+            if (featuresList.children.length > 1) {
+              featureItem.remove();
+              updateFeatureLabels(featuresList);
+            } else {
+              featureItem.querySelector('.feature-input').value = '';
+            }
+          });
+        });
+      }
+      
+      // Gắn handlers cho các amenity items đã có
+      amenitiesList.querySelectorAll('.hotel-amenity-item').forEach(item => {
+        attachAmenityHandlers(item);
+      });
+      
+      // Nút thêm tiện nghi
+      addBtn.addEventListener('click', () => {
+        const newItem = createEmptyAmenityItem();
+        amenitiesList.appendChild(newItem);
+      });
+    });
+    
+    // Xử lý thêm/xóa cơ sở vật chất
+    document.addEventListener('DOMContentLoaded', function() {
+      const facilitiesList = document.getElementById('facilities-list');
+      const addBtn = document.getElementById('facility-add-btn');
+      
+      if (!facilitiesList || !addBtn) return;
+      
+      function attachRemoveHandler(item) {
+        const btn = item.querySelector('.facility-remove-btn');
+        if (!btn) return;
+        
+        btn.addEventListener('click', () => {
+          if (facilitiesList.children.length > 1) {
+            item.remove();
+          } else {
+            // Nếu chỉ còn 1 item, chỉ clear dữ liệu
+            item.querySelectorAll('input, select').forEach(inp => {
+              if (inp.type === 'file') {
+                inp.value = '';
+              } else if (inp.type === 'checkbox') {
+                inp.checked = true;
+              } else {
+                inp.value = '';
+              }
+            });
+            // Xóa ảnh preview nếu có
+            const img = item.querySelector('img');
+            if (img) img.remove();
+          }
+        });
+      }
+      
+      function attachImagePreview(input) {
+        input.addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const img = input.closest('.hotel-facility-item').querySelector('.facility-image-preview');
+            if (img) {
+              img.src = e.target.result;
+              img.style.display = 'block';
+            } else {
+              // Tạo img mới nếu chưa có
+              const imgGroup = input.closest('.hotel-facility-image-group');
+              const newImg = document.createElement('img');
+              newImg.className = 'facility-image-preview';
+              newImg.style.cssText = 'max-width: 200px; max-height: 150px; object-fit: cover; border-radius: 4px; margin-bottom: 8px; display: block;';
+              newImg.src = e.target.result;
+              input.parentNode.insertBefore(newImg, input);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+      
+      // Hiển thị/ẩn input tùy chỉnh khi chọn "Khác"
+      function handleCategoryChange(selectElement) {
+        const categoryGroup = selectElement.closest('.hotel-facility-category-group');
+        const currentValue = selectElement.value;
+        
+        // Tìm hoặc tạo input tùy chỉnh
+        let customInput = categoryGroup.querySelector('.facility-category-custom-input');
+        
+        if (currentValue === 'other') {
+          // Nếu chưa có input, tạo mới
+          if (!customInput) {
+            customInput = document.createElement('input');
+            customInput.type = 'text';
+            customInput.name = 'facilityCategories';
+            customInput.className = 'facility-category-custom-input';
+            customInput.placeholder = 'Nhập tên danh mục tùy chỉnh';
+            customInput.style.cssText = 'width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; margin-top: 8px;';
+            customInput.required = true;
+            
+            // Lưu giá trị hiện tại nếu có
+            const existingCustomValue = selectElement.getAttribute('data-custom-value');
+            if (existingCustomValue) {
+              customInput.value = existingCustomValue;
+            }
+            
+            // Chèn input sau select (không ẩn select)
+            selectElement.parentNode.insertBefore(customInput, selectElement.nextSibling);
+            
+            // Khi blur, lưu giá trị tùy chỉnh vào data attribute
+            customInput.addEventListener('blur', function() {
+              if (customInput.value.trim()) {
+                selectElement.setAttribute('data-custom-value', customInput.value.trim());
+              }
+            });
+            
+            // Focus vào input khi mới hiện
+            setTimeout(() => customInput.focus(), 100);
+          } else {
+            // Nếu đã có input, chỉ cần hiện nó
+            customInput.style.display = 'block';
+            setTimeout(() => customInput.focus(), 100);
+          }
+        } else {
+          // Ẩn input khi chọn option khác (nhưng không xóa để giữ giá trị)
+          if (customInput) {
+            // Lưu giá trị tùy chỉnh vào data attribute trước khi ẩn
+            const customValue = customInput.value.trim();
+            if (customValue) {
+              selectElement.setAttribute('data-custom-value', customValue);
+            }
+            customInput.style.display = 'none';
+          }
+        }
+      }
+      
+      // Gắn handler cho category select
+      function attachCategoryHandler(item) {
+        const categorySelect = item.querySelector('select[name="facilityCategories"]');
+        if (categorySelect) {
+          // Kiểm tra nếu đang là "other" hoặc có giá trị tùy chỉnh
+          const customValue = categorySelect.getAttribute('data-custom-value');
+          const customInput = item.querySelector('.facility-category-custom-input');
+          
+          if (categorySelect.value === 'other') {
+            // Nếu đã có input sẵn (từ server render), hiện nó
+            if (customInput) {
+              customInput.style.display = 'block';
+            } else {
+              // Nếu chưa có, tạo mới
+              handleCategoryChange(categorySelect);
+            }
+          } else if (customInput) {
+            // Nếu không phải "other" nhưng có input, ẩn nó
+            customInput.style.display = 'none';
+          }
+          
+          categorySelect.addEventListener('change', function() {
+            handleCategoryChange(categorySelect);
+          });
+          
+          // Lưu giá trị tùy chỉnh khi input blur
+          if (customInput) {
+            customInput.addEventListener('blur', function() {
+              if (customInput.value.trim()) {
+                categorySelect.setAttribute('data-custom-value', customInput.value.trim());
+              }
+            });
+          }
+        }
+      }
+      
+      function createEmptyFacilityItem() {
+        const item = document.createElement('div');
+        item.className = 'hotel-facility-item';
+        item.innerHTML = `
+          <div class="hotel-facility-header">
+            <div class="hotel-facility-name-group">
+              <label>Tên cơ sở vật chất *</label>
+              <input type="text" name="facilityNames" placeholder="VD: Bể bơi, Phòng tập, Nhà hàng..." required />
+            </div>
+            <div class="hotel-facility-category-group">
+              <label>Danh mục</label>
+              <select name="facilityCategories">
+                <option value="internet">Truy cập Internet</option>
+                <option value="relaxation">Thư giãn & Vui chơi giải trí</option>
+                <option value="services">Dịch vụ và tiện nghi</option>
+                <option value="safety">Độ sạch sẽ và an toàn</option>
+                <option value="food">Ăn uống</option>
+                <option value="children">Dành cho trẻ em</option>
+                <option value="accessibility">Dễ dàng tiếp cận</option>
+                <option value="transport">Đi lại</option>
+                <option value="language">Ngôn ngữ được sử dụng</option>
+                <option value="other" selected>Khác</option>
+              </select>
+            </div>
+          </div>
+          <div class="hotel-facility-image-group">
+            <label>Ảnh minh họa (cho carousel - tùy chọn)</label>
+            <input type="file" name="facilityImages" accept="image/*" class="facility-image-input" />
+          </div>
+          <div class="hotel-facility-actions">
+            <button type="button" class="facility-remove-btn">Xóa</button>
+          </div>
+        `;
+        attachRemoveHandler(item);
+        const imageInput = item.querySelector('.facility-image-input');
+        if (imageInput) attachImagePreview(imageInput);
+        return item;
+      }
+      
+      // Gắn handler cho các item đã có
+      facilitiesList.querySelectorAll('.hotel-facility-item').forEach(item => {
+        attachRemoveHandler(item);
+        const imageInput = item.querySelector('.facility-image-input');
+        if (imageInput) attachImagePreview(imageInput);
+        attachCategoryHandler(item);
+      });
+      
+      // Nút thêm cơ sở vật chất
+      addBtn.addEventListener('click', () => {
+        const newItem = createEmptyFacilityItem();
+        facilitiesList.appendChild(newItem);
+        // Gắn handler cho item mới
+        const imageInput = newItem.querySelector('.facility-image-input');
+        if (imageInput) attachImagePreview(imageInput);
+        attachCategoryHandler(newItem);
+      });
+    });
+    
+    // Xử lý Age Bands - Giống hotel-create.pug
+    document.addEventListener('DOMContentLoaded', function() {
+      const ageBandsList = document.getElementById('ageBandsList');
+      const addBtn = document.getElementById('ageBandAddBtn');
+      
+      if (!ageBandsList || !addBtn) return;
+      
+      let ageBandCounter = ageBandsList.querySelectorAll('.age-band-item').length;
+      
+      function createAgeBandItem() {
+        const index = ageBandCounter++;
+        const item = document.createElement('div');
+        item.className = 'age-band-item';
+        item.setAttribute('data-band-index', index);
+        // Copy HTML từ hotel-create.pug (giống hệt)
+        item.innerHTML = `
+          <div class="age-band-header">
+            <div class="age-band-basic-info">
+              <div class="inner-group">
+                <label>Tên mức tuổi *</label>
+                <input class="age-band-name" type="text" placeholder="VD: Trẻ nhỏ, Trẻ em, Người lớn" required />
+              </div>
+              <div class="inner-group">
+                <label>Tuổi bé nhất *</label>
+                <input class="age-band-min" type="number" min="0" placeholder="0" value="0" required />
+              </div>
+              <div class="inner-group">
+                <label>Tuổi lớn nhất</label>
+                <input class="age-band-max" type="number" min="0" placeholder="Để trống = không giới hạn" />
+              </div>
+              <div class="inner-group">
+                <label>Loại</label>
+                <select class="age-band-type">
+                  <option value="infant">Infant (Trẻ sơ sinh)</option>
+                  <option value="child">Child (Trẻ em)</option>
+                  <option value="adult">Adult (Người lớn)</option>
+                  <option value="other" selected>Khác</option>
+                </select>
+              </div>
+            </div>
+            <button class="age-band-remove-btn" type="button">Xóa mức tuổi</button>
+          </div>
+          
+          <div class="age-band-config">
+            <button class="age-band-config-toggle" type="button">
+              <i class="fa-solid fa-chevron-down"></i>
+              <span>Cấu hình chi tiết</span>
+            </button>
+            
+            <div class="age-band-config-content" style="display: none;">
+              <!-- Copy tất cả HTML cấu hình chi tiết từ hotel-create.pug -->
+              <div class="config-section">
+                <div class="config-header">
+                  <label class="config-checkbox">
+                    <input class="config-count-occupancy" type="checkbox" checked />
+                    <span>Tính vào số người (occupancy)?</span>
+                  </label>
+                </div>
+                <div class="config-body count-occupancy-body">
+                  <div class="inner-group">
+                    <label>Trọng số tính sức chứa</label>
+                    <select class="config-occupancy-weight">
+                      <option value="0.5">0.5 (tính nửa người)</option>
+                      <option value="1" selected>1 (tính đủ 1 người)</option>
+                    </select>
+                    <small class="field-hint">VD: Trẻ 6-11 = 1, Người lớn = 1</small>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="config-section">
+                <div class="config-header">
+                  <label class="config-checkbox">
+                    <input class="config-is-free" type="checkbox" />
+                    <span>Miễn phí theo nhóm tuổi?</span>
+                  </label>
+                </div>
+                <div class="config-body is-free-body" style="display: none;">
+                  <div class="inner-group">
+                    <label>Miễn phí tối đa mỗi phòng</label>
+                    <input class="config-free-limit" type="number" min="0" value="1" />
+                  </div>
+                  <div class="inner-group">
+                    <label>Phí/đêm cho trẻ vượt quá free limit (VND)</label>
+                    <input class="config-fee-exceeding-free" type="number" min="0" value="0" placeholder="Để trống = dùng extraPersonFee" />
+                    <small class="field-hint">VD: Nếu có 2 trẻ 0-5 tuổi, trẻ thứ 2 sẽ tính phí này</small>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- C.3: Breakfast (Khách hàng tự chọn đăng ký, admin chỉ cấu hình phí) -->
+              <div class="config-section">
+                <div class="config-header">
+                  <label class="inner-label">Cấu hình ăn sáng cho nhóm tuổi này</label>
+                  <small class="field-hint" style="display: block; margin-top: 4px;">Khách hàng sẽ tự chọn đăng ký ăn sáng khi đặt phòng. Admin chỉ cấu hình phí.</small>
+                </div>
+                <div class="config-body">
+                  <div class="inner-group">
+                    <label>Loại ăn sáng</label>
+                    <div class="radio-group">
+                      <label class="radio-option">
+                        <input class="config-breakfast-free" type="radio" name="breakfastType_${index}" value="free" checked />
+                        <span>Miễn phí</span>
+                      </label>
+                      <label class="radio-option">
+                        <input class="config-breakfast-paid" type="radio" name="breakfastType_${index}" value="paid" />
+                        <span>Tính tiền</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="inner-group breakfast-fee-input" style="display: none;">
+                    <label>Phí ăn sáng / người / bữa (VND)</label>
+                    <input class="config-breakfast-fee" type="number" min="0" value="0" placeholder="VD: 100000" />
+                    <small class="field-hint">VD: 100,000 VND/người/bữa</small>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- C.3: Extra person (chỉ hiện khi countInOccupancy = true) -->
+              <div class="config-section extra-person-section" style="display: none;">
+                <div class="config-header">
+                  <label class="inner-label">Áp dụng phụ thu vượt base occupancy</label>
+                </div>
+                <div class="config-body">
+                  <div class="inner-group">
+                    <label>Phụ thu / đêm / người cho nhóm tuổi này (VND)</label>
+                    <input class="config-extra-person-fee" type="number" min="0" value="0" placeholder="VD: 200000" />
+                    <small class="field-hint">VD: 200,000 VND/đêm/người cho nhóm tuổi này</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        attachAgeBandHandlers(item);
+        return item;
+      }
+      
+      function attachAgeBandHandlers(item) {
+        // Copy toàn bộ function từ hotel-create.pug
+        const removeBtn = item.querySelector('.age-band-remove-btn');
+        if (removeBtn) {
+          removeBtn.addEventListener('click', () => {
+            if (ageBandsList.children.length > 1) {
+              item.remove();
+            } else {
+              item.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select').forEach(inp => {
+                if (inp.type === 'number') {
+                  inp.value = inp.classList.contains('age-band-min') ? 0 : '';
+                } else if (inp.tagName === 'SELECT') {
+                  inp.value = inp.classList.contains('age-band-type') ? 'other' : inp.options[0].value;
+                } else {
+                  inp.value = '';
+                }
+              });
+              item.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.checked = cb.classList.contains('config-count-occupancy');
+              });
+            }
+          });
+        }
+        
+        const configToggle = item.querySelector('.age-band-config-toggle');
+        const configContent = item.querySelector('.age-band-config-content');
+        if (configToggle && configContent) {
+          configToggle.addEventListener('click', () => {
+            const isVisible = configContent.style.display !== 'none';
+            configContent.style.display = isVisible ? 'none' : 'block';
+            const icon = configToggle.querySelector('i');
+            if (icon) {
+              icon.className = isVisible ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
+            }
+          });
+        }
+        
+        const configCheckboxes = [
+          { checkbox: '.config-count-occupancy', body: '.count-occupancy-body', inverse: false },
+          { checkbox: '.config-is-free', body: '.is-free-body', inverse: false }
+        ];
+        
+        configCheckboxes.forEach(({ checkbox, body }) => {
+          const cb = item.querySelector(checkbox);
+          const bd = item.querySelector(body);
+          if (cb && bd) {
+            const updateVisibility = () => {
+              bd.style.display = cb.checked ? 'block' : 'none';
+            };
+            cb.addEventListener('change', updateVisibility);
+            updateVisibility();
+          }
+        });
+        
+        // Handler: Nếu tích "Tính vào số người" → hiện "Áp dụng phụ thu vượt base occupancy"
+        const countOccupancyCheckbox = item.querySelector('.config-count-occupancy');
+        const extraPersonSection = item.querySelector('.extra-person-section');
+        
+        if (countOccupancyCheckbox && extraPersonSection) {
+          const updateExtraPersonVisibility = () => {
+            extraPersonSection.style.display = countOccupancyCheckbox.checked ? 'block' : 'none';
+          };
+          countOccupancyCheckbox.addEventListener('change', updateExtraPersonVisibility);
+          updateExtraPersonVisibility(); // Initial state
+        }
+        
+        // Handler cho radio buttons Breakfast (Free/Paid)
+        const breakfastFreeRadio = item.querySelector('.config-breakfast-free');
+        const breakfastPaidRadio = item.querySelector('.config-breakfast-paid');
+        const breakfastFeeInput = item.querySelector('.breakfast-fee-input');
+        
+        if (breakfastFreeRadio && breakfastPaidRadio && breakfastFeeInput) {
+          const updateBreakfastFeeVisibility = () => {
+            breakfastFeeInput.style.display = breakfastPaidRadio.checked ? 'block' : 'none';
+          };
+          breakfastFreeRadio.addEventListener('change', updateBreakfastFeeVisibility);
+          breakfastPaidRadio.addEventListener('change', updateBreakfastFeeVisibility);
+        }
+      }
+      
+      // Gắn handlers cho các items đã có (từ edit mode)
+      ageBandsList.querySelectorAll('.age-band-item').forEach(item => {
+        attachAgeBandHandlers(item);
+      });
+      
+      // Nút thêm mức tuổi
+      addBtn.addEventListener('click', () => {
+        const newItem = createAgeBandItem();
+        ageBandsList.appendChild(newItem);
+      });
+    });

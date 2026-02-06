@@ -1,0 +1,36 @@
+extends ../layouts/default.pug
+
+block main
+  .section-8
+    .container
+      h2.box-title Tin Tức Mới
+      .inner-wrap
+        if newsList && newsList.length > 0
+          each news in newsList
+            .blog-item-2
+              a(href=`/news/${news.slug}`)
+                .inner-image
+                  if news.avatar
+                    img(alt=news.title src=news.avatar)
+                  else
+                    img(alt=news.title src="/assets/images/blog-1.jpg")
+                .inner-content
+                  .inner-date= news.publishedAtFormat
+                  h3.inner-title= news.title
+                  if news.shortDescription
+                    .inner-desc= news.shortDescription
+        else
+          div(style="text-align: center; padding: 50px; color: #999; grid-column: 1 / -1;") Không có tin tức nào
+
+      //- Section 7: Phân trang
+      if pagination && pagination.totalPage > 1
+        .section-7(style="margin-top: 30px;")
+          span.inner-label
+            | Hiển thị #{pagination.skip + 1}
+            | - #{pagination.skip + newsList.length}
+            | của #{pagination.totalRecord}
+          select(class="inner-pagination" box-pagination)
+            - for (let i = 1; i <= pagination.totalPage; i++)
+              option(value=i selected=(i === pagination.currentPage)) Trang #{i}
+      //- End Section 7
+

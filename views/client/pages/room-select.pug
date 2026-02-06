@@ -1,0 +1,125 @@
+//- views/client/pages/room-select.pug
+extends ../layouts/default.pug
+include ../mixins/box-breadcrumb.pug
+
+block main
+  - const b = booking || {};
+  - const h = b.hotel || {};
+  - const room = b.room || {};
+  - const img = room.image || "/images/no-image.jpg";
+  - const checkIn  = (b.checkIn  ? new Date(b.checkIn)  : new Date());
+  - const checkOut = (b.checkOut ? new Date(b.checkOut) : new Date(Date.now() + 86400000));
+  - const nights   = Math.max(1, Math.round((checkOut - checkIn) / 86400000));
+  - const roomsQty = b.rooms || 1;
+  - const priceNight = Number(b.pricePerNight || room.pricePerNight || 0);
+  - const subtotal = Number(b.subtotal || priceNight * nights * roomsQty);
+  - const tax  = Number(b.tax || Math.round(subtotal * 0.165));
+  - const fee  = Number(b.fee || Math.round(subtotal * 0.008));
+  - const total = Number(b.total || subtotal + tax + fee);
+  - const currency = b.currency || "đ";
+  - const safe = (n)=> Number(n||0).toLocaleString('vi-VN');
+
+  +box-breadcrumb([
+    {name: "Quay lại", slug: "/hotel/search", avatar: ""},
+    {name: "Thông tin chi tiết khách sạn", slug: ""}
+  ])
+
+  .hotel-success
+    h1.hotel-success__title THÔNG TIN CHI TIẾT KHÁCH SẠN
+
+    .hotel-success__top
+      .topline
+        .topline__row
+          .topline__item
+            i.fa-regular.fa-building
+            span= h.name || "Tên khách sạn"
+          .topline__item
+            i.fa-regular.fa-calendar-days
+            span= `${checkIn.toLocaleDateString('vi-VN')} → ${checkOut.toLocaleDateString('vi-VN')}`
+          .topline__item
+            i.fa-regular.fa-bed
+            span= `${roomsQty} phòng`
+          .topline__item
+            i.fa-regular.fa-user
+            span= `${b.adults || 1} người lớn${b.children ? ' · ' + b.children + ' trẻ em' : ''}`
+
+    .hotel-success__grid
+      .hotel-success__left
+        .roomcard
+          .roomcard__head
+            h3.roomcard__title= room.title || "Hạng phòng đã chọn"
+            .holdbox
+              i.fa-regular.fa-clock
+              span Thời gian giữ giá:
+              strong#holdTimer(data-minutes="10") 00:10:00
+          .roomcard__body
+            .roomcard__thumb
+              img(src=img, alt=room.title || "Ảnh phòng")
+            .roomcard__meta
+              ul.roomfacts
+                li
+                  i.fa-regular.fa-user
+                  |  #{b.adults || 1} người
+                li
+                  i.fa-regular.fa-square
+                  |  #{room.sizeM2 ? room.sizeM2 + 'm²' : '60m²'}
+                li
+                  i.fa-regular.fa-eye
+                  |  #{room.view || 'Cảnh thành phố'}
+              ul.roomtags
+                li Bãi đậu xe
+                li Nhận phòng nhanh
+                li WiFi miễn phí
+                li Phòng tập
+            .roomcard__price
+              .roomcard__price-main #{safe(priceNight)} #{currency}
+              small= `${safe(priceNight)} ${currency} × ${nights} Đêm × ${roomsQty} Phòng`
+              a.roomcard__change(href="/hotel/search") Thay đổi
+
+      .hotel-success__right
+        .summary
+          .summary__header Tóm tắt đơn hàng
+          .summary__block
+            .summary__row
+              .summary__label Khách sạn
+              .summary__value= h.name || "Tên khách sạn"
+            .summary__sub
+              div= `${checkIn.toLocaleDateString('vi-VN')} – ${checkOut.toLocaleDateString('vi-VN')}`
+              div= room.title || "Hạng phòng"
+              div= `Giá (${roomsQty} phòng × ${nights} đêm)`
+          .summary__prices
+            .summary__row
+              .summary__label Giá phòng
+              .summary__value #{safe(subtotal)} #{currency}
+            .summary__row
+              .summary__label Thuế GTGT
+              .summary__value #{safe(tax)} #{currency}
+            .summary__row
+              .summary__label Phụ thu quản trị
+              .summary__value #{safe(fee)} #{currency}
+            .summary__total
+              .summary__label Tổng cộng
+              .summary__value #{safe(total)} #{currency}
+
+          .summary__action
+            form.summary__form(action="/hotel/booking" method="get")
+              input(type="hidden" name="hotelName"     value=(h.name || "Tên khách sạn"))
+              input(type="hidden" name="address"       value=(h.address || ""))
+              input(type="hidden" name="checkInDate"   value=(checkIn.toISOString().slice(0,10)))
+              input(type="hidden" name="checkOutDate"  value=(checkOut.toISOString().slice(0,10)))
+              input(type="hidden" name="rooms"         value=roomsQty)
+              input(type="hidden" name="adults"        value=(b.adults || 1))
+              input(type="hidden" name="children"      value=(b.children || 0))
+              input(type="hidden" name="roomTitle"     value=(room.title || "Hạng phòng"))
+              input(type="hidden" name="image"         value=img)
+              if room.sizeM2
+                input(type="hidden" name="sizeM2"      value=room.sizeM2)
+              if room.view
+                input(type="hidden" name="view"        value=room.view)
+              input(type="hidden" name="pricePerNight" value=priceNight)
+              input(type="hidden" name="currency"      value=currency)
+              input(type="hidden" name="subtotal"      value=subtotal)
+              input(type="hidden" name="tax"           value=tax)
+              input(type="hidden" name="fee"           value=fee)
+              input(type="hidden" name="total"         value=total)
+              button.summary__btn(type="submit") Xác nhận

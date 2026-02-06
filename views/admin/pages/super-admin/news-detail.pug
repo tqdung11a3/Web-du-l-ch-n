@@ -1,0 +1,111 @@
+extends ../../layouts/default.pug
+
+block main
+  .box-head
+    h1.box-title Chi tiết Tin tức
+    .inner-buttons
+      a.button.button-outline(href=`/${pathAdmin}/super-admin/news`)
+        <i class="fa-solid fa-arrow-left"></i> Quay lại
+      a.button.button-primary(href=`/${pathAdmin}/super-admin/news/edit/${news._id}`)
+        <i class="fa-solid fa-pen-to-square"></i> Chỉnh sửa
+
+  .section-6(style="margin-top: 20px;")
+    .box-detail
+      .detail-row
+        .detail-label Ảnh đại diện:
+        .detail-value
+          if news.avatar
+            img(src=news.avatar, alt=news.title, style="width: 300px; object-fit: cover; border-radius: 8px;")
+          else
+            span(style="color: #999;") Chưa có ảnh
+      
+      .detail-row
+        .detail-label Tiêu đề:
+        .detail-value
+          strong(style="font-size: 18px;")= news.title
+      
+      .detail-row
+        .detail-label Slug:
+        .detail-value
+          if news.slug
+            code(style="background: #f5f5f5; padding: 4px 8px; border-radius: 4px;")= news.slug
+          else
+            span(style="color: #999;") Không có
+      
+      .detail-row
+        .detail-label Mô tả ngắn:
+        .detail-value= news.shortDescription || "Không có"
+      
+      .detail-row
+        .detail-label Nội dung:
+        .detail-value
+          if news.content
+            div!= news.content
+          else
+            span(style="color: #999;") Không có nội dung
+      
+      .detail-row
+        .detail-label Trạng thái:
+        .detail-value
+          if news.status === "active"
+            span.badge.badge-green Hoạt động
+          else
+            span.badge.badge-red Dừng hoạt động
+      
+      .detail-row
+        .detail-label Nổi bật:
+        .detail-value
+          if news.isFeatured
+            span.badge.badge-blue Có
+          else
+            span.badge.badge-secondary Không
+      
+      .detail-row
+        .detail-label Lượt xem:
+        .detail-value= news.views || 0
+      
+      .detail-row
+        .detail-label Ngày xuất bản:
+        .detail-value= news.publishedAtFormat
+      
+      .detail-row
+        .detail-label Người tạo:
+        .detail-value= news.createdByName || "Không rõ"
+      
+      .detail-row
+        .detail-label Người cập nhật:
+        .detail-value= news.updatedByName || "Chưa cập nhật"
+      
+      .detail-row
+        .detail-label Ngày tạo:
+        .detail-value= news.createdAtFormat
+      
+      .detail-row
+        .detail-label Ngày cập nhật:
+        .detail-value= news.updatedAtFormat
+
+  style.
+    .box-detail {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .detail-row {
+      display: flex;
+      padding: 15px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      font-weight: 600;
+      width: 200px;
+      color: #333;
+    }
+    .detail-value {
+      flex: 1;
+      color: #666;
+    }
+

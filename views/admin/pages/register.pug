@@ -1,0 +1,92 @@
+extends ../layouts/account.pug
+
+block main
+  .form-account
+    h1.inner-title Đăng ký
+    .inner-desc Tạo một tài khoản để tiếp tục
+
+    // Hiển thị lỗi (nếu có) do server trả về
+    if errors && errors.length
+      ul.inner-errors
+        each e in errors
+          li= e.message
+
+    form.inner-form(id="register-form", method="post", action=`/${pathAdmin}/account/register`)
+      //- Nếu bạn đang dùng csurf, bật dòng dưới:
+      // input(type="hidden", name="_csrf", value=csrfToken)
+
+      .inner-group
+        label(for="fullName", class="inner-label") Họ tên
+        input(
+          type="text"
+          name="fullName"
+          id="fullName"
+          placeholder="Ví dụ: Lê Văn A"
+          class="inner-control"
+          required
+          value=(form && form.fullName) || ''
+        )
+
+      .inner-group
+        label(for="email", class="inner-label") Email
+        input(
+          type="email"
+          name="email"
+          id="email"
+          placeholder="Ví dụ: levana@gmail.com"
+          class="inner-control"
+          required
+          value=(form && form.email) || ''
+        )
+
+      //--- NEW: Tên công ty
+      .inner-group
+        label(for="companyName", class="inner-label") Tên công ty
+        //- Có thể thay bằng datalist để gợi ý (nếu server truyền biến companies)
+        input(
+          type="text"
+          name="companyName"
+          id="companyName"
+          placeholder="Ví dụ: VietTravel"
+          class="inner-control"
+          required
+          value=(form && form.companyName) || ''
+          list="company-suggestions"
+        )
+        if companies && companies.length
+          datalist#company-suggestions
+            each c in companies
+              option(value=c.name)
+
+      .inner-group
+        label(for="password", class="inner-label") Mật khẩu
+        input(
+          type="password"
+          name="password"
+          id="password"
+          class="inner-control"
+          required
+          minlength="8"
+        )
+
+      //--- (Khuyến nghị) Xác nhận mật khẩu
+      .inner-group
+        label(for="confirmPassword", class="inner-label") Xác nhận mật khẩu
+        input(
+          type="password"
+          name="confirmPassword"
+          id="confirmPassword"
+          class="inner-control"
+          required
+        )
+
+      .inner-meta
+        .inner-confirm
+          input(type="checkbox", name="agree", id="agree", class="inner-check", checked=(form && form.agree) ? true : false)
+          label(for="agree", class="inner-label") Tôi chấp nhận các điều khoản và điều kiện
+
+      button(class="inner-button" type="submit") Đăng Ký
+
+    .inner-more
+      span Bạn đã có tài khoản?
+      a(href=`/${pathAdmin}/account/login`) Đăng nhập

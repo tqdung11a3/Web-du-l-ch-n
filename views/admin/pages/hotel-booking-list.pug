@@ -1,0 +1,43 @@
+extends ../layouts/default.pug
+
+block main
+  .page-title
+    h1 Quản lý đặt phòng khách sạn
+
+  .table-responsive
+    table.table
+      thead
+        tr
+          th Mã đơn
+          th Khách hàng
+          th Khách sạn
+          th Thời gian
+          th Số phòng
+          th Tổng tiền
+          th Trạng thái
+          th Ngày tạo
+          th Thao tác
+      tbody
+        if bookingList && bookingList.length
+          each b in bookingList
+            tr
+              td= b.code
+              td
+                | #{b.guest && b.guest.fullName || ""}
+                br
+                | #{b.guest && b.guest.phone || ""}
+              td
+                | #{b.hotel && b.hotel.name || ""}
+                br
+                | #{b.hotel && b.hotel.address || ""}
+              td #{b.checkInFormat} - #{b.checkOutFormat}
+              td= b.rooms
+              td #{b.totalAmountFormat} #{b.currency}
+              td= b.status
+              td= b.createdAtFormat
+              td.inner-center
+                a.btn-action(href=`/${pathAdmin}/hotel/booking/detail/${b.id}` title="Xem chi tiết")
+                  i.fa-solid.fa-eye
+        else
+          tr
+            td(colspan="9") Không có đơn đặt phòng nào.

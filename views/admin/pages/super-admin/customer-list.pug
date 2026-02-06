@@ -1,0 +1,66 @@
+extends ../../layouts/default.pug
+
+block main
+  
+  .box-head
+    h1.box-title Quản lý Khách hàng
+
+  //- Section 4: Bộ lọc
+  .section-4
+    form#form-filter(method="GET")
+      .inner-form
+        .inner-input
+          input(
+            type="text",
+            name="keyword",
+            placeholder="Tìm theo tên, email, số điện thoại...",
+            value=keyword || ""
+          )
+        .inner-button
+          button.inner-submit(type="submit") Tìm kiếm
+
+  //- Section 6: Danh sách
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Họ tên
+            th Email
+            th Số điện thoại
+            th Số đơn
+            th Tổng chi tiêu
+            th Ngày đăng ký
+            th Hành động
+        tbody
+          if customers && customers.length > 0
+            each customer, index in customers
+              tr
+                td= index + 1 + (pagination ? pagination.skip : 0)
+                td= customer.fullName || '-'
+                td= customer.email
+                td= customer.phone || '-'
+                td.text-center= customer.orderCount || 0
+                td
+                  strong(style="color: #27ae60;")= (customer.totalSpent || 0).toLocaleString('vi-VN') + ' đ'
+                td= new Date(customer.createdAt || Date.now()).toLocaleDateString('vi-VN')
+                td
+                  .inner-buttons
+                    a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/customers/${customer._id}`, title="Xem chi tiết")
+                      <i class="fa-solid fa-eye"></i>
+          else
+            tr
+              td(colspan="8", style="text-align: center; padding: 30px; color: #999;") Không có khách hàng nào
+
+  //- Section 7: Phân trang
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label
+        | Hiển thị #{pagination.skip + 1}
+        | - #{pagination.skip + customers.length}
+        | của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}
+  //- End Section 7

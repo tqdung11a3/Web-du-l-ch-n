@@ -1,0 +1,117 @@
+extends ../layouts/default.pug
+
+block main
+  h1.box-title Thông tin công ty
+
+  if !company
+    .alert.alert-warning Không tìm thấy thông tin công ty của bạn.
+  else
+    // Header xem trước
+    .company-hero
+      .company-hero__banner
+        if company.banner
+          img(src=company.banner alt=`Banner ${company.name}`)
+        else
+          .company-hero__banner--placeholder Chưa có ảnh breadcrumb
+      .company-hero__meta
+        .company-hero__logo
+          if company.logo
+            img(src=company.logo alt=company.name)
+          else
+            .avatar-fallback= (company.name && company.name[0]) || 'C'
+        h2.company-name= company.name
+        if company.status
+          .status
+            if company.status === 'active'
+              span.badge.badge-green Hoạt động
+            else
+              span.badge.badge-red Tạm dừng
+
+    // FORM: banner, logo, thông tin, liên hệ, chính sách
+    form#company-info-form(enctype="multipart/form-data")
+      .details
+        .row
+          .label Ảnh breadcrumb (banner)
+          .value
+            .inner-upload-image(image-default=company.banner)
+              input(type="file" id="banner" name="banner" filepond-image)
+            .hint Kích thước gợi ý 1200×300 (tỷ lệ ~4:1)
+        .row
+          .label Logo
+          .value
+            .inner-upload-image(image-default=company.logo)
+              input(type="file" id="logo" name="logo" filepond-image)
+
+        .row
+          .label Thông tin tổng quan
+          .value
+            textarea(name="overview" rows="5" placeholder="Nhập mô tả tổng quan về công ty")= company.overview
+
+        .row
+          .label Địa chỉ
+          .value
+            input(type="text" name="address" placeholder="Nhập địa chỉ chi tiết" value=company.address)
+
+        .row
+          .label Email
+          .value
+            input(type="email" name="email" placeholder="Nhập email liên hệ" value=company.email)
+
+        .row
+          .label Số điện thoại (hotline)
+          .value
+            input(type="text" name="hotline" placeholder="Nhập số điện thoại liên hệ" value=company.hotline)
+
+        .row
+          .label Năm thành lập
+          .value
+            input(type="number" name="foundedYear" min="1900" max="2100" placeholder="Ví dụ: 2010" value=company.foundedYear)
+
+        .row
+          .label Chính sách hủy tour
+          .value
+            textarea(name="cancelPolicyTour" rows="4" placeholder="Nhập chi tiết chính sách hủy tour")= company.cancelPolicyTour
+
+        .row
+          .label Chính sách hủy đặt phòng khách sạn
+          .value
+            textarea(name="cancelPolicyHotel" rows="4" placeholder="Nhập chi tiết chính sách hủy đặt phòng khách sạn")= company.cancelPolicyHotel
+
+      .form-actions
+        button(type="submit").btn-primary Cập nhật
+
+  // style nhẹ để xem trước
+  style.
+    .company-hero { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px; }
+    .company-hero__banner { height:160px; border-radius:12px; overflow:hidden; background:#f6f7fb; display:flex; align-items:center; justify-content:center; }
+    .company-hero__banner img { width:100%; height:100%; object-fit:cover; }
+    .company-hero__banner--placeholder { color:#888; font-size:14px; }
+    .company-hero__logo img { width:80px; height:80px; border-radius:12px; object-fit:cover; }
+    .avatar-fallback { width:80px; height:80px; border-radius:12px; background:#eee; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:28px; }
+    .company-name { margin:0 0 6px 0; }
+    .details .row { display:flex; gap:12px; padding:8px 0; border-bottom:1px dashed #eee; }
+    .details .label { width:200px; color:#666; }
+    .details .value { flex:1; }
+    .details .value input {
+      width: 100%;
+      max-width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .details .value textarea {
+      width: 100%;
+      max-width: 100%;
+      min-height: 120px;
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.5;
+      resize: vertical;
+    }
+    .form-actions { margin-top:14px; }
+    .btn-primary { background:#3b82f6; color:#fff; border:none; padding:10px 16px; border-radius:10px; cursor:pointer; }
+    .btn-primary:hover { opacity:.92; }

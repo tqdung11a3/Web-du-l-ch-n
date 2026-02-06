@@ -1,0 +1,32 @@
+.sider-overlay
+nav.sider.super-admin-sider
+  ul.inner-menu
+    li
+      a(href=`/${pathAdmin}/super-admin/dashboard`) <i class="fa-solid fa-crown"></i> Tổng quan hệ thống
+    li
+      a(href=`/${pathAdmin}/super-admin/company`) <i class="fa-solid fa-building"></i> Quản lý công ty
+    li
+      a(href=`/${pathAdmin}/super-admin/admin`)
+        <i class="fa-solid fa-user-shield"></i> Quản lý Admin
+        if locals.pendingAdminCount && locals.pendingAdminCount > 0
+          span.badge.badge-orange(style="margin-left: 8px;")= pendingAdminCount
+    li
+      a(href=`/${pathAdmin}/super-admin/category`) <i class="fa-solid fa-table-cells-large"></i> Quản lý danh mục
+    li
+      a(href=`/${pathAdmin}/super-admin/news`) <i class="fa-solid fa-newspaper"></i> Quản lý tin tức
+    li
+      a(href=`/${pathAdmin}/super-admin/tours`) <i class="fa-solid fa-plane"></i> Xem tất cả Tours
+    li
+      a(href=`/${pathAdmin}/super-admin/hotels`) <i class="fa-solid fa-hotel"></i> Xem tất cả Hotels
+    li
+      a(href=`/${pathAdmin}/super-admin/orders`) <i class="fa-solid fa-shopping-cart"></i> Xem tất cả Đơn hàng
+    li
+      a(href=`/${pathAdmin}/super-admin/customers`) <i class="fa-solid fa-users"></i> Quản lý Khách hàng
+  hr
+  ul.inner-menu
+    li
+      a(href=`/${pathAdmin}/profile/edit`) <i class="fa-solid fa-user-gear"></i> Thông tin cá nhân
+    li
+      a(href="javascript:;" class="inner-logout") <i class="fa-solid fa-power-off"></i> Đăng xuất
+
+

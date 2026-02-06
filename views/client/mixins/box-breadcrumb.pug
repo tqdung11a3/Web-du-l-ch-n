@@ -1,0 +1,30 @@
+mixin box-breadcrumb(breadcrumb)
+  - const bc = Array.isArray(breadcrumb) ? breadcrumb : [];
+  // Phần tử cuối cùng để lấy tiêu đề
+  - const lastItem = bc.length ? bc[bc.length - 1] : { name: 'Thông tin', avatar: null };
+  // Phần tử có avatar cuối cùng trong mảng để lấy banner (ưu tiên company)
+  - const bannerItem = bc.slice().reverse().find(item => item && item.avatar) || lastItem;
+
+  .box-breadcrumb
+    .inner-image
+      if bannerItem && bannerItem.avatar
+        img(alt=bannerItem.name src=bannerItem.avatar)
+      else
+        // ảnh mặc định nếu không có banner/logo
+        img(alt="Breadcrumb" src="/assets/images/breadcrumb.jpg")
+
+    .inner-content
+      .container
+        // Tiêu đề là tên của phần tử cuối (ví dụ: "Tour đang khuyến mãi")
+        h1.inner-title #{lastItem.name}
+        nav.inner-links
+          ul
+            li
+              a(href="/") Trang Chủ
+              i.fa-solid.fa-angles-right
+            each item in bc
+              li
+                // Ưu tiên dùng item.url nếu có; nếu không thì tự build theo type
+                - const url = item.url ? item.url : (item.type === 'company' ? `/company/${item.slug}` : `/category/${item.slug}`);
+                a(href=url)= item.name
+                i.fa-solid.fa-angles-right

@@ -1,0 +1,179 @@
+extends ../layouts/default.pug
+
+block main
+  .account-page
+    // ===== Sidebar =====
+    .account-sidebar
+      .account-user
+        .avatar #{(user.fullName && user.fullName[0]) || (user.email && user.email[0]) || 'U'}
+        .name #{user.fullName || user.email || 'Người dùng'}
+      ul.account-nav
+        li
+          a(href="/account/profile?tab=info" class=(tab==='info' ? 'active' : ''))
+            i.fa-regular.fa-id-card
+            |  Thông tin cá nhân
+        li
+          a(href="/account/profile?tab=upcoming" class=(tab==='upcoming' ? 'active' : ''))
+            i.fa-regular.fa-calendar-check
+            |  Chuyến đi sắp tới
+        li
+          a(href="/account/profile?tab=history" class=(tab==='history' ? 'active' : ''))
+            i.fa-regular.fa-clock
+            |  Lịch sử chuyến đi
+        li
+          a(href="/account/profile?tab=hotel-bookings" class=(tab==='hotel-bookings' ? 'active' : ''))
+            i.fa-solid.fa-hotel
+            |  Lịch sử đặt phòng
+
+    // ===== Content =====
+    .account-content
+      h1.page-title Tài khoản của bạn
+
+      // ========== TAB: THÔNG TIN CÁ NHÂN ==========
+      if tab === 'info'
+        - var bdayStr = (user && user.birthday) ? new Date(user.birthday).toISOString().slice(0,10) : ''
+        - var totalTours = (user && typeof user.totalTours === 'number') ? user.totalTours : 0
+
+        .panel
+          .panel-head
+            h3 Thông tin cá nhân
+            p.desc Cập nhật thông tin của Quý khách
+          form(id="profile-edit-form")
+            .row
+              .label Họ tên
+              .value
+                input.inner-input(type="text" id="fullName" name="fullName" placeholder="Nhập họ tên" value=user.fullName)
+            .row
+              .label Giới tính
+              .value
+                select.inner-input(id="gender" name="gender")
+                  option(value="") — Chọn —
+                  option(value="male" selected=(user.gender == "male" ? true : false)) Nam
+                  option(value="female" selected=(user.gender == "female" ? true : false)) Nữ
+            .row
+              .label Ngày sinh
+              .value
+                input.inner-input(type="date" id="birthday" name="birthday" value=bdayStr)
+            .row
+              .label Điện thoại
+              .value
+                input.inner-input(type="tel" id="phone" name="phone" placeholder="Số điện thoại" value=user.phone)
+            .row
+              .label Email
+              .value
+                input.inner-input(type="email" id="email" name="email" value=user.email disabled)
+            .row
+              .label CMND/CCCD
+              .value
+                input.inner-input(type="text" id="idNumber" name="idNumber" placeholder="Số CMND/CCCD" value=user.idNumber)
+            .row
+              .label Quốc tịch
+              .value
+                input.inner-input(type="text" id="nationality" name="nationality" placeholder="VD: Việt Nam" value=user.nationality)
+            .row
+              .label Địa chỉ
+              .value
+                input.inner-input(type="text" id="address" name="address" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành" value=user.address)
+            .row
+              .label Tổng số tour đã đặt
+              .value #{totalTours}
+              .act
+            .form-actions
+              button(class="btn-primary") Cập nhật
+
+      // ========== TAB: CHUYẾN ĐI SẮP TỚI ==========
+      if tab === 'upcoming'
+        .panel
+          .panel-head
+            h3 Chuyến đi sắp tới
+            p.desc Những tour có ngày khởi hành từ hôm nay trở đi (đơn không bị hủy).
+          if !upcoming || upcoming.length === 0
+            .empty-box Chưa có chuyến đi nào.
+          else
+            each it in upcoming
+              - const tourDetailUrl = it.companySlug ? `/company/${it.companySlug}/tour/detail/${it.slug}` : `/tour/detail/${it.slug}`
+              .trip-card
+                .pic
+                  a(href=tourDetailUrl)
+                    img(src=it.avatar alt=it.name)
+                .info
+                  h3.title
+                    a(href=tourDetailUrl)= it.name
+                  .meta
+                    span Ngày khởi hành: 
+                    b= it.departureDateFormat
+                    |  • Mã đơn: #{it.orderCode}
+                    |  • Thanh toán: #{it.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                  .qty Số lượng: NL #{it.qtyA} • TE #{it.qtyC} • EB #{it.qtyB}
+                .money #{(it.total||0).toLocaleString('vi-VN')}đ
+
+      // ========== TAB: LỊCH SỬ CHUYẾN ĐI ==========
+      if tab === 'history'
+        .panel
+          .panel-head
+            h3 Lịch sử chuyến đi
+            p.desc Những tour đã khởi hành hoặc đơn đã hủy.
+          if !history || history.length === 0
+            .empty-box Chưa có lịch sử nào.
+          else
+            each it in history
+              - const tourDetailUrl = it.companySlug ? `/company/${it.companySlug}/tour/detail/${it.slug}` : `/tour/detail/${it.slug}`
+              .trip-card.is-muted
+                .pic
+                  a(href=tourDetailUrl)
+                    img(src=it.avatar alt=it.name)
+                .info
+                  h3.title
+                    a(href=tourDetailUrl)= it.name
+                  .meta
+                    span Ngày khởi hành: 
+                    b= it.departureDateFormat || '—'
+                    |  • Mã đơn: #{it.orderCode}
+                    |  • Thanh toán: #{it.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                  .qty Số lượng: NL #{it.qtyA} • TE #{it.qtyC} • EB #{it.qtyB}
+                .money #{(it.total||0).toLocaleString('vi-VN')}đ
+
+      // ========== TAB: LỊCH SỬ ĐẶT PHÒNG ==========
+      if tab === 'hotel-bookings'
+        .panel
+          .panel-head
+            h3 Lịch sử đặt phòng khách sạn
+            p.desc Danh sách các phòng khách sạn bạn đã đặt.
+          if !hotelBookings || hotelBookings.length === 0
+            .empty-box Chưa có lịch sử đặt phòng nào.
+          else
+            each booking in hotelBookings
+              .trip-card(class=(booking.status === 'cancelled' ? 'is-muted' : ''))
+                .pic
+                  if booking.hotelThumbnail
+                    img(src=booking.hotelThumbnail alt=booking.hotelName)
+                  else
+                    img(src="/images/no-image.jpg" alt=booking.hotelName)
+                .info
+                  h3.title= booking.hotelName
+                  if booking.hotelAddress
+                    p.hotel-address
+                      i.fa-solid.fa-location-dot
+                      |  #{booking.hotelAddress}
+                  .meta
+                    span Nhận phòng: 
+                    b= booking.checkInDate
+                    |  • Trả phòng: 
+                    b= booking.checkOutDate
+                    |  (#{booking.nights} đêm)
+                    br
+                    | Mã đơn: #{booking.code}
+                    |  • Thanh toán: #{booking.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                    |  • Trạng thái: 
+                    if booking.status === 'pending'
+                      span Chờ xác nhận
+                    else if booking.status === 'confirmed'
+                      span.status-confirmed Đã xác nhận
+                    else if booking.status === 'checked_in'
+                      span Đã nhận phòng
+                    else if booking.status === 'checked_out'
+                      span Đã trả phòng
+                    else if booking.status === 'cancelled'
+                      span Đã hủy
+                  .qty Số phòng: #{booking.rooms} • Người lớn: #{booking.adults} • Trẻ em: #{booking.children}
+                .money #{(booking.totalAmount||0).toLocaleString('vi-VN')} VND

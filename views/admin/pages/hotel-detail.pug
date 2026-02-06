@@ -1,0 +1,92 @@
+extends ../../layouts/default.pug
+
+block content
+  h1.page-title Chi tiết khách sạn
+
+  if hotel
+    .card.mb-3
+      .card-body
+        h3.card-title #{hotel.name}
+        p #{hotel.address}
+        p
+          | Thành phố:
+          b  #{hotel.cityName || hotel.cityCode || '-'}
+        p
+          | Hạng sao:
+          b  #{hotel.starRating || '-'}
+        p
+          | Giá từ:
+          b  #{hotel.basePrice ? hotel.basePrice.toLocaleString('vi-VN') + ' ' + (hotel.currency || 'VND') : '-'}
+
+        p
+          | Trạng thái:
+          span.badge(class=hotel.status === 'active' ? 'bg-success' : 'bg-secondary')
+            | #{hotel.status === 'active' ? 'Đang hoạt động' : 'Ngừng hiển thị'}
+
+        p
+          | Nổi bật:
+          if hotel.isFeatured
+            span.badge.bg-warning Nổi bật
+          else
+            span.badge.bg-light Không
+
+        if hotel.amenities && hotel.amenities.length
+          p
+            | Tiện nghi:
+            |  
+            span= hotel.amenities.join(", ")
+
+        if hotel.roomTypes && hotel.roomTypes.length
+          h5.mt-3 Loại phòng
+          table.table.table-sm
+            thead
+              tr
+                th Tên phòng
+                th Số khách
+                th Giá từ
+                th Mô tả
+            tbody
+              each room in hotel.roomTypes
+                tr
+                  td #{room.name}
+                  td #{room.maxOccupancy || 3}
+                  td #{room.basePrice ? room.basePrice.toLocaleString('vi-VN') + ' ' + (hotel.currency || 'VND') : '-'}
+                  td #{room.description}
+
+    a.btn.btn-outline-primary(href=`/admin/hotel/edit/${hotel._id}`) Sửa khách sạn
+    a.btn.btn-secondary.ms-2(href="/admin/hotel") Quay lại danh sách
+
+    hr
+
+    h3.mt-4 Booking phòng khách sạn (gần đây)
+
+    if bookings && bookings.length
+      table.table.table-striped
+        thead
+          tr
+            th Mã booking
+            th Khách hàng
+            th Liên hệ
+            th Ngày nhận phòng
+            th Ngày trả phòng
+            th Tổng tiền
+            th Trạng thái
+            th Thanh toán
+        tbody
+          each booking in bookings
+            tr
+              td #{booking.code || booking._id}
+              td #{booking.guest && booking.guest.fullName}
+              td
+                | #{booking.guest && booking.guest.phone} 
+                br
+                | #{booking.guest && booking.guest.email}
+              td #{booking.hotelSnapshot && booking.hotelSnapshot.checkInDate}
+              td #{booking.hotelSnapshot && booking.hotelSnapshot.checkOutDate}
+              td #{booking.totalPrice ? booking.totalPrice.toLocaleString('vi-VN') + ' ' + (booking.currency || 'VND') : '-'}
+              td #{booking.status || '-'}
+              td #{booking.paymentStatus || '-'}
+    else
+      p.mt-2 Chưa có booking nào cho khách sạn này.
+  else
+    p Không tìm thấy khách sạn.

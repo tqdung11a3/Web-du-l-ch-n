@@ -1,0 +1,104 @@
+extends ../layouts/default.pug
+
+block main
+  
+  h1.box-title Tài khoản quản trị
+
+  //- Section 4
+  .section-4
+    .inner-wrap
+      .inner-item
+        <i class="fa-solid fa-filter"></i> Bộ lọc
+      .inner-item
+        select
+          option(value="") Trạng thái
+          option(value="") Hoạt động
+          option(value="") Tạm dừng
+      .inner-item
+        input(type="date")
+        span -
+        input(type="date")
+      .inner-item
+        select
+          option(value="") Nhóm quyền
+          option(value="") Quản trị viên
+          option(value="") Quản lý đơn hàng
+          option(value="") Quản lý tour
+      .inner-item.inner-reset
+        <i class="fa-solid fa-rotate-left"></i> Xóa bộ lọc
+  //- End Section 4
+
+  //- Section 5
+  .section-5
+    .inner-wrap
+      .inner-change-status
+        .inner-item
+          select
+            option(value="") -- Hành động --
+            option(value="") Hoạt động
+            option(value="") Tạm dừng
+            option(value="") Xóa
+        .inner-item
+          button Áp dụng
+      .inner-search
+        <i class="fa-solid fa-magnifying-glass"></i>
+        input(type="text" placeholder="Tìm kiếm")
+      .inner-button-create
+        a(href=`/${pathAdmin}/setting/account-admin/create`) + Tạo mới 
+  //- End Section 5
+
+  //- Section 6
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th
+              input(type="checkbox" class="inner-check")
+            th Họ tên
+            th(class="inner-center") Ảnh đại diện
+            th Email
+            th Số điện thoại
+            th Nhóm quyền
+            th Chức vụ
+            th Trạng thái
+            th Hành động
+        tbody
+          each item in accountAdminList
+            tr
+              td
+                input(type="checkbox" class="inner-check")
+              td #{item.fullName}
+              td(class="inner-center")
+                img(src=item.avatar class="inner-avatar")
+              td #{item.email}
+              td #{item.phone}
+              td #{item.roleName}
+              td #{item.positionCompany}
+              td
+                if (item.status == "initial")
+                  .badge.badge-orange Khởi tạo
+                else if (item.status == "active")
+                  .badge.badge-green Hoạt động
+                else if (item.status == "inactive")
+                  .badge.badge-red Tạm dừng
+              td
+                .inner-buttons
+                  a(href=`/${pathAdmin}/setting/account-admin/edit/${item._id}` class="inner-edit")
+                    <i class="fa-regular fa-pen-to-square"></i>
+                  button(
+                    class="inner-delete"
+                    button-delete
+                    data-api=`/${pathAdmin}/setting/account-admin/delete/${item._id}`
+                    )
+                    <i class="fa-regular fa-trash-can"></i>
+  //- End Section 6
+
+  //- Section 7
+  .section-7
+    span.inner-label Hiển thị 1 - 9 của 78
+    select(class="inner-pagination")
+      option(value="") Trang 1
+      option(value="") Trang 2
+      option(value="") Trang 3
+  //- End Section 7

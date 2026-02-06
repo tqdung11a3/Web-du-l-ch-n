@@ -1,0 +1,189 @@
+extends ../layouts/default.pug
+include ../mixins/change-status.pug
+
+block main
+  
+  h1.box-title Quản lý tour
+
+  // Tabs: Tour trong nước / Tour nước ngoài
+  .tour-tabs
+    a.tour-tab(
+      href=`/${pathAdmin}/tour?tab=domestic`
+      class=currentTab === "domestic" ? "is-active" : ""
+    ) Tour trong nước
+    a.tour-tab(
+      href=`/${pathAdmin}/tour?tab=international`
+      class=currentTab === "international" ? "is-active" : ""
+    ) Tour nước ngoài
+
+  // form giảm giá theo % cho các tour đã chọn
+  form#bulk-discount-form.bulk-discount-form
+    span.bulk-label Giảm giá nhanh:
+    input.bulk-input-percent(
+      type="number"
+      name="percent"
+      min="1"
+      max="90"
+      placeholder="Giảm % (vd: 10)"
+    )
+    input.bulk-input-date(type="date" name="discountFrom")
+    span.bulk-separator đến
+    input.bulk-input-date(type="date" name="discountTo")
+    button.bulk-apply-btn(type="submit") Áp dụng cho tour đã chọn
+  //- Section 4
+  .section-4
+    .inner-wrap
+      .inner-item
+        <i class="fa-solid fa-filter"></i> Bộ lọc
+      .inner-item
+        select
+          option(value="") Trạng thái
+          option(value="") Hoạt động
+          option(value="") Tạm dừng
+      .inner-item
+        select
+          option(value="") Người tạo
+          option(value="") Lê Văn A
+          option(value="") Lê Văn B
+      .inner-item
+        input(type="date")
+        span -
+        input(type="date")
+      .inner-item
+        select
+          option(value="") Danh mục
+          option(value="") Danh mục 1
+          option(value="") Danh mục 2
+      .inner-item
+        select
+          option(value="") Mức giá
+          option(value="") Dưới 2tr
+          option(value="") 2tr đến 4tr
+          option(value="") 4tr đến 8tr
+          option(value="") Trên 8tr
+      .inner-item.inner-reset
+        <i class="fa-solid fa-rotate-left"></i> Xóa bộ lọc
+  //- End Section 4
+
+  //- Section 5
+  .section-5
+    .inner-wrap
+      +change-status(
+        `/${pathAdmin}/tour/change-multi`,
+        [
+          {
+            label: "Hoạt động",
+            value: "active"
+          },
+          {
+            label: "Tạm dừng",
+            value: "inactive"
+          },
+          {
+            label: "Xóa",
+            value: "delete"
+          }
+        ]
+      )
+      .inner-search
+        <i class="fa-solid fa-magnifying-glass"></i>
+        input(type="text" placeholder="Tìm kiếm" search)
+      .inner-button-create
+        - const createLink = currentTab === "international" ? `/${pathAdmin}/tour/create?type=international` : `/${pathAdmin}/tour/create?type=domestic`
+        a(href=createLink) + Tạo mới
+      .inner-button-discount
+        a(href=`/${pathAdmin}/tour/discounts`) Tour khuyến mãi
+      .inner-button-trash
+        a(href=`/${pathAdmin}/tour/trash`) Thùng rác
+  //- End Section 5
+
+  //- Section 6
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th
+              input(type="checkbox" class="inner-check" check-all)
+            th Tên tour
+            th(class="inner-center") Ảnh đại diện
+            th Giá
+            th Còn lại
+            th(class="inner-center") Đánh giá
+            th(class="inner-center") Vị trí
+            th(class="inner-center") Trạng thái
+            th Tạo bởi
+            th Cập nhật bởi
+            th Hành động
+        tbody
+          each item in tourList
+            tr
+              td
+                input(type="checkbox" class="inner-check" check-item=item.id)
+              td #{item.name}
+              td.inner-center
+                img(src=item.avatar class="inner-avatar")
+
+              // === GIÁ ===
+              td
+                - const fmt = (n) => {
+                -   const v = Number(n);
+                -   return Number.isFinite(v) ? v.toLocaleString('vi-VN') : '0';
+                - };
+
+                div NL: #{fmt(item.priceNewAdult)}đ
+                div TE: #{fmt(item.priceNewChildren)}đ
+                if item.babyPricingMode === 'fixed'
+                  div EB: #{fmt(item.priceNewBaby)}đ
+                else
+                  // ghép EB và badge theo bậc, tránh bị kéo giãn
+                  div(style="display:inline-flex;align-items:center;gap:6px")
+                    span EB:
+                    span.badge.badge-blue Theo bậc
+              // === CÒN LẠI (GHẾ) ===
+              td
+                div Còn: #{item.seatsRemaining || 0}
+              // === ĐÁNH GIÁ ===
+              td.inner-center
+                if item.ratingAvg && item.ratingAvg > 0
+                  div(style="display:flex;align-items:center;justify-content:center;gap:4px;")
+                    span(style="color:#ffa500;font-weight:bold;") ★
+                    span(style="font-weight:bold;") #{item.ratingAvg.toFixed(1)}
+                    if item.ratingCount && item.ratingCount > 0
+                      span(style="color:#999;font-size:12px;") (#{item.ratingCount})
+                else
+                  span(style="color:#999;") Chưa có đánh giá
+              td.inner-center #{item.position}
+              td.inner-center
+                if (item.status == "active")
+                  .badge.badge-green Hoạt động
+                else if (item.status == "inactive")
+                  .badge.badge-red Tạm dừng
+              td
+                div #{item.createdByFullName}
+                div.inner-time #{item.createdAtFormat}
+              td
+                div #{item.updatedByFullName}
+                div.inner-time #{item.updatedAtFormat}
+              td
+                .inner-buttons
+                  a(href=`/${pathAdmin}/tour/edit/${item.id}` class="inner-edit")
+                    <i class="fa-regular fa-pen-to-square"></i>
+                  button(
+                    class="inner-delete"
+                    button-delete
+                    data-api=`/${pathAdmin}/tour/delete/${item.id}`
+                  )
+                    <i class="fa-regular fa-trash-can"></i>
+  //- End Section 6
+
+  //- Section 7
+  .section-7
+    span.inner-label
+      | Hiển thị #{pagination.skip + 1}
+      | - #{pagination.skip + tourList.length}
+      | của #{pagination.totalRecord}
+    select(class="inner-pagination" box-pagination)
+      - for (let i = 1; i <= pagination.totalPage; i++)
+        option(value=i) Trang #{i}
+  //- End Section 7

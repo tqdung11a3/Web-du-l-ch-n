@@ -1,0 +1,74 @@
+extends ../layouts/default.pug
+
+block main
+  // Hero: Tổng quan công ty
+  .section-company-hero
+    .container
+      h1.company-hero__title Công ty du lịch
+      p.company-hero__subtitle Khám phá các công ty du lịch uy tín với đa dạng tour, khách sạn và vé máy bay
+      if summary
+        .company-hero__stats
+          .company-hero__stat
+            .stat-number #{summary.totalCompanies || 0}
+            .stat-label Công ty đối tác
+          .company-hero__stat
+            .stat-number #{summary.totalTours || 0}
+            .stat-label Tour du lịch
+          .company-hero__stat
+            .stat-number #{summary.totalCustomers || 0} +
+            .stat-label Khách hàng hài lòng
+
+  // Danh sách công ty
+  .section-company-list
+    .container
+      if companyList && companyList.length
+        each c in companyList
+          a.company-list-card(href=`/company/${c.slug}`)
+            .company-list-card__image
+              if c.banner
+                img(src=c.banner alt=c.name)
+              else if c.logo
+                img(src=c.logo alt=c.name)
+              else
+                .company-list-card__image-placeholder= (c.name && c.name[0]) || 'C'
+            .company-list-card__body
+              h2.company-list-card__title= c.name
+              if c.rating && c.rating > 0
+                .company-list-card__rating-row
+                  .rating-left
+                    i.fa-solid.fa-star
+                    span.rating-number= c.rating.toFixed(1)
+                  .rating-badge Đối tác uy tín
+              if c.shortOverview
+                p.company-list-card__desc= c.shortOverview
+              .company-list-card__meta
+                if c.address
+                  .meta-item
+                    i.fa-solid.fa-location-dot
+                    span= c.address
+                if c.email
+                  .meta-item
+                    i.fa-solid.fa-envelope
+                    span= c.email
+                if c.hotline
+                  .meta-item
+                    i.fa-solid.fa-phone
+                    span= c.hotline
+                if c.foundedYear
+                  .meta-item
+                    i.fa-regular.fa-calendar
+                    span Thành lập: #{c.foundedYear}
+              .company-list-card__foot
+                .company-list-card__stats
+                  if typeof c.toursCount !== 'undefined'
+                    span
+                      b #{c.toursCount}
+                      |  tour du lịch
+                  if typeof c.orderCount !== 'undefined'
+                    span
+                      b #{c.orderCount}
+                      |  đơn hàng
+                .company-list-card__cta-wrap
+                  span.company-list-card__cta Xem chi tiết công ty →
+      else
+        .no-data Không có công ty nào để hiển thị.
