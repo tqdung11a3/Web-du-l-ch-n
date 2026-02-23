@@ -3,7 +3,9 @@ const categoryHelper = require("../../helpers/category.helper");
 const City = require("../../models/city.model");
 const Country = require("../../models/country.model");
 const Tour = require("../../models/tour.model");
+const Hotel = require("../../models/hotel.model");
 const AccountAdmin = require("../../models/account-admin.model");
+const Company = require("../../models/company.model");
 const { pathAdmin } = require("../../config/variable.config");
 const moment = require("moment");
 const mongoose = require("mongoose");
@@ -525,15 +527,60 @@ module.exports.list = async (req, res) => {
     }
   }
 
+    // Lấy cấu hình mức tuổi của công ty
+    const company = companyId
+      ? await Company.findById(companyId).select("tourAgeBands").lean()
+      : null;
+    const tourAgeBands = company?.tourAgeBands || { babyMaxAge: 3, childrenMaxAge: 11 };
+
     res.render("admin/pages/tour-list", {
       pageTitle: "Quản lý tour",
       tourList: tourList,
       pagination: pagination,
       currentTab: tab,
+      tourAgeBands,
+      pathAdmin,
     });
   } catch (error) {
     console.error("Tour list error:", error);
     res.status(500).render("admin/pages/500", { pageTitle: "Lỗi hệ thống" });
+  }
+};
+
+// ── Lưu cấu hình mức tuổi hành khách ────────────────────────────────────────
+module.exports.saveAgeBands = async (req, res) => {
+  try {
+    const companyId = req.account.companyId;
+    if (!companyId) {
+      return res.json({ success: false, message: "Không xác định được công ty" });
+    }
+
+    const babyMaxAge     = parseInt(req.body.babyMaxAge, 10);
+    const childrenMaxAge = parseInt(req.body.childrenMaxAge, 10);
+
+    if (
+      isNaN(babyMaxAge) || isNaN(childrenMaxAge) ||
+      babyMaxAge < 0 || childrenMaxAge <= babyMaxAge
+    ) {
+      return res.json({
+        success: false,
+        message: "Mức tuổi không hợp lệ. Cần: babyMaxAge ≥ 0 và childrenMaxAge > babyMaxAge",
+      });
+    }
+
+    await Company.findByIdAndUpdate(companyId, {
+      "tourAgeBands.babyMaxAge":     babyMaxAge,
+      "tourAgeBands.childrenMaxAge": childrenMaxAge,
+    });
+
+    return res.json({
+      success: true,
+      message: "Đã lưu cấu hình mức tuổi thành công",
+      tourAgeBands: { babyMaxAge, childrenMaxAge },
+    });
+  } catch (err) {
+    console.error("[saveAgeBands]", err);
+    return res.json({ success: false, message: "Lỗi server" });
   }
 };
 
@@ -615,6 +662,7 @@ module.exports.listDiscounts = async (req, res) => {
 };
 
 module.exports.create = async (req, res) => {
+  const companyId = req.account.companyId;
   const categoryList = await Category.find({});
 
   const categoryTree = categoryHelper.buildCategoryTree(categoryList, "");
@@ -681,10 +729,10 @@ module.exports.create = async (req, res) => {
   res.render("admin/pages/tour-create", {
     pageTitle: isInternationalTour ? "Tạo tour nước ngoài" : "Tạo tour trong nước",
     categoryList: categoryTree,
-    cityList: vietnamCities, // Mặc định hiển thị thành phố Việt Nam
+    cityList: vietnamCities,
     europeanCountries,
     europeanCities,
-    isInternationalTour, // Truyền vào view để hiển thị đúng form
+    isInternationalTour,
   });
 };
 
@@ -804,34 +852,47 @@ module.exports.createPost = async (req, res) => {
       ? JSON.parse(req.body.schedules)
       : [];
     
-    // Xử lý departureDates (mảng ngày khởi hành)
-    if (req.body.departureDates) {
+    // Xử lý departures: mảng cặp { departureDate, endDate, seatsTotal, seatsRemaining }
+    // Client gửi lên JSON string
+    if (req.body.departures) {
       try {
-        const datesRaw = typeof req.body.departureDates === "string" 
-          ? JSON.parse(req.body.departureDates) 
-          : req.body.departureDates;
-        if (Array.isArray(datesRaw)) {
-          req.body.departureDates = datesRaw
-            .map((d) => {
-              if (!d) return null;
-              const date = typeof d === "string" ? new Date(d) : d;
-              return date instanceof Date && !isNaN(date) ? date : null;
+        const raw = typeof req.body.departures === "string"
+          ? JSON.parse(req.body.departures)
+          : req.body.departures;
+        if (Array.isArray(raw)) {
+          req.body.departures = raw
+            .map((item) => {
+              if (!item || !item.departureDate) return null;
+              const depDate = new Date(item.departureDate);
+              if (isNaN(depDate)) return null;
+              const endDate = item.endDate ? new Date(item.endDate) : null;
+              const sTotal = Math.max(0, toInt(item.seatsTotal, 0));
+              let sRem = item.seatsRemaining !== undefined
+                ? Math.max(0, toInt(item.seatsRemaining, sTotal))
+                : sTotal;
+              if (sRem > sTotal) sRem = sTotal;
+              return {
+                departureDate: depDate,
+                endDate: endDate && !isNaN(endDate) ? endDate : null,
+                seatsTotal: sTotal,
+                seatsRemaining: sRem,
+              };
             })
-            .filter((d) => d !== null)
-            .sort((a, b) => a - b); // Sắp xếp theo thứ tự tăng dần
+            .filter(Boolean)
+            .sort((a, b) => a.departureDate - b.departureDate);
         } else {
-          req.body.departureDates = [];
+          req.body.departures = [];
         }
       } catch {
-        req.body.departureDates = [];
+        req.body.departures = [];
       }
     } else {
-      req.body.departureDates = [];
+      req.body.departures = [];
     }
-    
-    // Giữ lại departureDate để tương thích (lấy ngày đầu tiên nếu có)
-    req.body.departureDate = req.body.departureDates.length > 0 
-      ? req.body.departureDates[0] 
+
+    // Giữ lại departureDate để tương thích (= ngày khởi hành đầu tiên)
+    req.body.departureDate = req.body.departures.length > 0
+      ? req.body.departures[0].departureDate
       : null;
 
     // --- Điểm nổi bật, bao gồm, không bao gồm ---
@@ -886,6 +947,9 @@ module.exports.createPost = async (req, res) => {
       }
     }
 
+    // --- Khách sạn trong tour đã bỏ; luôn lưu rỗng ---
+    req.body.accommodations = [];
+
     // --- cấu hình giá em bé ---
     const babyPricingMode = (req.body.babyPricingMode || "fixed").trim();
     req.body.babyPricingMode =
@@ -922,19 +986,10 @@ module.exports.createPost = async (req, res) => {
       req.body.priceNewBaby = 0;
     }
 
-    // --- QUẢN LÝ GHẾ: seatsTotal / seatsRemaining ---
-    const seatsTotal = toInt(req.body.seatsTotal, 0);
-    let seatsRemaining =
-      req.body.seatsRemaining !== undefined
-        ? toInt(req.body.seatsRemaining, seatsTotal)
-        : seatsTotal;
-
-    // chuẩn hoá ràng buộc
-    if (seatsRemaining < 0) seatsRemaining = 0;
-    if (seatsRemaining > seatsTotal) seatsRemaining = seatsTotal;
-
-    req.body.seatsTotal = seatsTotal;
-    req.body.seatsRemaining = seatsRemaining;
+    // Ghế đã chuyển sang từng departure; giữ top-level = tổng tất cả departures (backward compat)
+    const depArr = req.body.departures || [];
+    req.body.seatsTotal = depArr.reduce((s, d) => s + (d.seatsTotal || 0), 0);
+    req.body.seatsRemaining = depArr.reduce((s, d) => s + (d.seatsRemaining || 0), 0);
 
     // bỏ các field stock cũ nếu client còn gửi lên
     delete req.body.stockAdult;
@@ -1033,18 +1088,19 @@ module.exports.edit = async (req, res) => {
       );
     }
 
-    // Chuẩn hoá departureDates cho form:
-    //   departureDatesBlocks: [{ dateFormat: 'YYYY-MM-DD' }]
-    const dates = Array.isArray(tourDetail.departureDates)
-      ? tourDetail.departureDates
+    // Chuẩn hoá departures cho form:
+    //   departuresBlocks: [{ departureDateFormat, endDateFormat }]
+    const departuresArr = Array.isArray(tourDetail.departures) && tourDetail.departures.length > 0
+      ? tourDetail.departures
       : tourDetail.departureDate
-      ? [tourDetail.departureDate]
+      ? [{ departureDate: tourDetail.departureDate, endDate: null }]
       : [];
-    tourDetail.departureDatesBlocks = dates
-      .filter((d) => d)
-      .map((d) => ({
-        dateFormat: moment(d).format("YYYY-MM-DD"),
-      }));
+    tourDetail.departuresBlocks = departuresArr.map((d) => ({
+      departureDateFormat: d.departureDate ? moment(d.departureDate).format("YYYY-MM-DD") : "",
+      endDateFormat: d.endDate ? moment(d.endDate).format("YYYY-MM-DD") : "",
+      seatsTotal: d.seatsTotal ?? 0,
+      seatsRemaining: d.seatsRemaining ?? 0,
+    }));
 
     // ===== THỜI HẠN KHUYẾN MÃI (prefill cho input date) =====
     tourDetail.discountFromInput = tourDetail.discountFrom
@@ -1184,7 +1240,7 @@ module.exports.edit = async (req, res) => {
       pageTitle: "Chỉnh sửa tour",
       categoryList: categoryTree,
       tourDetail,
-      cityList: vietnamCities, // Mặc định hiển thị thành phố Việt Nam
+      cityList: vietnamCities,
       europeanCountries,
       europeanCities,
       isInternationalTour,
@@ -1246,34 +1302,46 @@ module.exports.editPatch = async (req, res) => {
       ? JSON.parse(req.body.schedules)
       : [];
     
-    // Xử lý departureDates (mảng ngày khởi hành)
-    if (req.body.departureDates) {
+    // Xử lý departures: mảng cặp { departureDate, endDate, seatsTotal, seatsRemaining }
+    if (req.body.departures) {
       try {
-        const datesRaw = typeof req.body.departureDates === "string" 
-          ? JSON.parse(req.body.departureDates) 
-          : req.body.departureDates;
-        if (Array.isArray(datesRaw)) {
-          req.body.departureDates = datesRaw
-            .map((d) => {
-              if (!d) return null;
-              const date = typeof d === "string" ? new Date(d) : d;
-              return date instanceof Date && !isNaN(date) ? date : null;
+        const raw = typeof req.body.departures === "string"
+          ? JSON.parse(req.body.departures)
+          : req.body.departures;
+        if (Array.isArray(raw)) {
+          req.body.departures = raw
+            .map((item) => {
+              if (!item || !item.departureDate) return null;
+              const depDate = new Date(item.departureDate);
+              if (isNaN(depDate)) return null;
+              const endDate = item.endDate ? new Date(item.endDate) : null;
+              const sTotal = Math.max(0, toInt(item.seatsTotal, 0));
+              let sRem = item.seatsRemaining !== undefined
+                ? Math.max(0, toInt(item.seatsRemaining, sTotal))
+                : sTotal;
+              if (sRem > sTotal) sRem = sTotal;
+              return {
+                departureDate: depDate,
+                endDate: endDate && !isNaN(endDate) ? endDate : null,
+                seatsTotal: sTotal,
+                seatsRemaining: sRem,
+              };
             })
-            .filter((d) => d !== null)
-            .sort((a, b) => a - b); // Sắp xếp theo thứ tự tăng dần
+            .filter(Boolean)
+            .sort((a, b) => a.departureDate - b.departureDate);
         } else {
-          req.body.departureDates = [];
+          req.body.departures = [];
         }
       } catch {
-        req.body.departureDates = [];
+        req.body.departures = [];
       }
     } else {
-      req.body.departureDates = [];
+      req.body.departures = [];
     }
-    
-    // Giữ lại departureDate để tương thích (lấy ngày đầu tiên nếu có)
-    req.body.departureDate = req.body.departureDates.length > 0 
-      ? req.body.departureDates[0] 
+
+    // Giữ lại departureDate để tương thích
+    req.body.departureDate = req.body.departures.length > 0
+      ? req.body.departures[0].departureDate
       : null;
 
     // --- Điểm nổi bật, bao gồm, không bao gồm ---
@@ -1342,6 +1410,9 @@ module.exports.editPatch = async (req, res) => {
       delete req.body.discountTo;
     }
 
+    // --- Khách sạn trong tour đã bỏ; luôn lưu rỗng ---
+    req.body.accommodations = [];
+
     // --- Cấu hình giá em bé ---
     const mode = (
       req.body.babyPricingMode ||
@@ -1384,19 +1455,10 @@ module.exports.editPatch = async (req, res) => {
       req.body.babyPricingRules = [];
     }
 
-    // --- QUẢN LÝ GHẾ ---
-    const seatsTotal = toInt(req.body.seatsTotal, existed.seatsTotal || 0);
-    let seatsRemaining =
-      req.body.seatsRemaining !== undefined
-        ? toInt(req.body.seatsRemaining, seatsTotal)
-        : existed.seatsRemaining ?? seatsTotal;
-
-    // Ràng buộc hợp lệ
-    if (seatsRemaining < 0) seatsRemaining = 0;
-    if (seatsRemaining > seatsTotal) seatsRemaining = seatsTotal;
-
-    req.body.seatsTotal = seatsTotal;
-    req.body.seatsRemaining = seatsRemaining;
+    // Ghế đã chuyển sang từng departure; giữ top-level = tổng tất cả departures (backward compat)
+    const depArrE = req.body.departures || [];
+    req.body.seatsTotal = depArrE.reduce((s, d) => s + (d.seatsTotal || 0), 0);
+    req.body.seatsRemaining = depArrE.reduce((s, d) => s + (d.seatsRemaining || 0), 0);
 
     // BỎ các field stock cũ nếu client còn gửi
     delete req.body.stockAdult;

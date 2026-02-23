@@ -5,16 +5,135 @@ block main
   
   h1.box-title Quản lý tour
 
-  // Tabs: Tour trong nước / Tour nước ngoài
+  // Tab: Tour trong nước (tab Tour nước ngoài đã ẩn)
   .tour-tabs
     a.tour-tab(
       href=`/${pathAdmin}/tour?tab=domestic`
       class=currentTab === "domestic" ? "is-active" : ""
     ) Tour trong nước
-    a.tour-tab(
-      href=`/${pathAdmin}/tour?tab=international`
-      class=currentTab === "international" ? "is-active" : ""
-    ) Tour nước ngoài
+
+  //- ── Cấu hình mức tuổi hành khách ──────────────────────────────────────────
+  .age-band-panel
+    .age-band-panel__header(onclick="toggleAgeBandPanel()")
+      .age-band-panel__header-left
+        i.fa-solid.fa-users-gear
+        span  Cấu hình mức tuổi hành khách
+        span.age-band-panel__subtitle
+          |  (Người lớn từ #{(tourAgeBands.childrenMaxAge || 11) + 1} tuổi · Trẻ em #{(tourAgeBands.babyMaxAge || 3) + 1}–#{tourAgeBands.childrenMaxAge || 11} tuổi · Em bé 0–#{tourAgeBands.babyMaxAge || 3} tuổi)
+      .age-band-panel__toggle
+        i.fa-solid.fa-chevron-down#age-band-chevron
+
+    .age-band-panel__body#age-band-body(style="display:none")
+      .age-band-panel__desc
+        i.fa-solid.fa-circle-info
+        |  Cấu hình này xác định ngưỡng tuổi để phân loại hành khách khi hiển thị và đặt tour. Áp dụng cho tất cả tour của công ty.
+
+      .age-band-grid
+        //- Em bé
+        .age-band-card.age-band-card--baby
+          .age-band-card__icon
+            i.fa-solid.fa-baby
+          .age-band-card__label Em bé
+          .age-band-card__range
+            span Từ 0 đến
+            input#baby-max-age.age-band-input(
+              type="number" min="0" max="10"
+              value=tourAgeBands.babyMaxAge !== undefined ? tourAgeBands.babyMaxAge : 3
+            )
+            span tuổi
+          .age-band-card__note Không tính ghế ngồi riêng (tuỳ cài đặt)
+
+        //- Trẻ em
+        .age-band-card.age-band-card--children
+          .age-band-card__icon
+            i.fa-solid.fa-child
+          .age-band-card__label Trẻ em
+          .age-band-card__range
+            span#children-min-display Từ #{(tourAgeBands.babyMaxAge || 3) + 1} đến
+            input#children-max-age.age-band-input(
+              type="number" min="1" max="17"
+              value=tourAgeBands.childrenMaxAge !== undefined ? tourAgeBands.childrenMaxAge : 11
+            )
+            span tuổi
+
+        //- Người lớn
+        .age-band-card.age-band-card--adult
+          .age-band-card__icon
+            i.fa-solid.fa-person
+          .age-band-card__label Người lớn
+          .age-band-card__range
+            span Từ
+            span#adult-min-display #{(tourAgeBands.childrenMaxAge || 11) + 1}
+            span tuổi trở lên
+          .age-band-card__note Áp dụng giá người lớn đầy đủ
+
+      .age-band-panel__actions
+        button#btn-save-age-bands.btn-primary(type="button")
+          i.fa-solid.fa-floppy-disk
+          |  Lưu cấu hình
+        span#age-band-msg
+
+  script.
+    function toggleAgeBandPanel() {
+      var body    = document.getElementById('age-band-body');
+      var chevron = document.getElementById('age-band-chevron');
+      var open    = body.style.display !== 'none';
+      body.style.display    = open ? 'none' : '';
+      chevron.style.transform = open ? '' : 'rotate(180deg)';
+    }
+
+    function updateAgeBandDisplay() {
+      var babyMax     = parseInt(document.getElementById('baby-max-age').value) || 0;
+      var childrenMax = parseInt(document.getElementById('children-max-age').value) || 0;
+      var childrenMin = babyMax + 1;
+      var adultMin    = childrenMax + 1;
+
+      var childrenMinEl = document.getElementById('children-min-display');
+      var adultMinEl    = document.getElementById('adult-min-display');
+      var subtitle      = document.querySelector('.age-band-panel__subtitle');
+
+      if (childrenMinEl) childrenMinEl.textContent = 'Từ ' + childrenMin + ' đến';
+      if (adultMinEl)    adultMinEl.textContent    = adultMin;
+      if (subtitle)      subtitle.textContent      =
+        ' (Người lớn từ ' + adultMin + ' tuổi · Trẻ em ' + childrenMin + '–' + childrenMax + ' tuổi · Em bé 0–' + babyMax + ' tuổi)';
+    }
+
+    document.getElementById('baby-max-age').addEventListener('input', updateAgeBandDisplay);
+    document.getElementById('children-max-age').addEventListener('input', updateAgeBandDisplay);
+
+    document.getElementById('btn-save-age-bands').addEventListener('click', function() {
+      var btn         = this;
+      var msg         = document.getElementById('age-band-msg');
+      var babyMax     = parseInt(document.getElementById('baby-max-age').value);
+      var childrenMax = parseInt(document.getElementById('children-max-age').value);
+
+      if (isNaN(babyMax) || isNaN(childrenMax) || childrenMax <= babyMax) {
+        msg.textContent = 'Mức tuổi không hợp lệ: trẻ em phải lớn hơn em bé';
+        msg.style.color = '#ef4444';
+        return;
+      }
+
+      btn.disabled = true;
+      msg.textContent = 'Đang lưu...';
+
+      fetch('!{`/${pathAdmin}/tour/age-bands`}', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ babyMaxAge: babyMax, childrenMaxAge: childrenMax }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          btn.disabled = false;
+          msg.textContent = data.message || '';
+          msg.style.color = data.success ? '#16a34a' : '#ef4444';
+          if (data.success) updateAgeBandDisplay();
+        })
+        .catch(function() {
+          btn.disabled = false;
+          msg.textContent = 'Lỗi kết nối';
+          msg.style.color = '#ef4444';
+        });
+    });
 
   // form giảm giá theo % cho các tour đã chọn
   form#bulk-discount-form.bulk-discount-form
@@ -106,6 +225,7 @@ block main
             th
               input(type="checkbox" class="inner-check" check-all)
             th Tên tour
+            th(class="inner-center" title="6 ký tự cuối MongoDB _id, dùng để đối chiếu trên lịch phòng khách sạn") ID tour
             th(class="inner-center") Ảnh đại diện
             th Giá
             th Còn lại
@@ -121,6 +241,8 @@ block main
               td
                 input(type="checkbox" class="inner-check" check-item=item.id)
               td #{item.name}
+              td.inner-center
+                span.tour-short-id ##{String(item.id).slice(-6)}
               td.inner-center
                 img(src=item.avatar class="inner-avatar")
 

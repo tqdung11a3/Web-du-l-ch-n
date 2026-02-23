@@ -77,10 +77,10 @@ module.exports.list = async (req, res) => {
       find.departureDate = new Date(departureDate);
     }
 
-    // 3. Số chỗ trống tối thiểu
+    // 3. Số chỗ trống tối thiểu: tìm tour có ÍT NHẤT 1 ngày khởi hành còn đủ chỗ
     const seats = Number(minSeats) || 0;
     if (seats > 0) {
-      find.seatsRemaining = { $gte: seats };
+      find.departures = { $elemMatch: { seatsRemaining: { $gte: seats } } };
     }
 
     // 4. Khoảng giá priceNewAdult: "min-max"
@@ -139,6 +139,17 @@ module.exports.list = async (req, res) => {
         const c = Number(item.stockChildren || 0);
         item.seatsRemaining = a + c;
       }
+
+      item.departuresWithSeats =
+        Array.isArray(item.departures) && item.departures.length > 0
+          ? item.departures
+              .filter((d) => d && d.departureDate)
+              .map((d) => ({
+                dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+                seatsTotal: d.seatsTotal ?? 0,
+                seatsRemaining: d.seatsRemaining ?? 0,
+              }))
+          : [];
     }
 
     // 8. Gắn thông tin công ty để product.pug hiển thị

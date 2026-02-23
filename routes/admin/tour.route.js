@@ -46,6 +46,9 @@ router.patch(
   tourController.editPatch
 );
 
+// Cấu hình mức tuổi hành khách (áp dụng toàn bộ tour công ty)
+router.patch("/age-bands", auth.verifyToken, tourController.saveAgeBands);
+
 router.patch("/delete/:id", auth.verifyToken, tourController.deletePatch);
 
 router.patch("/undo/:id", auth.verifyToken, tourController.undoPatch);

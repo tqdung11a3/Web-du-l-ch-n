@@ -28,14 +28,26 @@ router.get("/booking/room-management", hotelController.roomManagement);
 // Assign phòng cho booking
 router.post("/booking/assign-room", hotelController.assignRoom);
 
+// Huỷ xếp phòng
+router.post("/booking/unassign-room", hotelController.unassignRoom);
+
 // Cập nhật trạng thái booking
 router.post("/booking/update-status", hotelController.updateBookingStatus);
+
+// Xóa đơn đặt phòng
+router.post("/booking/delete", hotelController.deleteBooking);
 
 // Lịch phòng
 router.get("/booking/calendar", hotelController.bookingCalendar);
 
 // Danh sách khách hàng đã xếp phòng
 router.get("/booking/guest-list", hotelController.guestList);
+
+// Phòng đang giữ cho tour
+router.get("/booking/tour-holds", hotelController.tourHolds);
+
+// Giải phóng phòng giữ chỗ tour chưa gán khách
+router.post("/booking/release-holds", hotelController.releaseHolds);
 
 // Danh sách khách sạn
 router.get("/list", hotelController.list);

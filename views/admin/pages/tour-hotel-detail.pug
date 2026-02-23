@@ -1,0 +1,146 @@
+extends ../layouts/default.pug
+
+block main
+  h1.box-title Cấu hình khung thời gian – Khách sạn
+
+  //- ── Breadcrumb ──────────────────────────────────────────────────────
+  .th-breadcrumb
+    a(href=`/${pathAdmin}/tour-hotel/list`)
+      i.fa-solid.fa-arrow-left
+      |  Danh sách tour
+    span.th-sep  /
+    span= tour.name
+
+  //- ── Chọn lịch khởi hành ─────────────────────────────────────────────
+  .th-departure-select-bar
+    label.th-label
+      i.fa-solid.fa-calendar-day
+      |  Chọn lịch khởi hành:
+    select#departure-select.th-select(onchange=`window.location.href='/${pathAdmin}/tour-hotel/detail/${tour._id}?departure='+this.value`)
+      option(value="" disabled selected=!departureDateParam) -- Chọn lịch --
+      each dep in tour.departuresFormatted
+        option(
+          value=dep.departureDateStr
+          selected=(dep.departureDateStr === departureDateParam)
+        ) #{dep.departureDateDisplay} → #{dep.endDateDisplay}
+
+  if !selectedDeparture
+    .th-hint
+      i.fa-solid.fa-circle-info
+      |  Vui lòng chọn một lịch khởi hành bên trên để bắt đầu cấu hình.
+
+  else
+    //- ── Header: thông tin departure đang chọn ───────────────────────────
+    .th-config-header
+      .th-config-header__item
+        span.th-config-label Khởi hành
+        strong= moment(selectedDeparture.departureDate).format('DD/MM/YYYY')
+      .th-config-header__item
+        span.th-config-label Kết thúc
+        strong= selectedDeparture.endDate ? moment(selectedDeparture.endDate).format('DD/MM/YYYY') : '—'
+      .th-config-header__item
+        span.th-config-label Tổng ngày
+        - const totalDays = selectedDeparture.endDate ? moment(selectedDeparture.endDate).diff(moment(selectedDeparture.departureDate), 'days') : 0
+        strong= totalDays + ' ngày'
+      .th-config-header__item
+        span.th-config-label Trạng thái
+        if existingSegment
+          if existingSegment.status === 'confirmed'
+            span.badge.badge--green Đã xác nhận
+          else
+            span.badge.badge--yellow Bản nháp
+        else
+          span.badge.badge--gray Chưa cấu hình
+
+    //- ── Số người yêu cầu ────────────────────────────────────────────────
+    .th-pax-row
+      label.th-label(for="pax-required")
+        i.fa-solid.fa-users
+        |  Số người cần bố trí phòng:
+      input#pax-required.th-input-number(
+        type="number" min="1"
+        value=(existingSegment ? existingSegment.paxRequired : (selectedDeparture && selectedDeparture.seatsTotal ? selectedDeparture.seatsTotal : (tour.seatsTotal || '')))
+        placeholder="Nhập số người..."
+      )
+      button#sync-pax-btn.btn-sync-pax(
+        type="button"
+        title="Cập nhật theo số ghế hiện tại của lịch khởi hành này"
+        data-seats=`${selectedDeparture && selectedDeparture.seatsTotal != null ? selectedDeparture.seatsTotal : ''}`
+      )
+        i.fa-solid.fa-rotate
+        |  Đồng bộ từ tour
+
+    //- ── Khung thời gian ─────────────────────────────────────────────────
+    h2.th-section-title Khung thời gian lưu trú
+    p.th-section-desc Chia khoảng #{moment(selectedDeparture.departureDate).format('DD/MM/YYYY')} → #{selectedDeparture.endDate ? moment(selectedDeparture.endDate).format('DD/MM/YYYY') : '?'} thành các khung. Mỗi khung chọn một hoặc nhiều khách sạn.
+
+    #segments-wrapper.th-segments-wrapper
+      //- Dữ liệu cũ sẽ được render bởi JS từ #existing-data
+
+    .th-segments-actions
+      button#add-segment-btn.btn-add-segment(type="button")
+        i.fa-solid.fa-plus
+        |  Thêm khung thời gian
+
+    //- ── Tổng kết & nút hành động ─────────────────────────────────────────
+    .th-summary-bar
+      .th-summary-item
+        span Sức chứa tối thiểu:
+        strong#total-capacity-display 0 người
+        span.th-summary-hint  (khung yếu nhất)
+      .th-summary-item
+        span Cần bố trí:
+        strong#pax-required-display 0 người
+      .th-summary-item#capacity-status-item
+
+    .th-action-bar
+      button#save-draft-btn.btn-save-draft(type="button")
+        i.fa-solid.fa-floppy-disk
+        |  Lưu bản nháp
+      button#confirm-btn.btn-confirm(type="button")
+        i.fa-solid.fa-circle-check
+        if existingSegment && existingSegment.status === 'confirmed'
+          |  Xác nhận lại (Re-assign phòng)
+        else
+          |  Xác nhận & Giữ phòng
+      if existingSegment && existingSegment.status === 'confirmed'
+        button#cancel-btn.btn-cancel-segment(type="button")
+          i.fa-solid.fa-ban
+          |  Huỷ & Giải phóng phòng
+
+    //- ── Hidden data cho JS ───────────────────────────────────────────────
+    script#existing-data(type="application/json")!= JSON.stringify(existingSegment)
+    script#hotels-data(type="application/json")!= JSON.stringify(hotels)
+    script#departure-meta(type="application/json")!= JSON.stringify({ tourId: String(tour._id), departureDate: moment(selectedDeparture.departureDate).format('YYYY-MM-DD'), endDate: selectedDeparture.endDate ? moment(selectedDeparture.endDate).format('YYYY-MM-DD') : '' })
+    script#path-admin(type="application/json")!= JSON.stringify(pathAdmin)
+
+    //- Template HTML cho 1 khung thời gian (dùng bởi JS)
+    template#segment-template
+      .th-segment-item
+        .th-segment-header
+          .th-segment-dates
+            .th-segment-date-field
+              label Từ ngày
+              input.seg-from-date(type="date")
+            .th-segment-date-field
+              label Đến ngày
+              input.seg-to-date(type="date")
+          .th-segment-header-right
+            span.th-segment-capacity-badge Sức chứa: 0
+            button.seg-remove-btn(type="button")
+              i.fa-solid.fa-trash
+              |  Xoá khung
+
+        .th-hotels-in-segment
+          .th-add-hotel-row
+            select.seg-hotel-select
+              option(value="" disabled selected) -- Chọn khách sạn --
+            button.seg-add-hotel-btn(type="button")
+              i.fa-solid.fa-plus
+              |  Thêm khách sạn
+            button.seg-suggest-btn(type="button")
+              i.fa-solid.fa-wand-magic-sparkles
+              |  Gợi ý tự động
+
+          .seg-hotels-list
+

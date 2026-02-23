@@ -125,6 +125,9 @@ button {
 .header .inner-menu {
   flex: 1;
   min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .header .inner-menu > ul {
@@ -598,11 +601,12 @@ button {
   background-color: transparent;
   cursor: pointer;
   border-radius: 10px;
+  padding-left: 14px;
 }
 
 /* Style item bên trong dropdown khoảng giá */
 .section-1 .inner-form .inner-box.inner-price select.inner-input option {
-  padding: 8px 14px;
+  padding: 8px 14px 8px 20px;
 }
 
 .section-1 .inner-form .inner-box .inner-input-group .inner-icon {
@@ -1383,6 +1387,93 @@ button {
   font-weight: 700;
   font-size: 14px;
   color: #ffffff;
+}
+
+/* ===== Lịch khởi hành + số chỗ theo từng ngày (product-item) ===== */
+.inner-departures-seats {
+  margin: 8px 0 6px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.inner-departures-seats__head {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: #f1f3f5;
+  font-weight: 700;
+  color: #495057;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.inner-departures-seats__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+  border-top: 1px solid #f1f3f5;
+  transition: background 0.15s;
+}
+
+.inner-departures-seats__row:hover {
+  background: #f8f9fa;
+}
+
+.inner-departures-seats__row.is-full {
+  opacity: 0.6;
+}
+
+.inner-departures-seats__col--date {
+  color: #495057;
+}
+
+.inner-departures-seats__col--seats {
+  text-align: right;
+}
+
+.seats-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.seats-badge--ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.seats-badge--low {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.seats-badge--full {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Số chỗ còn lại theo ngày khởi hành – tour detail */
+.departure-seat-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #374151;
+  flex-wrap: wrap;
+}
+.departure-seat-info .seats-badge {
+  font-size: 12px;
+}
+.departure-seat-info .seats-total-hint {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 /* Rating stars in product card */
@@ -2978,6 +3069,112 @@ button {
   color: var(--color-primary);
 }
 
+/* ── Khối nhập tuổi hành khách nhỏ ── */
+.age-inputs-wrapper {
+  margin: 10px 0 14px;
+  border: 1px solid #e3edff;
+  border-radius: 10px;
+  background: #f6faff;
+  overflow: hidden;
+}
+
+.age-inputs-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: #dce9ff;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #1a66cc;
+}
+
+.age-inputs-header i {
+  font-size: 14px;
+}
+
+.age-inputs-body {
+  padding: 10px 14px 6px;
+}
+
+.age-inputs-group {
+  margin-bottom: 10px;
+}
+
+.age-inputs-group-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.age-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.age-input-label {
+  font-size: 13px;
+  color: #444;
+  min-width: 90px;
+  white-space: nowrap;
+}
+
+.age-input-field {
+  width: 64px;
+  padding: 4px 8px;
+  border: 1px solid #c3d6f5;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.age-input-field:focus {
+  border-color: var(--color-primary, #0d6efd);
+}
+
+.age-input-hint {
+  font-size: 12px;
+  color: #888;
+}
+
+/* Age tags trên cart / order success / order-edit */
+.cart-ages-info,
+.inner-ages-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 12.5px;
+}
+
+.inner-age-tag {
+  display: inline-block;
+  background: #e8f0fe;
+  color: #1a66cc;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cart-ages-info {
+  color: #555;
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+
+.cart-ages-info b {
+  color: #1a66cc;
+}
+/* ── End khối nhập tuổi ── */
+
 .box-tour-detail .inner-total {
   margin-bottom: 18px;
   display: flex;
@@ -3712,6 +3909,15 @@ button {
   font-weight: 500;
   font-size: 14px;
   color: #898b8d;
+}
+
+.section-11 .inner-tour-item .inner-quantity .inner-item-input .cart-qty-fixed {
+  display: inline-block;
+  width: 45px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+  text-align: center;
 }
 
 .section-11 .inner-tour-item .inner-quantity .inner-item-price {
@@ -9063,6 +9269,40 @@ body {
   vertical-align: top;
 }
 
+.compare-departures-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.compare-departures-seats__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #f8f9fa;
+}
+
+.compare-departures-seats__row.is-full {
+  background: #fff0f0;
+}
+
+.compare-departures-seats__row.is-low {
+  background: #fff8e6;
+}
+
+.compare-departures-seats__date {
+  font-size: 13px;
+  color: #444;
+  white-space: nowrap;
+}
+
+.compare-departures-seats__badge {
+  flex-shrink: 0;
+}
+
 .compare-rating {
   display: flex;
   align-items: center;
@@ -10933,6 +11173,31 @@ body {
   color: #fff;
 }
 
+.edit-guests-popup__done-row {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.edit-guests-popup__done-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: #0071c2;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.edit-guests-popup__done-btn:hover {
+  background: #005999;
+}
+
 .form-group--actions {
   display: flex;
   gap: 12px;
@@ -11943,4 +12208,286 @@ body {
     font-size: 14px;
     padding: 12px 20px;
   }
+}
+
+/* ── Trang order-pending (đặt tour) ────────────────────────────────────────── */
+.order-pending-page {
+  background: #f8f9ff;
+  min-height: 80vh;
+  padding: 40px 0 60px;
+}
+
+/* Tour item trong pending page */
+.pending-tour-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0f1f8;
+}
+.pending-tour-item:last-child { border-bottom: none; }
+
+.pending-tour-img {
+  width: 90px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.pending-tour-body { flex: 1; min-width: 0; }
+
+.pending-tour-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 6px;
+  white-space: normal;
+}
+
+.pending-tour-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.pending-tour-meta i { color: #6366f1; margin-right: 3px; }
+
+.pending-tour-qty {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+.pending-tour-qty i { color: #6366f1; margin-right: 3px; }
+
+/* Info card tổng tiền */
+.info-card--total {
+  background: #f0f4ff;
+  border: 1px solid #c7d2fe;
+}
+.info-row--total {
+  padding-top: 8px;
+  margin-top: 6px;
+  border-top: 1px solid #c7d2fe;
+}
+.info-row--total .info-label { font-weight: 700; font-size: 15px; }
+.info-row--total .total-amount {
+  font-size: 20px;
+  color: #e53e3e;
+}
+
+/* Badge trạng thái */
+.badge-pending {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Payment info box */
+.payment-info {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.7;
+}
+.payment-info i { margin-right: 6px; color: #6366f1; }
+.payment-info--highlight {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+}
+
+.text-green { color: #059669; }
+
+.hotel-avail-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #fff7ed;
+  border: 1.5px solid #fb923c;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  color: #9a3412;
+  font-size: 14px;
+}
+.hotel-avail-warning > i {
+  font-size: 20px;
+  color: #f97316;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.hotel-avail-warning ul {
+  margin: 6px 0 4px 16px;
+  padding: 0;
+}
+.hotel-avail-warning ul li {
+  margin-bottom: 3px;
+}
+.hotel-avail-warning span {
+  opacity: .85;
+}
+
+.btn-cancel-hold {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 20px;
+  background: transparent;
+  border: 2px solid #ef4444;
+  color: #ef4444;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.btn-cancel-hold:hover {
+  background: #ef4444;
+  color: #fff;
+}
+.btn-cancel-hold:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* ======== CCCD Upload Area (client checkout) ======== */
+.cccd-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.cccd-upload-area {
+  position: relative;
+  border: 2px dashed #ccc;
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  background: #fafafa;
+}
+.cccd-upload-area.dragover,
+.cccd-upload-area:hover {
+  border-color: #3CB371;
+  background: #f0fdf4;
+}
+.cccd-upload-area input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.cccd-upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #888;
+  font-size: 14px;
+  pointer-events: none;
+}
+.cccd-upload-placeholder i {
+  font-size: 28px;
+  color: #3CB371;
+}
+
+/* ======== CCCD Preview Thumbnails (client) ======== */
+.cccd-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.cccd-thumb {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.cccd-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cccd-thumb-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0;
+}
+.cccd-thumb-remove:hover {
+  background: #e74c3c;
+}
+
+/* ======== CCCD Gallery (admin detail pages) ======== */
+.cccd-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+.cccd-gallery-item {
+  display: block;
+  width: 120px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  transition: transform .2s, box-shadow .2s;
+}
+.cccd-gallery-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 12px rgba(0,0,0,.15);
+}
+.cccd-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cccd-gallery--inline {
+  margin-top: 8px;
+}
+.cccd-gallery--inline .cccd-gallery-item {
+  width: 50px;
+  height: 36px;
+  border-radius: 4px;
+}
+
+/* ======== Hotel checkout CCCD (form-group--full) ======== */
+.form-group--full {
+  grid-column: 1 / -1;
 }

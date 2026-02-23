@@ -566,12 +566,21 @@ if (boxTourDetail) {
   const inputBaby = boxTourDetail.querySelector('[input-quantity="stockBaby"]');
   const babyUnitSpan = boxTourDetail.querySelector("[data-baby-unit]");
 
-  const maxSeats =
+  const globalMaxSeats =
     parseInt(boxTourDetail.getAttribute("data-seats-remaining")) || 0;
+  let maxSeats = globalMaxSeats;
   const priceAdultBase = parseInt(boxTourDetail.dataset.priceAdult) || 0;
   const priceChildBase = parseInt(boxTourDetail.dataset.priceChildren) || 0;
   const priceBabyFixed = parseInt(boxTourDetail.dataset.priceBaby) || 0; // dùng khi mode=fixed
   const babyMode = (boxTourDetail.dataset.babyMode || "fixed").trim();
+
+  // --- Age band config từ data attributes ---
+  const dtBabyMaxAge       = parseInt(boxTourDetail.dataset.babyMaxAge, 10);
+  const dtChildrenMinAge   = parseInt(boxTourDetail.dataset.childrenMinAge, 10);
+  const dtChildrenMaxAge   = parseInt(boxTourDetail.dataset.childrenMaxAge, 10);
+  const agebabyMax         = isNaN(dtBabyMaxAge)     ? 3  : dtBabyMaxAge;
+  const ageChildMin        = isNaN(dtChildrenMinAge) ? 4  : dtChildrenMinAge;
+  const ageChildMax        = isNaN(dtChildrenMaxAge) ? 11 : dtChildrenMaxAge;
 
   let babyRules = [];
   try {
@@ -691,11 +700,68 @@ if (boxTourDetail) {
 
   // Lắng nghe input
   listInputQuantity.forEach((input) => {
-    input.addEventListener("input", () => drawBoxDetail(input));
+    input.addEventListener("input", () => {
+      drawBoxDetail(input);
+      updateAgeInputs();
+    });
   });
   if (seatBabyCheckbox) {
     seatBabyCheckbox.addEventListener("change", () => drawBoxDetail(null));
   }
+
+  // === NHẬP TUỔI TỪNG TRẺ EM / EM BÉ ===
+  const ageWrapper       = boxTourDetail.querySelector(".age-inputs-wrapper");
+  const childrenGroup    = boxTourDetail.querySelector("#children-ages-group");
+  const childrenAgesList = boxTourDetail.querySelector("#children-ages-list");
+  const babiesGroup      = boxTourDetail.querySelector("#babies-ages-group");
+  const babiesAgesList   = boxTourDetail.querySelector("#babies-ages-list");
+
+  function renderAgeRows(container, count, min, max, labelPrefix, existingAges) {
+    if (!container) return;
+    // Giữ lại các giá trị hiện tại trước khi render lại
+    const current = [];
+    container.querySelectorAll(".age-input-row input").forEach(inp => {
+      current.push(parseInt(inp.value, 10) || min);
+    });
+    container.innerHTML = "";
+    for (let i = 0; i < count; i++) {
+      const val = (existingAges && existingAges[i] !== undefined)
+        ? existingAges[i]
+        : (current[i] !== undefined ? current[i] : min);
+      const row = document.createElement("div");
+      row.className = "age-input-row";
+      row.innerHTML = `
+        <label class="age-input-label">${labelPrefix} thứ ${i + 1}:</label>
+        <input class="age-input-field" type="number" min="${min}" max="${max}" value="${val}" required>
+        <span class="age-input-hint">${min}–${max} tuổi</span>
+      `;
+      container.appendChild(row);
+    }
+  }
+
+  function updateAgeInputs(existingChildrenAges, existingBabyAges) {
+    const qc = parseInt(inputChild?.value || "0", 10) || 0;
+    const qb = parseInt(inputBaby?.value || "0", 10) || 0;
+
+    if (ageWrapper) ageWrapper.style.display = (qc > 0 || qb > 0) ? "" : "none";
+    if (childrenGroup) childrenGroup.style.display = qc > 0 ? "" : "none";
+    if (babiesGroup)   babiesGroup.style.display   = qb > 0 ? "" : "none";
+
+    renderAgeRows(childrenAgesList, qc, ageChildMin, ageChildMax, "Trẻ em", existingChildrenAges);
+    renderAgeRows(babiesAgesList,   qb, 0, agebabyMax, "Em bé",  existingBabyAges);
+  }
+
+  function collectAges(container) {
+    const ages = [];
+    if (!container) return ages;
+    container.querySelectorAll(".age-input-field").forEach(inp => {
+      ages.push(parseInt(inp.value, 10) || 0);
+    });
+    return ages;
+  }
+
+  // Vẽ lần đầu
+  updateAgeInputs();
 
   // === ĐẶT NGAY (không còn locationFrom) ===
   const buttonAddToCart = boxTourDetail.querySelector(".inner-button-add-cart");
@@ -724,7 +790,6 @@ if (boxTourDetail) {
         departureDateDisplay = departureSelect.value || "";
 
         if (!departureDateDisplay) {
-          // Nếu có nhiều hơn 1 lựa chọn thì bắt buộc user phải chọn
           if (
             hasMultiple &&
             departureSelect.querySelectorAll("option").length > 1
@@ -736,6 +801,10 @@ if (boxTourDetail) {
       }
 
       if (quantityAdult > 0 || quantityChild > 0 || quantityBaby > 0) {
+        // Thu thập tuổi
+        const childrenAges = collectAges(childrenAgesList);
+        const babyAges     = collectAges(babiesAgesList);
+
         const item = {
           tourId: tourId,
           quantityAdult,
@@ -744,6 +813,9 @@ if (boxTourDetail) {
           checked: true,
           babySeat,
           departureDateDisplay,
+          childrenAges,
+          babyAges,
+          ageBands: { babyMaxAge: agebabyMax, childrenMinAge: ageChildMin, childrenMaxAge: ageChildMax },
         };
         sessionStorage.setItem("cart_once_mode", "quick-order");
         setSessionCart([item]);
@@ -774,7 +846,50 @@ if (boxTourDetail) {
         departureSelect.value = existItem.departureDateDisplay;
       }
       drawBoxDetail();
+      updateAgeInputs(existItem.childrenAges || [], existItem.babyAges || []);
     }
+  }
+
+  // === HIỂN THỊ SỐ CHỖ CÒN LẠI KHI CHỌN NGÀY KHỞI HÀNH ===
+  const departureSel = boxTourDetail.querySelector("#departureDateSelect");
+  const seatInfoEl   = boxTourDetail.querySelector("#departureSeatInfo");
+  if (departureSel && seatInfoEl) {
+    let seatsByDate = {};
+    try {
+      seatsByDate = JSON.parse(departureSel.getAttribute("data-seats-by-date") || "{}");
+    } catch (e) { seatsByDate = {}; }
+
+    function renderDepartureSeatInfo(dateKey) {
+      if (!dateKey || !seatsByDate[dateKey]) {
+        seatInfoEl.style.display = "none";
+        seatInfoEl.innerHTML = "";
+        // Không có ngày cụ thể → dùng lại giá trị tổng
+        maxSeats = globalMaxSeats;
+        return;
+      }
+      const { seatsTotal, seatsRemaining } = seatsByDate[dateKey];
+
+      // Cập nhật maxSeats theo ngày khởi hành được chọn
+      maxSeats = seatsRemaining;
+
+      const isFull = seatsRemaining <= 0;
+      const isLow  = !isFull && seatsRemaining <= 5;
+      const badgeClass = isFull ? "seats-badge--full" : (isLow ? "seats-badge--low" : "seats-badge--ok");
+      const badgeText  = isFull ? "Hết chỗ" : `${seatsRemaining} chỗ còn`;
+      seatInfoEl.innerHTML =
+        `<i class="fa-solid fa-chair" style="opacity:.7;margin-right:5px"></i>` +
+        `<span>Số chỗ còn lại:</span> ` +
+        `<span class="seats-badge ${badgeClass}">${badgeText}</span>` +
+        (seatsTotal > 0 ? `<span class="seats-total-hint"> / ${seatsTotal} tổng</span>` : "");
+      seatInfoEl.style.display = "flex";
+    }
+
+    departureSel.addEventListener("change", () => {
+      renderDepartureSeatInfo(departureSel.value);
+    });
+
+    // Hiển thị ngay nếu đã có ngày được chọn sẵn
+    if (departureSel.value) renderDepartureSeatInfo(departureSel.value);
   }
 }
 
@@ -813,11 +928,30 @@ if (orderForm) {
         errorMessage: "Số điện thoại không đúng định dạng!",
       },
     ])
-    .onSuccess((event) => {
+    .onSuccess(async (event) => {
       const fullName = event.target.fullName.value;
       const phone = event.target.phone.value;
+      const email = event.target.email ? event.target.email.value : "";
       const note = event.target.note.value;
       const paymentMethod = event.target.method.value;
+
+      // Upload CCCD images nếu có
+      let cccdImages = [];
+      const cccdInput = document.getElementById("cccd-file-input");
+      if (cccdInput && cccdInput.files && cccdInput.files.length > 0) {
+        const formData = new FormData();
+        for (let i = 0; i < cccdInput.files.length; i++) {
+          formData.append("files", cccdInput.files[i]);
+        }
+        try {
+          const uploadRes = await fetch("/upload/images", { method: "POST", body: formData });
+          const uploadData = await uploadRes.json();
+          if (uploadData.success) cccdImages = uploadData.urls;
+        } catch (e) {
+          notify.error("Lỗi upload ảnh CCCD!");
+          return;
+        }
+      }
 
       // Lấy giỏ hiện tại (ưu tiên session nếu đang ĐẶT NGAY)
       let cart = getCart();
@@ -834,6 +968,8 @@ if (orderForm) {
         const dataFinal = {
           fullName: fullName,
           phone: phone,
+          email: email,
+          cccdImages: cccdImages,
           note: note,
           paymentMethod: paymentMethod,
           items: cart,
@@ -881,13 +1017,14 @@ if (orderForm) {
               switch (paymentMethod) {
                 case "money":
                 case "bank":
-                  window.location.href = `/order/success?orderCode=${orderCode}&phone=${respPhone}`;
+                  window.location.href = `/order/pending?orderCode=${orderCode}&phone=${respPhone}`;
                   break;
                 case "zalopay":
                   window.location.href = `/order/payment-zalopay?orderCode=${orderCode}&phone=${respPhone}`;
                   break;
                 case "vnpay":
-                  window.location.href = `/order/payment-vnpay?orderCode=${orderCode}&phone=${respPhone}`;
+                  // VNPay: hiển thị trang pending trước, khách bấm nút mới sang cổng thanh toán
+                  window.location.href = `/order/pending?orderCode=${orderCode}&phone=${respPhone}`;
                   break;
               }
             }
@@ -914,6 +1051,49 @@ if (orderForm) {
   // End List Input Method
 }
 // End Order Form
+
+// ===============================
+// CCCD Upload Preview (tour)
+// ===============================
+(function() {
+  function initCccdPreview(fileInputId, previewId) {
+    var fileInput = document.getElementById(fileInputId);
+    var preview = document.getElementById(previewId);
+    if (!fileInput || !preview) return;
+
+    fileInput.addEventListener("change", function() {
+      preview.innerHTML = "";
+      if (!fileInput.files) return;
+      Array.from(fileInput.files).forEach(function(file, idx) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var thumb = document.createElement("div");
+          thumb.className = "cccd-thumb";
+          thumb.innerHTML = '<img src="' + e.target.result + '" alt="CCCD ' + (idx + 1) + '">'
+            + '<button type="button" class="cccd-thumb-remove" data-idx="' + idx + '">&times;</button>';
+          preview.appendChild(thumb);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    // Drag and drop
+    var area = fileInput.closest(".cccd-upload-area");
+    if (area) {
+      area.addEventListener("dragover", function(e) { e.preventDefault(); area.classList.add("dragover"); });
+      area.addEventListener("dragleave", function() { area.classList.remove("dragover"); });
+      area.addEventListener("drop", function(e) {
+        e.preventDefault();
+        area.classList.remove("dragover");
+        fileInput.files = e.dataTransfer.files;
+        fileInput.dispatchEvent(new Event("change"));
+      });
+    }
+  }
+
+  initCccdPreview("cccd-file-input", "cccd-preview");
+  initCccdPreview("hotel-cccd-file-input", "hotel-cccd-preview");
+})();
 
 // ===============================
 // Box Filter (client) dùng chung
@@ -1075,7 +1255,16 @@ const drawCart = () => {
           subTotal += qAdult * unitAdult + qChild * unitChild + babyTotal;
         }
 
-        const tourDetailUrl = (item.company && item.company.slug) 
+        // Build age info display for cart
+        const childrenAgesArr = Array.isArray(item.childrenAges) ? item.childrenAges : [];
+        const babyAgesArr     = Array.isArray(item.babyAges)     ? item.babyAges     : [];
+        const childrenAgesHtml = childrenAgesArr.length
+          ? `<div class="cart-ages-info">Tuổi trẻ em: ${childrenAgesArr.map((a, i) => `Bé ${i+1}: <b>${a} tuổi</b>`).join(" · ")}</div>`
+          : "";
+        const babyAgesHtml = babyAgesArr.length
+          ? `<div class="cart-ages-info">Tuổi em bé: ${babyAgesArr.map((a, i) => `Bé ${i+1}: <b>${a} tuổi</b>`).join(" · ")}</div>`
+          : "";
+        const tourDetailUrlForBack = (item.company && item.company.slug)
           ? `/company/${item.company.slug}/tour/detail/${item.slug}`
           : `/tour/detail/${item.slug}`;
 
@@ -1094,13 +1283,13 @@ const drawCart = () => {
 
             <div class="inner-product">
               <div class="inner-image">
-                <a href="${tourDetailUrl}">
+                <a href="${tourDetailUrlForBack}">
                   <img alt="${item.name}" src="${item.avatar}">
                 </a>
               </div>
               <div class="inner-content">
                 <div class="inner-title">
-                  <a href="${tourDetailUrl}">${item.name}</a>
+                  <a href="${tourDetailUrlForBack}">${item.name}</a>
                 </div>
                 <div class="inner-meta">
                   <div>Ngày Khởi Hành: <b>${item.departureDate}</b></div>
@@ -1111,6 +1300,8 @@ const drawCart = () => {
                       ? `<div style="font-size:13px;color:#e67e22">Đặt chỗ ngồi riêng cho em bé</div>`
                       : ""
                   }
+                  ${childrenAgesHtml}
+                  ${babyAgesHtml}
                 </div>
               </div>
             </div>
@@ -1121,66 +1312,36 @@ const drawCart = () => {
                 <div class="inner-item">
                   <div class="inner-item-label">Người lớn:</div>
                   <div class="inner-item-input">
-                    <input
-                      value="${qAdult}"
-                      min="0"
-                      max="${seatsTotal}"
-                      type="number"
-                      name="quantityAdult"
-                      tour-id="${item.tourId}"
-                      data-seats-total="${seatsTotal}"
-                    >
+                    <span class="cart-qty-fixed">${qAdult}</span>
                   </div>
                   <div class="inner-item-price">
                     <span>${qAdult}</span>
                     <span>x</span>
-                    <span class="inner-hl">${unitAdult.toLocaleString(
-                      "vi-VN"
-                    )}</span>
+                    <span class="inner-hl">${unitAdult.toLocaleString("vi-VN")}</span>
                   </div>
                 </div>
 
                 <div class="inner-item">
                   <div class="inner-item-label">Trẻ em:</div>
                   <div class="inner-item-input">
-                    <input
-                      value="${qChild}"
-                      min="0"
-                      max="${seatsTotal}"
-                      type="number"
-                      name="quantityChildren"
-                      tour-id="${item.tourId}"
-                      data-seats-total="${seatsTotal}"
-                    >
+                    <span class="cart-qty-fixed">${qChild}</span>
                   </div>
                   <div class="inner-item-price">
                     <span>${qChild}</span>
                     <span>x</span>
-                    <span class="inner-hl">${unitChild.toLocaleString(
-                      "vi-VN"
-                    )}</span>
+                    <span class="inner-hl">${unitChild.toLocaleString("vi-VN")}</span>
                   </div>
                 </div>
 
                 <div class="inner-item">
                   <div class="inner-item-label">Em bé:</div>
                   <div class="inner-item-input">
-                    <input
-                      value="${qBaby}"
-                      min="0"
-                      max="${seatsTotal}"
-                      type="number"
-                      name="quantityBaby"
-                      tour-id="${item.tourId}"
-                      data-seats-total="${seatsTotal}"
-                    >
+                    <span class="cart-qty-fixed">${qBaby}</span>
                   </div>
                   <div class="inner-item-price">
                     <span>${qBaby}</span>
                     <span>x</span>
-                    <span class="inner-hl">${unitBabyForUi.toLocaleString(
-                      "vi-VN"
-                    )}</span>
+                    <span class="inner-hl">${unitBabyForUi.toLocaleString("vi-VN")}</span>
                   </div>
                 </div>
               </div>
@@ -1270,6 +1431,19 @@ const drawCart = () => {
           cartData[idx].quantityAdult = qAdult;
           cartData[idx].quantityChildren = qChild;
           cartData[idx].quantityBaby = qBaby;
+
+          // Sync mảng tuổi theo số lượng mới (cắt bớt hoặc thêm giá trị mặc định)
+          const ab = cartData[idx].ageBands || {};
+          const defChildAge = ab.childrenMinAge || 4;
+          const defBabyAge  = 0;
+          let cAges = Array.isArray(cartData[idx].childrenAges) ? [...cartData[idx].childrenAges] : [];
+          let bAges = Array.isArray(cartData[idx].babyAges)     ? [...cartData[idx].babyAges]     : [];
+          while (cAges.length > qChild) cAges.pop();
+          while (cAges.length < qChild) cAges.push(defChildAge);
+          while (bAges.length > qBaby)  bAges.pop();
+          while (bAges.length < qBaby)  bAges.push(defBabyAge);
+          cartData[idx].childrenAges = cAges;
+          cartData[idx].babyAges     = bAges;
 
           setCart(cartData);
           drawCart(); // re-render để đơn giá em bé cập nhật theo bậc mới

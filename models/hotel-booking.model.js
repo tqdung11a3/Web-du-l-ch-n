@@ -6,6 +6,7 @@ const guestSchema = new Schema(
     fullName: String,
     phone: String,
     email: String,
+    cccdImages: [String],
   },
   { _id: false }
 );
@@ -85,6 +86,15 @@ const schema = new Schema(
     holdExpiresAt: {
       type: Date,
       default: null, // Thời điểm hết hạn giữ chỗ (15 phút sau khi tạo)
+    },
+
+    // ==== GIỮ PHÒNG CHO TOUR ====
+    // Nếu booking này được tạo bởi company admin để giữ phòng cho tour,
+    // lưu tourSegmentId để có thể huỷ hàng loạt khi cần.
+    tourSegmentId: {
+      type: Schema.Types.ObjectId,
+      ref: "TourSegment",
+      default: null,
     },
   },
   {

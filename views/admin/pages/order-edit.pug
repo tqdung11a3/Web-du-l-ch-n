@@ -16,6 +16,19 @@ block main
       .inner-group
         label(for="phone" class="inner-label") Số điện thoại
         input(type="text" id="phone" name="phone" value=orderDetail.phone)
+      .inner-group
+        label(for="email" class="inner-label") Email
+        input(type="email" id="email" name="email" value=(orderDetail.email || ''))
+      if orderDetail.cccdImages && orderDetail.cccdImages.length
+        .inner-group.inner-two-col
+          label(class="inner-label")
+            i.fa-solid.fa-id-card
+            |  Ảnh CCCD / Hộ chiếu
+          .cccd-gallery
+            each img in orderDetail.cccdImages
+              .cccd-gallery-item
+                a(href=img target="_blank")
+                  img(src=img alt="CCCD")
       .inner-group.inner-two-col
         label(for="note" class="inner-label") Ghi chú
         textarea(id="note" name="note") #{orderDetail.note}
@@ -57,8 +70,18 @@ block main
                 .inner-order-name #{item.name}
                 .inner-order-text
                   div Người lớn: #{item.quantityAdult} x #{item.priceNewAdult.toLocaleString("vi-VN")}đ
-                  div Trẻ em: #{item.quantityChildren} x #{item.priceNewChildren.toLocaleString("vi-VN")}đ
-                  div Em bé: #{item.quantityBaby} x #{item.babyUnitForUi.toLocaleString("vi-VN")}đ
+                  div
+                    | Trẻ em: #{item.quantityChildren} x #{item.priceNewChildren.toLocaleString("vi-VN")}đ
+                    if item.childrenAges && item.childrenAges.length
+                      .inner-ages-info
+                        each age, idx in item.childrenAges
+                          span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
+                  div
+                    | Em bé: #{item.quantityBaby} x #{item.babyUnitForUi.toLocaleString("vi-VN")}đ
+                    if item.babyAges && item.babyAges.length
+                      .inner-ages-info
+                        each age, idx in item.babyAges
+                          span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
                   div Ngày khởi hành: #{item.departureDateFormat}
                   div Khởi hành tại: #{item.cityName}
       .inner-group

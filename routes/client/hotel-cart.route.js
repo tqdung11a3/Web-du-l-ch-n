@@ -15,4 +15,6 @@ router.delete("/clear", controller.clearCart);
 
 router.get("/count", controller.getCount);
 
+router.get("/check-availability", controller.checkAvailability);
+
 module.exports = router;

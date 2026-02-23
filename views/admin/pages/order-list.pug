@@ -37,9 +37,52 @@ block main
   //- Section 5
   .section-5
     .inner-wrap
-      .inner-search
-        <i class="fa-solid fa-magnifying-glass"></i>
-        input(type="text" placeholder="Tìm kiếm")
+      form.inner-search.order-search-form(method="GET" action=`/${pathAdmin}/order/list`)
+        .order-search-fields
+          .order-search-field
+            i.fa-solid.fa-hashtag
+            input(
+              type="text"
+              name="keyword"
+              placeholder="Mã đơn hàng..."
+              value=keyword || ""
+              autocomplete="off"
+            )
+          .order-search-field
+            i.fa-solid.fa-user
+            input(
+              type="text"
+              name="searchName"
+              placeholder="Tên khách hàng..."
+              value=searchName || ""
+              autocomplete="off"
+            )
+          .order-search-field
+            i.fa-solid.fa-phone
+            input(
+              type="text"
+              name="searchPhone"
+              placeholder="Số điện thoại..."
+              value=searchPhone || ""
+              autocomplete="off"
+            )
+          .order-search-field
+            i.fa-solid.fa-map-location-dot
+            input(
+              type="text"
+              name="searchTour"
+              placeholder="Tên tour du lịch..."
+              value=searchTour || ""
+              autocomplete="off"
+            )
+          button.order-search-btn(type="submit")
+            i.fa-solid.fa-magnifying-glass
+            |  Tìm kiếm
+          - const hasSearch = keyword || searchName || searchPhone || searchTour
+          if hasSearch
+            a.order-search-clear(href=`/${pathAdmin}/order/list` title="Xoá tìm kiếm")
+              i.fa-solid.fa-xmark
+              |  Xoá
   //- End Section 5
 
   //- Section 6
@@ -72,6 +115,10 @@ block main
                         img(src=item.avatar, alt="")
                       .inner-info
                         .inner-name #{item.name}
+                        if item.departureDateDisplay
+                          .inner-departure
+                            i.fa-solid.fa-calendar-day
+                            |  #{item.departureDateDisplay}
                         .inner-quantity
                           div Người lớn: #{item.quantityAdult} x #{item.priceNewAdult.toLocaleString("vi-VN")}đ
                           div Trẻ em: #{item.quantityChildren} x #{item.priceNewChildren.toLocaleString("vi-VN")}đ

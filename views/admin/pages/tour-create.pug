@@ -22,19 +22,19 @@ block main
         label(class="inner-label") Tags (Loại hình trải nghiệm)
         .tags-wrapper
           .tag-item
-            input(type="checkbox" id="tag-adventure" name="tags")
+            input(type="checkbox" id="tag-adventure" name="tags" value="phiêu lưu")
             label(for="tag-adventure") Phiêu lưu
           .tag-item
-            input(type="checkbox" id="tag-beach" name="tags")
+            input(type="checkbox" id="tag-beach" name="tags" value="biển")
             label(for="tag-beach") Biển
           .tag-item
-            input(type="checkbox" id="tag-culture" name="tags")
+            input(type="checkbox" id="tag-culture" name="tags" value="văn hóa")
             label(for="tag-culture") Văn hóa
           .tag-item
-            input(type="checkbox" id="tag-mountain" name="tags")
+            input(type="checkbox" id="tag-mountain" name="tags" value="leo núi")
             label(for="tag-mountain") Leo núi
           .tag-item
-            input(type="checkbox" id="tag-city" name="tags")
+            input(type="checkbox" id="tag-city" name="tags" value="tham quan thành phố")
             label(for="tag-city") Tham quan thành phố
 
       .inner-group
@@ -155,16 +155,7 @@ block main
         //- Input ẩn: nơi JS sẽ ghi JSON để gửi lên server
         input(type="hidden" id="babyPricingRulesJson" name="babyPricingRulesJson")
 
-      //- Còn lại (quản lý ghế)
-      .inner-group
-        label(class="inner-label") Tổng số ghế (seatsTotal)
-        input(type="number" name="seatsTotal" min="0" placeholder="VD: 40" class="inner-control")
-
-      .inner-group
-        label(class="inner-label") Số ghế còn lại (seatsRemaining)
-        input(type="number" name="seatsRemaining" min="0" placeholder="VD: 40" class="inner-control")
-        .inner-desc
-          | Lưu ý: Người lớn 1 ghế, Trẻ em 1 ghế, Em bé không tốn ghế.
+      //- (ghế đã chuyển vào từng lịch khởi hành bên dưới)
 
       //- ĐIỂM KHỞI HÀNH
       .inner-group
@@ -254,16 +245,29 @@ block main
         label(for="vehicle" class="inner-label") Phương tiện
         input(type="text" id="vehicle" name="vehicle")
 
-      .inner-group
-        label(class="inner-label") Ngày khởi hành
-        .departure-dates-wrapper#departure-dates-wrapper
-          .departure-date-item(data-index="0")
-            input(type="date" class="departure-date-input")
-            button(type="button" class="departure-date-remove-btn") Xóa
-        .departure-dates-actions
-          button(type="button" id="departure-date-add-btn") + Thêm ngày khởi hành
-        //- Input ẩn: JS sẽ ghi JSON departureDates trước khi submit
-        input(type="hidden" id="departureDatesJson" name="departureDates")
+      .inner-group.inner-two-col
+        label(class="inner-label") Ngày khởi hành & Ngày kết thúc
+        .inner-desc Mỗi dòng là một lịch khởi hành. Ngày kết thúc phải sau ngày khởi hành.
+        .departures-wrapper#departures-wrapper
+          .departure-pair-item(data-index="0")
+            .departure-pair-inputs
+              .departure-pair-field
+                label Ngày khởi hành
+                input(type="date" class="departure-date-input")
+              .departure-pair-field
+                label Ngày kết thúc
+                input(type="date" class="end-date-input")
+              .departure-pair-field
+                label Tổng số ghế
+                input(type="number" class="seats-total-input" min="0" placeholder="VD: 40")
+              .departure-pair-field
+                label Ghế còn lại
+                input(type="number" class="seats-remaining-input" min="0" placeholder="VD: 40")
+            button(type="button" class="departure-pair-remove-btn") Xóa
+        .departures-actions
+          button(type="button" id="departure-pair-add-btn") + Thêm lịch khởi hành
+        //- Input ẩn: JS sẽ ghi JSON mảng [{departureDate, endDate, seatsTotal, seatsRemaining}]
+        input(type="hidden" id="departuresJson" name="departures")
 
       .inner-group.inner-two-col
         label(for="information" class="inner-label") Thông tin tour
@@ -530,3 +534,4 @@ block main
         excludesList.appendChild(createExcludeItem());
       });
     });
+    

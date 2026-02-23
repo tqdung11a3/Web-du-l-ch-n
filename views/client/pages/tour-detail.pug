@@ -190,6 +190,11 @@ block main
           - const priceChild    = Number(tourDetail.priceNewChildren || 0);
           - const priceBabyFix  = Number(tourDetail.priceNewBaby || 0);
           - const babyUnit      = (babyMode === 'fixed' ? priceBabyFix.toLocaleString('vi-VN') : '0');
+          - const ageBands      = tourDetail.tourAgeBands || {};
+          - const babyMaxAge    = ageBands.babyMaxAge !== undefined ? ageBands.babyMaxAge : 3;
+          - const childrenMaxAge = ageBands.childrenMaxAge !== undefined ? ageBands.childrenMaxAge : 11;
+          - const childrenMinAge = babyMaxAge + 1;
+          - const adultMinAge    = childrenMaxAge + 1;
 
           .box-tour-detail(
             data-seats-remaining=tourDetail.seatsRemaining
@@ -198,6 +203,9 @@ block main
             data-price-baby=priceBabyFix
             data-baby-mode=babyMode
             data-baby-rules=babyRulesJson
+            data-baby-max-age=babyMaxAge
+            data-children-min-age=childrenMinAge
+            data-children-max-age=childrenMaxAge
           )
             .inner-title-main Chuyến Đi Của Bạn
             .inner-product
@@ -219,10 +227,12 @@ block main
                 i.fa-solid.fa-calendar-days
                 span Ngày Khởi Hành:
                 - const departureDatesList = tourDetail.departureDatesFormatted && tourDetail.departureDatesFormatted.length ? tourDetail.departureDatesFormatted : (tourDetail.departureDateFormat ? [tourDetail.departureDateFormat] : []);
+                - const seatsByDateJson = JSON.stringify(tourDetail.departureSeatsByDate || {})
                 if departureDatesList && departureDatesList.length
                   select#departureDateSelect.departure-date-select(
                     name="departureDate"
                     data-has-multiple=(departureDatesList.length > 1 ? "1" : "0")
+                    data-seats-by-date=seatsByDateJson
                   )
                     option(value="") Chọn ngày khởi hành
                     each d, idx in departureDatesList
@@ -230,6 +240,7 @@ block main
                         value=d
                         selected=(departureDatesList.length === 1 && idx === 0)
                       )= d
+                  #departureSeatInfo.departure-seat-info(style="display:none")
                 else
                   span.inner-hl Chưa thiết lập ngày khởi hành
 
@@ -245,7 +256,7 @@ block main
               .inner-label Số Lượng Hành Khách
               .inner-list
                 .inner-item
-                  .inner-item-label Người lớn:
+                  .inner-item-label Người lớn (từ #{adultMinAge} tuổi):
                   .inner-item-input
                     input(
                       value="1"
@@ -261,7 +272,7 @@ block main
                     span.inner-hl= priceAdult.toLocaleString('vi-VN')
 
                 .inner-item
-                  .inner-item-label Trẻ em (3-11 tuổi):
+                  .inner-item-label Trẻ em (#{childrenMinAge}–#{childrenMaxAge} tuổi):
                   .inner-item-input
                     input(
                       value="0"
@@ -277,7 +288,7 @@ block main
                     span.inner-hl= priceChild.toLocaleString('vi-VN')
 
                 .inner-item
-                  .inner-item-label Em bé (0-2 tuổi):
+                  .inner-item-label Em bé (0–#{babyMaxAge} tuổi):
                   .inner-item-input
                     input(
                       value="0"
@@ -298,6 +309,19 @@ block main
                   label
                     input(type="checkbox" name="seatBaby" seat-baby-toggle)
                     |  Đặt chỗ ngồi riêng cho em bé
+
+            // Khối nhập tuổi từng trẻ em / em bé — JS hiển thị khi số lượng > 0
+            .age-inputs-wrapper(style="display:none")
+              .age-inputs-header
+                i.fa-solid.fa-child-reaching
+                span Tuổi hành khách nhỏ
+              .age-inputs-body
+                .age-inputs-group#children-ages-group(style="display:none")
+                  .age-inputs-group-label Trẻ em (#{childrenMinAge}–#{childrenMaxAge} tuổi)
+                  .age-inputs-list#children-ages-list
+                .age-inputs-group#babies-ages-group(style="display:none")
+                  .age-inputs-group-label Em bé (0–#{babyMaxAge} tuổi)
+                  .age-inputs-list#babies-ages-list
 
             .inner-total
               .inner-label Tổng cộng:

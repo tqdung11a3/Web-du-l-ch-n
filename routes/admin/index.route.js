@@ -11,6 +11,7 @@ const profileRoutes = require("./profile.route");
 const uploadRoutes = require("./upload.route");
 const companyRoutes = require("./company.route");
 const hotelRoutes = require("./hotel.route");
+const tourHotelRoutes = require("./tour-hotel.route");
 const superAdminRoutes = require("./super-admin.route");
 const notificationRoutes = require("./notification.route");
 
@@ -34,6 +35,7 @@ router.use("/profile", authMiddleware.verifyToken, notificationMiddleware.getUnr
 router.use("/upload", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, uploadRoutes);
 router.use("/company", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, companyRoutes);
 router.use("/hotel", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, hotelRoutes);
+router.use("/tour-hotel", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, tourHotelRoutes);
 router.use("/notifications", authMiddleware.verifyToken, notificationRoutes);
 
 router.use(authMiddleware.verifyToken, (req, res) => {

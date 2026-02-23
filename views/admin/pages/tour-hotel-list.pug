@@ -1,0 +1,62 @@
+extends ../layouts/default.pug
+
+block main
+  h1.box-title Liên kết Tour – Khách sạn
+
+  .th-intro
+    p Chọn một tour và một lịch khởi hành để cấu hình khung thời gian lưu trú và phân bổ phòng khách sạn.
+
+  if !tours || tours.length === 0
+    .th-empty
+      i.fa-solid.fa-circle-info
+      span  Công ty chưa có tour nào. Hãy tạo tour trước.
+  else
+    .th-tour-list
+      each tour in tours
+        .th-tour-card
+          .th-tour-card__header
+            if tour.avatar
+              img.th-tour-card__avatar(src=tour.avatar alt=tour.name)
+            else
+              .th-tour-card__avatar-placeholder
+                i.fa-solid.fa-map-location-dot
+            .th-tour-card__info
+              h3.th-tour-card__name= tour.name
+
+          .th-tour-card__departures
+            if !tour.departuresFormatted || tour.departuresFormatted.length === 0
+              p.th-no-departure Chưa có lịch khởi hành. Vui lòng cập nhật trong trang chỉnh sửa tour.
+            else
+              each dep in tour.departuresFormatted
+                - const isConfigured = tour.configuredDepartures.find(c => c.departureDateStr === dep.departureDateStr)
+                .th-departure-row
+                  .th-departure-row__dates
+                    i.fa-solid.fa-calendar-day
+                    span  #{dep.departureDateDisplay}
+                    span.th-sep  →
+                    i.fa-solid.fa-calendar-check
+                    span  #{dep.endDateDisplay}
+                    if dep.seatsTotal !== null && dep.seatsTotal !== undefined
+                      span.th-departure-seats
+                        i.fa-solid.fa-users(style="margin-left:10px;opacity:.7")
+                        |  #{dep.seatsTotal} người
+                  .th-departure-row__right
+                    if isConfigured
+                      if isConfigured.status === 'confirmed'
+                        span.badge.badge--green
+                          i.fa-solid.fa-circle-check
+                          |  Đã xác nhận
+                      else
+                        span.badge.badge--yellow
+                          i.fa-solid.fa-pencil
+                          |  Bản nháp
+                    else
+                      span.badge.badge--gray Chưa cấu hình
+
+                    a.btn-config(href=`/${pathAdmin}/tour-hotel/detail/${tour._id}?departure=${dep.departureDateStr}`)
+                      i.fa-solid.fa-sliders
+                      |  Cấu hình
+                    if isConfigured && isConfigured.status === 'confirmed'
+                      a.btn-assign(href=`/${pathAdmin}/tour-hotel/assign/${isConfigured.segmentId}`)
+                        i.fa-solid.fa-person-shelter
+                        |  Phân công phòng

@@ -1769,7 +1769,8 @@ module.exports.bookingList = async (req, res) => {
       ];
     }
 
-    // Lấy booking của khách sạn được chọn
+    // Lấy booking của khách sạn được chọn (không bao gồm tour holds)
+    bookingFilter.tourSegmentId = null;
     const rawBookings = await HotelBooking.find(bookingFilter)
       .sort({ createdAt: -1 })
       .lean();
@@ -1899,6 +1900,10 @@ module.exports.bookingList = async (req, res) => {
         _id: b._id, // ID gốc để edit
         customerName: b.guest?.fullName || "Khách lẻ",
         customerEmail: b.guest?.email || "",
+        cccdImages: b.guest?.cccdImages || [],
+        createdAtFormat: b.createdAt
+          ? moment(b.createdAt).format("DD/MM/YYYY HH:mm")
+          : "—",
         checkIn: b.checkIn
           ? moment(b.checkIn).format("DD/MM/YYYY")
           : "—",
@@ -2383,6 +2388,211 @@ module.exports.bookingDetail = async (req, res) => {
  * GET /admin/hotel/booking/room-management
  * Quản lý số phòng - xếp phòng cho booking
  */
+// ── Tab "Giữ phòng Tour" ──────────────────────────────────────────────────────
+// Hiển thị toàn bộ HotelBooking có tourSegmentId != null của khách sạn được chọn,
+// nhóm theo TourSegment để admin thấy rõ: tour nào, lịch nào, đang giữ bao nhiêu phòng.
+module.exports.tourHolds = async (req, res) => {
+  try {
+    const companyId = req.account?.companyId || null;
+    const TourSegment = require("../../models/tour-segment.model");
+    const Tour = require("../../models/tour.model");
+
+    if (!companyId) {
+      return res.render("admin/pages/hotel-booking", {
+        pageTitle: "Giữ phòng Tour",
+        bookingsData: { tourHoldGroups: [], activeTab: "tour-holds" },
+        selectedHotelId: null,
+        pathAdmin,
+        isBookingManagement: true,
+      });
+    }
+
+    let hotelId = req.query.hotelId || null;
+    const hotels = await Hotel.find({ companyId, deleted: false })
+      .select("_id name address rooms roomTypes")
+      .lean();
+
+    if (!hotels || hotels.length === 0) {
+      return res.render("admin/pages/hotel-booking", {
+        pageTitle: "Giữ phòng Tour",
+        bookingsData: { tourHoldGroups: [], hotels: [], activeTab: "tour-holds" },
+        selectedHotelId: null,
+        pathAdmin,
+        isBookingManagement: true,
+      });
+    }
+
+    if (!hotelId || hotelId === "all") {
+      hotelId = String(hotels[0]._id);
+      const urlParams = new URLSearchParams(req.query);
+      urlParams.set("hotelId", hotelId);
+      return res.redirect(`/${pathAdmin}/hotel/booking/tour-holds?${urlParams.toString()}`);
+    }
+
+    const selectedHotel = hotels.find((h) => String(h._id) === hotelId);
+
+    // Dọn dẹp booking tour hold bị lỗi (code: null) còn sót lại từ lần confirm thất bại
+    await HotelBooking.updateMany(
+      {
+        "hotel.hotelId": selectedHotel._id,
+        tourSegmentId: { $ne: null, $exists: true },
+        code: null,
+        status: { $ne: "cancelled" },
+      },
+      { status: "cancelled" }
+    );
+
+    // Lấy tất cả tour hold bookings hợp lệ của khách sạn này
+    const holdBookings = await HotelBooking.find({
+      "hotel.hotelId": selectedHotel._id,
+      tourSegmentId: { $ne: null, $exists: true },
+      status: { $ne: "cancelled" },
+      code: { $ne: null },  // Loại trừ booking lỗi không có code
+    })
+      .sort({ checkIn: 1 })
+      .lean();
+
+    // Lấy tất cả TourSegment liên quan
+    const segmentIds = [...new Set(holdBookings.map((b) => String(b.tourSegmentId)).filter(Boolean))];
+    const segments = await TourSegment.find({ _id: { $in: segmentIds } }).lean();
+    const segmentMap = {};
+    for (const seg of segments) segmentMap[String(seg._id)] = seg;
+
+    // Lấy tên tour
+    const tourIds = [...new Set(segments.map((s) => String(s.tourId)))];
+    const tours = await Tour.find({ _id: { $in: tourIds } }).select("name").lean();
+    const tourMap = {};
+    for (const t of tours) tourMap[String(t._id)] = t;
+
+    // Nhóm booking theo tourSegmentId
+    const groupMap = {};
+    for (const booking of holdBookings) {
+      const segId = String(booking.tourSegmentId);
+      if (!groupMap[segId]) {
+        const seg = segmentMap[segId] || {};
+        const tour = tourMap[String(seg.tourId)] || {};
+        const tourIdStr = String(seg.tourId || "");
+        groupMap[segId] = {
+          segmentId:    segId,
+          tourId:       tourIdStr,
+          tourShortId:  tourIdStr ? tourIdStr.slice(-6) : "—",
+          tourName:     tour.name || "—",
+          departureDate: seg.departureDate ? moment(seg.departureDate).format("DD/MM/YYYY") : "—",
+          endDate:       seg.endDate ? moment(seg.endDate).format("DD/MM/YYYY") : "—",
+          paxRequired:   seg.paxRequired || 0,
+          segmentStatus: seg.status || "draft",
+          bookings:      [],
+          timeFrameMap:  {},  // key: "checkInStr_checkOutStr"
+          totalRooms:    0,
+          totalPeople:   0,
+        };
+      }
+      const rt = (selectedHotel.roomTypes || []).find(
+        (r) => String(r._id) === String(booking.roomTypeId)
+      );
+      // Lấy số phòng từ danh sách rooms của hotel
+      const roomDoc = booking.roomId
+        ? (selectedHotel.rooms || []).find((r) => String(r._id) === String(booking.roomId))
+        : null;
+      const guestName = booking.guest?.fullName || "";
+      const isAssigned = guestName !== "" && guestName !== "[Tour Hold]";
+      const checkInStr  = booking.checkIn  ? moment(booking.checkIn).format("DD/MM/YYYY")  : "—";
+      const checkOutStr = booking.checkOut ? moment(booking.checkOut).format("DD/MM/YYYY") : "—";
+      const tfKey = `${checkInStr}_${checkOutStr}`;
+
+      groupMap[segId].bookings.push({
+        id:            String(booking._id),
+        code:          booking.code,
+        roomTypeName:  rt ? rt.name : "—",
+        roomNumber:    roomDoc ? roomDoc.roomNumber || roomDoc.name || "—" : "—",
+        rooms:         booking.rooms || 1,
+        adults:        booking.adults || 0,
+        checkIn:       checkInStr,
+        checkOut:      checkOutStr,
+        tfKey,
+        status:        booking.status,
+        guestName:     isAssigned ? guestName : "",
+        guestPhone:    isAssigned ? (booking.guest?.phone || "") : "",
+        isAssigned,
+      });
+
+      // Thống kê theo từng khung thời gian để hiển thị riêng biệt
+      if (!groupMap[segId].timeFrameMap[tfKey]) {
+        groupMap[segId].timeFrameMap[tfKey] = {
+          checkIn:     checkInStr,
+          checkOut:    checkOutStr,
+          totalRooms:  0,
+          totalPeople: 0,
+        };
+      }
+      groupMap[segId].timeFrameMap[tfKey].totalRooms  += booking.rooms || 1;
+      groupMap[segId].timeFrameMap[tfKey].totalPeople += booking.adults || 0;
+
+      groupMap[segId].totalRooms  += booking.rooms || 1;
+      groupMap[segId].totalPeople += booking.adults || 0;
+    }
+
+    // Chuyển timeFrameMap thành mảng có thứ tự (sớm nhất trước)
+    // và gán segmentIndex tương ứng với khung thời gian đã cấu hình ở tour-hotel detail
+    for (const group of Object.values(groupMap)) {
+      const toMs = (str) => {
+        if (!str || str === "—") return 0;
+        const [d, m, y] = str.split("/");
+        return new Date(`${y}-${m}-${d}`).getTime();
+      };
+
+      group.timeFrames = Object.values(group.timeFrameMap).sort(
+        (a, b) => toMs(a.checkIn) - toMs(b.checkIn)
+      );
+
+      // Lấy các sub-segments đã cấu hình ở tour-hotel detail, sắp xếp theo fromDate
+      const tourSegDoc = segmentMap[group.segmentId] || null;
+      const subSegs = ((tourSegDoc?.segments || []).slice()).sort(
+        (a, b) => new Date(a.fromDate) - new Date(b.fromDate)
+      );
+
+      // Gán segmentIndex cho từng time frame bằng cách khớp checkIn với fromDate sub-segment
+      group.timeFrames = group.timeFrames.map((tf) => {
+        const tfMs = toMs(tf.checkIn);
+        const idx = subSegs.findIndex((ss) => {
+          const ssFromMs = ss.fromDate ? new Date(ss.fromDate).getTime() : null;
+          return ssFromMs !== null && Math.abs(tfMs - ssFromMs) < 2 * 86400 * 1000;
+        });
+        return {
+          ...tf,
+          segmentIndex: idx >= 0 ? idx : null,
+          segmentLabel: idx >= 0 ? `Khung ${idx + 1}` : null,
+        };
+      });
+
+      delete group.timeFrameMap;
+    }
+
+    const tourHoldGroups = Object.values(groupMap);
+
+    return res.render("admin/pages/hotel-booking", {
+      pageTitle: "Giữ phòng Tour",
+      bookingsData: {
+        activeTab:      "tour-holds",
+        tourHoldGroups,
+        hotels,
+      },
+      selectedHotelId: hotelId,
+      pathAdmin,
+      isBookingManagement: true,
+    });
+  } catch (err) {
+    console.error("[tourHolds]", err);
+    return res.render("admin/pages/hotel-booking", {
+      pageTitle: "Giữ phòng Tour",
+      bookingsData: { tourHoldGroups: [], activeTab: "tour-holds" },
+      selectedHotelId: null,
+      pathAdmin,
+      isBookingManagement: true,
+    });
+  }
+};
+
 module.exports.roomManagement = async (req, res) => {
   try {
     const companyId = req.account?.companyId || null;
@@ -2401,8 +2611,10 @@ module.exports.roomManagement = async (req, res) => {
       });
     }
 
-    // Lấy hotelId từ query params (nếu có nhiều khách sạn)
+    // Lấy hotelId và bộ lọc ngày từ query params
     let hotelId = req.query.hotelId || null;
+    const filterFrom = req.query.filterFrom || null; // "YYYY-MM-DD"
+    const filterTo   = req.query.filterTo   || null; // "YYYY-MM-DD"
 
     // Lấy tất cả hotels của company
     const hotelsQuery = { companyId, deleted: false };
@@ -2459,6 +2671,8 @@ module.exports.roomManagement = async (req, res) => {
         { roomId: { $exists: false } }
       ],
       status: { $ne: "cancelled" },
+      // Loại trừ booking giữ phòng cho tour (Tour Hold) - không phải booking khách thật
+      tourSegmentId: null,
     })
       .sort({ createdAt: -1 })
       .lean();
@@ -2509,23 +2723,46 @@ module.exports.roomManagement = async (req, res) => {
     });
     
     const now = new Date();
+
+    // Xây dựng điều kiện lọc ngày nếu admin chỉ định
+    // Dùng quy tắc half-open interval [checkIn, checkOut):
+    //   Hai khoảng [filterFrom, filterTo) và [checkIn, checkOut) overlap khi:
+    //     checkIn < filterTo  VÀ  checkOut > filterFrom
+    const dateOverlapFilter = {};
+    if (filterFrom || filterTo) {
+      if (filterFrom) {
+        const from = new Date(filterFrom);
+        dateOverlapFilter.checkOut = { $gt: from };
+      }
+      if (filterTo) {
+        const to = new Date(filterTo); // KHÔNG cộng thêm 1 ngày — checkIn = filterTo không overlap
+        dateOverlapFilter.checkIn = { $lt: to };
+      }
+    }
     
     // Lấy bookings ĐANG DIỄN RA (CHỈ những booking đã nhận phòng - status = checked_in)
-    const currentBookings = await HotelBooking.find({
+    // Nếu có bộ lọc ngày, dùng nó; nếu không, dùng "hiện tại" như cũ
+    const currentBookingsQuery = {
       "hotel.hotelId": selectedHotel._id,
       roomId: { $ne: null },
-      status: "checked_in", // CHỈ LẤY booking đã nhận phòng
-      checkIn: { $lte: now }, // Đã check-in
-      checkOut: { $gte: now }, // Chưa checkout
-    }).lean();
+      status: "checked_in",
+      ...(filterFrom || filterTo ? dateOverlapFilter : {
+        checkIn:  { $lte: now },
+        checkOut: { $gte: now },
+      }),
+    };
+    const currentBookings = await HotelBooking.find(currentBookingsQuery).lean();
     
     // Lấy TẤT CẢ bookings còn hiệu lực (để hiển thị trong modal chi tiết)
-    const allBookings = await HotelBooking.find({
+    const allBookingsQuery = {
       "hotel.hotelId": selectedHotel._id,
       roomId: { $ne: null },
-      status: { $nin: ["cancelled", "checked_out"] }, // Loại bỏ đã hủy và đã trả phòng
-      checkOut: { $gte: now }, // Chưa checkout (bao gồm cả future bookings)
-    }).lean();
+      status: { $nin: ["cancelled", "checked_out"] },
+      ...(filterFrom || filterTo ? dateOverlapFilter : {
+        checkOut: { $gte: now },
+      }),
+    };
+    const allBookings = await HotelBooking.find(allBookingsQuery).lean();
 
     // Map roomId -> Set để check phòng đang sử dụng
     const occupiedRoomIds = new Set();
@@ -2534,7 +2771,38 @@ module.exports.roomManagement = async (req, res) => {
         occupiedRoomIds.add(String(b.roomId));
       }
     });
-    
+
+    // ── Join TourSegment → Tour để hiển thị tên tour + ngày cho tour hold bookings ──
+    const TourSegment = require("../../models/tour-segment.model");
+    const Tour        = require("../../models/tour.model");
+
+    const tourHoldBookings = allBookings.filter(b => b.tourSegmentId);
+    const uniqueSegIds = [...new Set(tourHoldBookings.map(b => String(b.tourSegmentId)))];
+
+    const segmentInfoMap = {}; // segmentId -> { tourName, departureDate, endDate }
+    if (uniqueSegIds.length > 0) {
+      const segments = await TourSegment.find({ _id: { $in: uniqueSegIds } })
+        .select("tourId departureDate endDate")
+        .lean();
+
+      const uniqueTourIds = [...new Set(segments.map(s => String(s.tourId)).filter(Boolean))];
+      let tourNameMap = {};
+      if (uniqueTourIds.length > 0) {
+        const tours = await Tour.find({ _id: { $in: uniqueTourIds } })
+          .select("name")
+          .lean();
+        tourNameMap = Object.fromEntries(tours.map(t => [String(t._id), t.name]));
+      }
+
+      for (const seg of segments) {
+        segmentInfoMap[String(seg._id)] = {
+          tourName:      tourNameMap[String(seg.tourId)] || "Tour",
+          departureDate: seg.departureDate ? moment(seg.departureDate).format("DD/MM/YYYY") : "",
+          endDate:       seg.endDate       ? moment(seg.endDate).format("DD/MM/YYYY")       : "",
+        };
+      }
+    }
+
     // Map roomId -> array of ALL bookings (để hiển thị trong modal)
     const roomBookingsMap = {};
     allBookings.forEach(b => {
@@ -2591,15 +2859,26 @@ module.exports.roomManagement = async (req, res) => {
           }
         }
         
+        const isTourHold    = !!b.tourSegmentId;
+        const guestAssigned = isTourHold && b.guest?.fullName && b.guest.fullName !== "[Tour Hold]";
+        const segInfo       = isTourHold ? (segmentInfoMap[String(b.tourSegmentId)] || null) : null;
+
         roomBookingsMap[roomIdStr].push({
-          code: b.code,
-          customerName: b.guest?.fullName || "Khách",
+          bookingId:     String(b._id),
+          code:          b.code,
+          customerName:  b.guest?.fullName || "Khách",
           customerPhone: b.guest?.phone || "",
-          checkIn: b.checkIn ? moment(b.checkIn).format("DD/MM/YYYY") : "",
-          checkOut: b.checkOut ? moment(b.checkOut).format("DD/MM/YYYY") : "",
-          status: b.status,
-          rooms: b.rooms || 1,
-          roomsDetails: roomsDetails, // Chi tiết từng phòng
+          checkIn:       b.checkIn  ? moment(b.checkIn).format("DD/MM/YYYY")  : "",
+          checkOut:      b.checkOut ? moment(b.checkOut).format("DD/MM/YYYY") : "",
+          status:        b.status,
+          rooms:         b.rooms || 1,
+          roomsDetails:  roomsDetails,
+          isTourHold,
+          tourAssigned:  guestAssigned,
+          tourName:      segInfo ? segInfo.tourName      : "",
+          tourDeparture: segInfo ? segInfo.departureDate : "",
+          tourEndDate:   segInfo ? segInfo.endDate       : "",
+          note:          b.note || "",
         });
       }
     });
@@ -2642,12 +2921,15 @@ module.exports.roomManagement = async (req, res) => {
       hotels,
       selectedHotelId,
       activeTab: "room-management",
+      filterFrom: filterFrom || "",
+      filterTo:   filterTo   || "",
+      isFiltered: !!(filterFrom || filterTo),
     };
 
     return res.render("admin/pages/hotel-booking", {
       pageTitle: "Quản lý số phòng",
       bookingsData,
-      selectedHotelId, // Pass selectedHotelId ở root level để hotel-selector có thể access
+      selectedHotelId,
       pathAdmin,
       isBookingManagement: true,
     });
@@ -2723,23 +3005,15 @@ module.exports.assignRoom = async (req, res) => {
       });
     }
 
-    // Kiểm tra tất cả các phòng
-    const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
+    // Lấy tất cả bookings còn hiệu lực của khách sạn (trừ booking gốc và trừ cancelled/checked_out)
+    const { hasTimeOverlap } = require("../../helpers/hotel-availability.helper");
     const allBookings = await HotelBooking.find({
       "hotel.hotelId": hotel._id,
-      status: { $ne: "cancelled" },
-      _id: { $ne: originalBooking._id }, // Loại trừ booking gốc
+      status: { $nin: ["cancelled", "checked_out"] },
+      _id: { $ne: originalBooking._id },
     }).lean();
 
-    const availableRooms = getAvailableRoomsForType(
-      hotel.rooms,
-      originalBooking.roomTypeId,
-      allBookings,
-      originalBooking.checkIn,
-      originalBooking.checkOut
-    );
-
-    // Validate tất cả roomIds
+    // Validate tất cả roomIds — kiểm tra trực tiếp từng phòng cụ thể
     for (const roomId of roomIds) {
       const room = hotel.rooms?.find(r => String(r._id) === String(roomId));
       if (!room) {
@@ -2756,8 +3030,14 @@ module.exports.assignRoom = async (req, res) => {
         });
       }
 
-      const isRoomAvailable = availableRooms.some(r => String(r._id) === String(roomId));
-      if (!isRoomAvailable) {
+      // Kiểm tra phòng có bị đặt cụ thể (roomId khớp) trong khoảng thời gian này không
+      const hasConflict = allBookings.some(b =>
+        b.roomId &&
+        String(b.roomId) === String(roomId) &&
+        hasTimeOverlap(originalBooking.checkIn, originalBooking.checkOut, b.checkIn, b.checkOut)
+      );
+
+      if (hasConflict) {
         return res.json({
           code: "error",
           message: `Phòng ${room.number || room.roomNumber} đã được đặt trong khoảng thời gian này!`,
@@ -2819,9 +3099,9 @@ module.exports.assignRoom = async (req, res) => {
         roomId: roomId,
         roomTypeId: originalBooking.roomTypeId,
         currency: originalBooking.currency,
-        pricePerNight: originalBooking.pricePerNight,
-        totalNights: originalBooking.totalNights,
-        totalAmount: originalBooking.pricePerNight * originalBooking.totalNights,
+        pricePerNight: originalBooking.pricePerNight || 0,
+        totalNights: originalBooking.totalNights || 0,
+        totalAmount: (originalBooking.pricePerNight || 0) * (originalBooking.totalNights || 0),
         hotel: originalBooking.hotel,
         orderTotal: originalBooking.orderTotal, // Giữ nguyên tổng tiền đơn
         additionalServices: originalBooking.additionalServices,
@@ -2848,6 +3128,52 @@ module.exports.assignRoom = async (req, res) => {
       code: "error",
       message: "Có lỗi xảy ra khi xếp phòng!",
     });
+  }
+};
+
+/**
+ * POST /admin/hotel/booking/unassign-room
+ * Huỷ xếp phòng: xoá roomId khỏi booking, booking trở về danh sách cần xếp phòng
+ */
+module.exports.unassignRoom = async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+    const companyId = req.account?.companyId || null;
+
+    if (!bookingId) {
+      return res.json({ code: "error", message: "Thiếu thông tin booking!" });
+    }
+
+    const booking = await HotelBooking.findById(bookingId);
+    if (!booking) {
+      return res.json({ code: "error", message: "Không tìm thấy booking!" });
+    }
+
+    // Xác nhận khách sạn thuộc công ty này
+    const hotel = await Hotel.findOne({
+      _id: booking.hotel?.hotelId,
+      companyId,
+      deleted: false,
+    });
+    if (!hotel) {
+      return res.json({ code: "error", message: "Không có quyền truy cập khách sạn này!" });
+    }
+
+    // Không cho phép huỷ khi khách đã nhận/trả phòng
+    if (booking.status === "checked_in" || booking.status === "checked_out") {
+      return res.json({
+        code: "error",
+        message: "Không thể huỷ xếp phòng khi khách đã nhận phòng hoặc đã trả phòng!",
+      });
+    }
+
+    booking.roomId = null;
+    await booking.save();
+
+    return res.json({ code: "success", message: "Đã huỷ xếp phòng thành công!" });
+  } catch (error) {
+    console.error("unassignRoom error:", error);
+    return res.json({ code: "error", message: "Có lỗi xảy ra khi huỷ xếp phòng!" });
   }
 };
 
@@ -2924,6 +3250,104 @@ module.exports.updateBookingStatus = async (req, res) => {
       code: "error",
       message: "Có lỗi xảy ra khi cập nhật trạng thái!",
     });
+  }
+};
+
+/**
+ * POST /admin/hotel/booking/delete
+ * Xóa toàn bộ booking group (theo base code) khỏi DB.
+ * Chỉ cho phép xóa khi chưa check-in (pending / confirmed / cancelled).
+ */
+module.exports.deleteBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+    const companyId = req.account?.companyId || null;
+
+    if (!bookingId) {
+      return res.json({ code: "error", message: "Thiếu thông tin booking!" });
+    }
+
+    const booking = await HotelBooking.findById(bookingId);
+    if (!booking) {
+      return res.json({ code: "error", message: "Không tìm thấy đơn đặt phòng!" });
+    }
+
+    // Kiểm tra quyền theo công ty
+    const hotel = await Hotel.findOne({
+      _id: booking.hotel?.hotelId,
+      companyId,
+      deleted: false,
+    });
+    if (!hotel) {
+      return res.json({ code: "error", message: "Không có quyền truy cập đơn đặt phòng này!" });
+    }
+
+    // Không cho xóa khi khách đang ở trong phòng
+    if (booking.status === "checked_in") {
+      return res.json({ code: "error", message: "Không thể xóa đơn khi khách đang nhận phòng!" });
+    }
+
+    // Tìm toàn bộ booking cùng group (cùng base code) để xóa hết
+    let baseCode = booking.code
+      .replace(/-R\d+(-\d+)?$/, "")
+      .replace(/-\d+$/, "");
+    while (baseCode.match(/-\d+$/)) {
+      baseCode = baseCode.replace(/-\d+$/, "");
+    }
+
+    await HotelBooking.deleteMany({
+      code: new RegExp(`^${baseCode}(-\\d+)?(-R\\d+)?(-\\d+)?$`),
+    });
+
+    return res.json({ code: "success", message: "Đã xóa đơn đặt phòng thành công!" });
+  } catch (error) {
+    console.error("deleteBooking error:", error);
+    return res.json({ code: "error", message: "Có lỗi xảy ra khi xóa đơn đặt phòng!" });
+  }
+};
+
+module.exports.releaseHolds = async (req, res) => {
+  try {
+    const { bookingIds } = req.body;
+    const companyId = req.account?.companyId || null;
+
+    if (!companyId) {
+      return res.json({ code: "error", message: "Không xác định được công ty!" });
+    }
+    if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+      return res.json({ code: "error", message: "Danh sách booking rỗng!" });
+    }
+
+    // Lấy danh sách hotel thuộc công ty để verify quyền
+    const companyHotels = await Hotel.find({ companyId, deleted: false }).select("_id").lean();
+    const companyHotelIds = new Set(companyHotels.map((h) => String(h._id)));
+
+    // Tìm các booking phù hợp để giải phóng
+    const bookings = await HotelBooking.find({
+      _id: { $in: bookingIds },
+      tourSegmentId: { $ne: null, $exists: true },
+      "guest.fullName": "[Tour Hold]",
+      status: { $nin: ["cancelled", "checked_in", "checked_out"] },
+    });
+
+    // Chỉ cancel những booking thuộc hotel của công ty hiện tại
+    let released = 0;
+    for (const booking of bookings) {
+      if (companyHotelIds.has(String(booking.hotel?.hotelId))) {
+        booking.status = "cancelled";
+        await booking.save();
+        released++;
+      }
+    }
+
+    return res.json({
+      code: "success",
+      message: `Đã giải phóng ${released} phòng thành công!`,
+      released,
+    });
+  } catch (error) {
+    console.error("releaseHolds error:", error);
+    return res.json({ code: "error", message: "Có lỗi xảy ra khi giải phóng phòng!" });
   }
 };
 
@@ -3044,51 +3468,120 @@ module.exports.bookingCalendar = async (req, res) => {
       return roomA - roomB;
     });
 
-    // Lấy bookings trong tháng của khách sạn được chọn (chỉ bookings còn hiệu lực)
+    // Lấy TẤT CẢ bookings trong tháng đã được assign phòng cụ thể (gồm cả tour holds và checked_out)
     const bookings = await HotelBooking.find({
       "hotel.hotelId": hotelId,
-      checkIn: { $lte: endOfMonth },
+      checkIn:  { $lte: endOfMonth },
       checkOut: { $gte: startOfMonth },
-      status: { $nin: ["cancelled", "checked_out"] }, // Loại bỏ đã hủy và đã trả phòng
-      roomId: { $ne: null }, // Chỉ lấy bookings đã được assign phòng
+      status:   { $ne: "cancelled" },
+      roomId:   { $ne: null },
     })
-      .select("code guest checkIn checkOut status roomId")
+      .select("code guest checkIn checkOut status roomId tourSegmentId")
       .lean();
+
+    // ── Lấy thông tin tour cho tour hold bookings ────────────────────────────────
+    const TourSegment = require("../../models/tour-segment.model");
+    const Tour        = require("../../models/tour.model");
+
+    // Tìm tất cả tourSegmentId xuất hiện trong tháng
+    const tourHoldBookingsRaw = await HotelBooking.find({
+      "hotel.hotelId": hotelId,
+      checkIn:  { $lte: endOfMonth },
+      checkOut: { $gte: startOfMonth },
+      status:   { $nin: ["cancelled", "checked_out"] },
+      tourSegmentId: { $ne: null, $exists: true },
+      code:     { $ne: null },
+    })
+      .select("tourSegmentId checkIn checkOut rooms adults roomTypeId")
+      .lean();
+
+    // Tạo map: segmentId → { tourName, shortCode, segments[] }
+    const segIds = [...new Set(tourHoldBookingsRaw.map(b => String(b.tourSegmentId)))];
+    const tourSegDocs = segIds.length
+      ? await TourSegment.find({ _id: { $in: segIds } }).select("tourId departureDate endDate segments").lean()
+      : [];
+    const tourDocIds = [...new Set(tourSegDocs.map(s => String(s.tourId)))];
+    const tourDocs   = tourDocIds.length
+      ? await Tour.find({ _id: { $in: tourDocIds } }).select("name").lean()
+      : [];
+
+    const tourNameMap = {};
+    tourDocs.forEach(t => { tourNameMap[String(t._id)] = t.name; });
+
+    // Xây dựng tourSegmentInfoMap: segId → { tourName, shortCode, timeSegments[] }
+    // shortCode = [KH{n}] — KH viết tắt của "Khởi Hành", n là số thứ tự trong tháng
+    const tourSegmentInfoMap = {};
+    tourSegDocs.forEach((seg, idx) => {
+      const tourName  = tourNameMap[String(seg.tourId)] || "Tour";
+      // Dùng 6 ký tự cuối của tourId làm mã ngắn hiển thị trên block lịch
+      const shortCode = `#${String(seg.tourId).slice(-6)}`;
+
+      // Thu thập các khung thời gian (fromDate → toDate) của segment
+      const timeSegments = (seg.segments || []).map(s => ({
+        fromDate: s.fromDate ? moment(s.fromDate).format("DD/MM/YYYY") : "?",
+        toDate:   s.toDate   ? moment(s.toDate).format("DD/MM/YYYY")   : "?",
+      }));
+
+      tourSegmentInfoMap[String(seg._id)] = { tourName, shortCode, timeSegments };
+    });
 
     // Map roomId -> bookings
     const roomBookingsMap = {};
     bookings.forEach(b => {
       const roomIdStr = String(b.roomId);
-      if (!roomBookingsMap[roomIdStr]) {
-        roomBookingsMap[roomIdStr] = [];
-      }
+      if (!roomBookingsMap[roomIdStr]) roomBookingsMap[roomIdStr] = [];
+
+      const segInfo      = b.tourSegmentId ? tourSegmentInfoMap[String(b.tourSegmentId)] : null;
+      const rawGuestName = b.guest?.fullName || "";
+      const isAssigned   = !!b.tourSegmentId
+        && rawGuestName !== ""
+        && rawGuestName !== "[Tour Hold]";
+
       roomBookingsMap[roomIdStr].push({
-        bookingId: b.code,
-        code: b.code,
-        guestName: b.guest?.fullName || "Khách",
-        startDate: b.checkIn,
-        endDate: b.checkOut,
-        status: b.status,
+        bookingId:     b.code,
+        code:          b.code,
+        guestName:     rawGuestName || "Khách",
+        phone:         b.guest?.phone || "",
+        startDate:     b.checkIn,
+        endDate:       b.checkOut,
+        checkInFmt:    b.checkIn  ? moment(b.checkIn).format("DD/MM/YYYY")  : "",
+        checkOutFmt:   b.checkOut ? moment(b.checkOut).format("DD/MM/YYYY") : "",
+        status:        b.status,
+        isTourHold:    !!b.tourSegmentId,
+        isAssigned,
+        tourShortCode: segInfo ? segInfo.shortCode : null,
+        tourName:      segInfo ? segInfo.tourName  : null,
       });
     });
 
     // Map bookings với phòng
-    const roomsWithBookings = allRooms.map(room => {
-      const roomIdStr = String(room._id);
-      const roomBookings = roomBookingsMap[roomIdStr] || [];
-      
+    const roomsWithBookings = allRooms.map(room => ({
+      roomNumber: room.roomNumber,
+      roomType:   room.roomType,
+      bookings:   roomBookingsMap[String(room._id)] || [],
+    }));
+
+    // Xây dựng legend cho bảng chú thích dưới lịch
+    const tourHoldLegend = Object.entries(tourSegmentInfoMap).map(([segId, info]) => {
+      // Tính tổng phòng/người đang giữ của segment này
+      const holdBookings = tourHoldBookingsRaw.filter(b => String(b.tourSegmentId) === segId);
+      const totalRooms   = holdBookings.reduce((s, b) => s + (b.rooms  || 1), 0);
+      const totalPeople  = holdBookings.reduce((s, b) => s + (b.adults || 0), 0);
       return {
-        roomNumber: room.roomNumber,
-        roomType: room.roomType,
-        bookings: roomBookings
+        shortCode:    info.shortCode,
+        tourName:     info.tourName,
+        timeSegments: info.timeSegments,
+        totalRooms,
+        totalPeople,
       };
     });
 
     const calendarData = {
-      currentMonth: currentMonthText,
-      currentYear: year,
+      currentMonth:    currentMonthText,
+      currentYear:     year,
       currentMonthNum: month,
-      rooms: roomsWithBookings,
+      rooms:           roomsWithBookings,
+      tourHoldLegend,
       activeTab: "calendar"
     };
 
@@ -3281,6 +3774,7 @@ module.exports.guestList = async (req, res) => {
         guestName: booking.guest?.fullName || "N/A",
         guestEmail: booking.guest?.email || "N/A",
         guestPhone: booking.guest?.phone || "",
+        cccdImages: booking.guest?.cccdImages || [],
         checkInDisplay: moment(booking.checkIn).format("DD/MM/YYYY"),
         checkOutDisplay: moment(booking.checkOut).format("DD/MM/YYYY"),
         roomType: roomTypeName,

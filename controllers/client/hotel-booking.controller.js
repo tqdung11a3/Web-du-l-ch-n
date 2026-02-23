@@ -369,6 +369,7 @@ module.exports.createPost = async (req, res) => {
           fullName: fullName.trim(),
           phone: phone.trim(),
           email: (email || "").trim(),
+          cccdImages: Array.isArray(req.body.cccdImages) ? req.body.cccdImages : [],
         },
         checkIn: checkInMoment.toDate(),
         checkOut: checkOutMoment.toDate(),
@@ -399,10 +400,54 @@ module.exports.createPost = async (req, res) => {
         
         // ==== ĐƠN TẠM / GIỮ CHỖ ====
         isTemporaryHold: true, // Đánh dấu là đơn tạm
-        holdExpiresAt: moment().add(1, 'minutes').toDate(), // Hết hạn sau 1 phút (TEST MODE)
+        holdExpiresAt: moment().add(15, 'minutes').toDate(), // Hết hạn sau 15 phút
       });
 
       await booking.save();
+
+      // ── Kiểm tra race condition sau khi lưu (optimistic locking) ──────────
+      // Lấy TẤT CẢ bookings cùng roomType, cùng ngày (bao gồm booking vừa tạo)
+      // Sắp xếp theo _id tăng dần → booking được tạo sớm nhất có _id nhỏ nhất
+      const allOverlappingAfterSave = await HotelBooking.find({
+        "hotel.hotelId": hotel._id,
+        roomTypeId: item.roomTypeId,
+        status: { $nin: ["cancelled", "checked_out"] },
+        $or: [{ checkIn: { $lt: checkOutMoment.toDate() }, checkOut: { $gt: checkInMoment.toDate() } }],
+      })
+        .sort({ _id: 1 })
+        .lean();
+
+      // Tổng số phòng vật lý của roomType này
+      const totalPhysicalRooms = individualRooms.filter(
+        (r) => String(r.roomTypeId) === String(item.roomTypeId) && r.status === "vacant"
+      ).length;
+
+      // Đi qua danh sách theo thứ tự _id, cộng dồn đến khi chạm booking của ta
+      // → "Early bird wins": booking tạo trước giữ được phòng
+      let cumulative = 0;
+      let withinCapacity = false;
+      for (const b of allOverlappingAfterSave) {
+        cumulative += b.rooms || 1;
+        if (String(b._id) === String(booking._id)) {
+          withinCapacity = cumulative <= totalPhysicalRooms;
+          break;
+        }
+      }
+
+      if (!withinCapacity) {
+        // Race condition: phòng đã bị booking trước ta → hủy booking vừa tạo
+        await HotelBooking.deleteOne({ _id: booking._id });
+        // Hủy cả các booking đã tạo trước đó trong cùng request này (nếu có nhiều item)
+        if (createdBookings.length > 0) {
+          await HotelBooking.deleteMany({ _id: { $in: createdBookings.map((b) => b._id) } });
+        }
+        return res.json({
+          code: "error",
+          message: `Phòng loại "${item.roomTypeName}" vừa được đặt hết bởi khách khác! Vui lòng kiểm tra lại giỏ hàng.`,
+        });
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       createdBookings.push(booking);
     }
 
@@ -620,6 +665,74 @@ module.exports.paymentVNPayResult = async (req, res) => {
 };
 
 /**
+ * Helper: Hủy tất cả booking trong cùng group code (set status = cancelled)
+ */
+async function _cancelHotelBookingGroup(code, phone) {
+  try {
+    await HotelBooking.updateMany(
+      { code, "guest.phone": phone, paymentStatus: { $ne: "paid" } },
+      { status: "cancelled", isTemporaryHold: false, holdExpiresAt: null }
+    );
+  } catch (err) {
+    console.error("[hotel cancelHold] Error:", err.message);
+  }
+}
+
+/**
+ * GET /hotel-booking/cancel-hold?bookingCode=...&phone=...
+ * POST /hotel-booking/cancel-hold  (sendBeacon dùng POST)
+ * Hủy đặt phòng tạm thời và trả lại phòng
+ */
+module.exports.cancelHold = async (req, res) => {
+  try {
+    // Hỗ trợ GET (query string) và POST (sendBeacon body text/plain)
+    let bookingCode = req.query.bookingCode || req.body?.bookingCode;
+    let phone       = req.query.phone       || req.body?.phone;
+
+    if (!bookingCode && req.body && typeof req.body === "string") {
+      const params = new URLSearchParams(req.body);
+      bookingCode = params.get("bookingCode");
+      phone       = params.get("phone");
+    }
+
+    if (!bookingCode || !phone) {
+      return res.json({ code: "error", message: "Thiếu tham số" });
+    }
+
+    const booking = await HotelBooking.findOne({
+      code: bookingCode,
+      "guest.phone": phone,
+    }).lean();
+
+    if (!booking) {
+      return res.json({ code: "error", message: "Không tìm thấy đặt phòng" });
+    }
+    if (booking.paymentStatus === "paid") {
+      return res.json({ code: "error", message: "Đơn đã thanh toán, không thể hủy" });
+    }
+    if (booking.status === "cancelled") {
+      return res.json({ code: "ok", message: "Đơn đã hủy trước đó" });
+    }
+
+    // Phân biệt "explicit cancel" (GET / nút hủy) vs sendBeacon POST
+    const isExplicit = req.headers["x-cancel-reason"] === "explicit" ||
+                       req.method === "GET";
+    const isExpired  = booking.holdExpiresAt && new Date() > new Date(booking.holdExpiresAt);
+
+    if (!isExpired && !isExplicit) {
+      // sendBeacon khi rời trang nhưng đơn chưa hết hạn → giữ nguyên
+      return res.json({ code: "skipped", message: "Đơn chưa hết hạn, giữ nguyên" });
+    }
+
+    await _cancelHotelBookingGroup(bookingCode, phone);
+    return res.json({ code: "success", message: "Đã hủy đặt phòng" });
+  } catch (err) {
+    console.error("hotel-booking.cancelHold error:", err);
+    return res.json({ code: "error", message: "Có lỗi xảy ra" });
+  }
+};
+
+/**
  * GET /hotel-booking/pending?bookingCode=...&phone=...
  * Hiển thị trang đơn tạm thời (chưa thanh toán)
  */
@@ -641,6 +754,18 @@ module.exports.pending = async (req, res) => {
 
     if (!bookings || bookings.length === 0) {
       return res.redirect("/");
+    }
+
+    // Auto-cancel nếu đơn đã hết hạn giữ chỗ
+    const firstBooking = bookings[0];
+    if (
+      firstBooking.isTemporaryHold &&
+      firstBooking.paymentStatus === "unpaid" &&
+      firstBooking.holdExpiresAt &&
+      new Date() > new Date(firstBooking.holdExpiresAt)
+    ) {
+      await _cancelHotelBookingGroup(bookingCode, phone);
+      return res.redirect("/?expired=1");
     }
 
     // Format booking data

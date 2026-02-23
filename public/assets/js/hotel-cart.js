@@ -128,7 +128,6 @@ function showDateRequiredMessage() {
         console.log('Add to cart response:', data);
         
         if (data.code === 'success') {
-          // Show success notification
           if (typeof Notyf !== 'undefined') {
             const notyf = new Notyf({
               duration: 3000,
@@ -138,22 +137,32 @@ function showDateRequiredMessage() {
           } else {
             alert(data.message || 'Đã thêm vào giỏ hàng');
           }
-          
-          // Update cart count in header
           updateCartCount();
         } else {
-          throw new Error(data.message || 'Có lỗi xảy ra');
+          // Hiển thị thông báo lỗi — kéo dài hơn nếu phòng đang bị khách khác giữ
+          const errMsg = data.message || 'Có lỗi xảy ra';
+          const isHeldByOther = data.type === 'room_held_by_other';
+          if (typeof Notyf !== 'undefined') {
+            const notyf = new Notyf({
+              duration: isHeldByOther ? 6000 : 4000,
+              position: { x: 'right', y: 'top' },
+              dismissible: true,
+            });
+            notyf.error(errMsg);
+          } else {
+            alert(errMsg);
+          }
         }
       } catch (error) {
         console.error('Error adding to cart:', error);
         if (typeof Notyf !== 'undefined') {
           const notyf = new Notyf({
-            duration: 3000,
+            duration: 4000,
             position: { x: 'right', y: 'top' }
           });
-          notyf.error(error.message || 'Có lỗi xảy ra');
+          notyf.error(error.message || 'Có lỗi xảy ra khi kết nối. Vui lòng thử lại.');
         } else {
-          alert(error.message || 'Có lỗi xảy ra');
+          alert(error.message || 'Có lỗi xảy ra khi kết nối. Vui lòng thử lại.');
         }
       } finally {
         // Re-enable button
@@ -662,10 +671,30 @@ function showDateRequiredMessage() {
       }
     });
 
+    // Upload CCCD images nếu có
+    let cccdImages = [];
+    const hotelCccdInput = formContainer.querySelector('#hotel-cccd-file-input');
+    if (hotelCccdInput && hotelCccdInput.files && hotelCccdInput.files.length > 0) {
+      const formData = new FormData();
+      for (let i = 0; i < hotelCccdInput.files.length; i++) {
+        formData.append('files', hotelCccdInput.files[i]);
+      }
+      try {
+        const uploadRes = await fetch('/upload/images', { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        if (uploadData.success) cccdImages = uploadData.urls;
+      } catch (e) {
+        alert('Lỗi upload ảnh CCCD!');
+        isSubmitting = false;
+        return;
+      }
+    }
+
     const dataFinal = {
       fullName,
       phone,
       email,
+      cccdImages,
       note,
       paymentMethod,
       additionalServices,

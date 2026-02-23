@@ -9,7 +9,11 @@ module.exports.list = async (req, res, next) => {
 
   const categoryTree = categoryHelper.buildCategoryTree(categoryList, "");
 
-  res.locals.categoryList = categoryTree;
+  // Ẩn "Tour Nước Ngoài" khỏi menu header
+  const normalizedHide = "tour nước ngoài";
+  res.locals.categoryList = categoryTree.filter(
+    (item) => (item.name || "").toLowerCase().trim() !== normalizedHide
+  );
 
   next();
 };

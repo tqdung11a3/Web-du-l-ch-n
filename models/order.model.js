@@ -1,10 +1,39 @@
 const mongoose = require("mongoose");
 
+// Mỗi phần tử trong `items` là 1 tour được đặt, có cấu trúc:
+// {
+//   tourId, name, slug, avatar, companyId,
+//   departureCity, departureDateDisplay, departureDate,
+//   quantityAdult, quantityChildren, quantityBaby, babySeat,
+//   priceNewAdult, priceNewChildren, priceNewBaby,
+//   babyPricingMode, babyPricingRules,
+//
+//   // Lớp trung gian Tour ↔ Hotel (kết quả phân bổ Greedy)
+//   hotelAllocation: {
+//     status: 'ok' | 'partial' | 'no_hotels',
+//     totalPeople: Number,
+//     totalAssigned: Number,
+//     remaining: Number,
+//     checkIn: Date,
+//     checkOut: Date,
+//     allocations: [{
+//       hotelId: String,
+//       hotelName: String,
+//       assignedPeople: Number,  // số người được phân bổ vào hotel này
+//       capacity: Number,         // sức chứa còn lại của hotel
+//       vacantRooms: Number,      // số phòng trống tương ứng
+//       note: String,             // ghi chú admin đặt (VD: "Đêm 1-2")
+//     }]
+//   }
+// }
+
 const schema = new mongoose.Schema(
   {
     code: String,
     fullName: String,
     phone: String,
+    email: String,
+    cccdImages: [String],
     note: String,
     items: Array,
     subTotal: Number,
@@ -26,6 +55,10 @@ const schema = new mongoose.Schema(
     },
     deletedBy: String,
     deletedAt: Date,
+
+    // ==== ĐƠN TẠM / GIỮ CHỖ TOUR ====
+    isTemporaryHold: { type: Boolean, default: false },
+    holdExpiresAt:   { type: Date,    default: null  },
   },
   {
     timestamps: true, // Tự động sinh ra trường createdAt và updatedAt

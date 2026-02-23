@@ -93,12 +93,26 @@ const schema = new Schema(
     // Khác
     time: String,
     vehicle: String,
-    departureDate: Date, // Giữ lại để tương thích với dữ liệu cũ
-    departureDates: { type: [Date], default: [] }, // Mảng các ngày khởi hành
+    departureDate: Date, // Giữ lại để tương thích với dữ liệu cũ (= departures[0].departureDate)
+
+    // Mảng cặp ngày: mỗi phần tử gồm ngày khởi hành + ngày kết thúc + ghế riêng
+    departures: {
+      type: [
+        {
+          departureDate: { type: Date, required: true },
+          endDate: { type: Date, default: null },
+          seatsTotal: { type: Number, default: 0 },     // tổng ghế của lịch khởi hành này
+          seatsRemaining: { type: Number, default: 0 }, // ghế còn lại của lịch khởi hành này
+        },
+      ],
+      default: [],
+      _id: false,
+    },
     information: String,
     schedules: Array,
-    seatsTotal: Number, // tổng số ghế của phương tiện (xe/bus/tàu…)
-    seatsRemaining: Number, // số ghế còn lại có thể bán
+    // Giữ lại 2 trường cấp tour cho backward-compatibility (dữ liệu cũ / API cũ)
+    seatsTotal: Number,
+    seatsRemaining: Number,
 
     // Điểm nổi bật, bao gồm, không bao gồm
     highlights: { type: [String], default: [] }, // Điểm nổi bật
@@ -107,6 +121,17 @@ const schema = new Schema(
 
     // Tags phân loại theo loại hình trải nghiệm
     tags: { type: [String], default: [] }, // Ví dụ: ["phiêu lưu", "biển", "văn hóa", "leo núi", "tham quan thành phố"]
+
+    // Khách sạn gắn với tour (lớp trung gian Tour ↔ Hotel)
+    accommodations: {
+      type: [
+        {
+          hotel: { type: Types.ObjectId, ref: "Hotel", required: true },
+          note: { type: String, default: "" }, // VD: "Đêm 1-2", "Toàn bộ tour"
+        },
+      ],
+      default: [],
+    },
 
     ratingAvg: { type: Number, default: 0 }, // ví dụ 4.6
     ratingCount: { type: Number, default: 0 }, // ví dụ 27

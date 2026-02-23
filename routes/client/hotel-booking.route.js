@@ -7,6 +7,9 @@ router.get("/payment-vnpay", hotelBookingController.paymentVNPay);
 
 router.get("/payment-vnpay-result", hotelBookingController.paymentVNPayResult);
 
+router.get("/cancel-hold",  hotelBookingController.cancelHold);
+router.post("/cancel-hold", hotelBookingController.cancelHold); // sendBeacon dùng POST
+
 router.get("/pending", hotelBookingController.pending);
 
 router.get("/success", hotelBookingController.success);

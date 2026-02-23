@@ -166,7 +166,9 @@ module.exports.list = async (req, res) => {
 
     const needSeats = Number(minSeats) || 0;
     if (needSeats > 0) {
-      pipeline.push({ $match: { seatsRemainingEff: { $gte: needSeats } } });
+      pipeline.push({
+        $match: { departures: { $elemMatch: { seatsRemaining: { $gte: needSeats } } } },
+      });
     }
 
     // sort ổn định trước
@@ -192,12 +194,24 @@ module.exports.list = async (req, res) => {
         ? moment(t.discountTo).format("DD/MM/YYYY")
         : "";
 
+      const departuresWithSeats =
+        Array.isArray(t.departures) && t.departures.length > 0
+          ? t.departures
+              .filter((d) => d && d.departureDate)
+              .map((d) => ({
+                dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+                seatsTotal: d.seatsTotal ?? 0,
+                seatsRemaining: d.seatsRemaining ?? 0,
+              }))
+          : [];
+
       return {
         ...t,
         discount,
         departureDateFormat,
         discountFromFormat,
         discountToFormat,
+        departuresWithSeats,
         seatsRemaining:
           typeof t.seatsRemainingEff === "number"
             ? t.seatsRemainingEff

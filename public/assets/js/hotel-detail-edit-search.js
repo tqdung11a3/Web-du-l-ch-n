@@ -18,6 +18,7 @@
   const guestsPopup = document.getElementById('editGuestsPopup');
   const roomsContainer = document.getElementById('editRoomsContainer');
   const addRoomBtn = document.getElementById('editAddRoomBtn');
+  const guestsDoneBtn = document.getElementById('editGuestsDoneBtn');
   const guestText = document.getElementById('editGuestText');
   const roomsInput = document.getElementById('editRoomsInput');
   const adultsInput = document.getElementById('editAdultsInput');
@@ -282,6 +283,16 @@
       roomsData.push({ adults: 1, children: [] });
       renderRooms();
       updateSummary();
+    });
+  }
+
+  // Close guests popup via Done button
+  if (guestsDoneBtn) {
+    guestsDoneBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      guestsPopup.setAttribute('aria-hidden', 'true');
+      guestBtn.setAttribute('aria-expanded', 'false');
     });
   }
   

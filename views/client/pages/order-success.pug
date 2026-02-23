@@ -58,12 +58,20 @@ block main
                       span #{item.quantityChildren}
                       span x
                       span.inner-hl #{item.priceNewChildren.toLocaleString("vi-VN")}
+                  if item.childrenAges && item.childrenAges.length
+                    .inner-ages-info
+                      each age, idx in item.childrenAges
+                        span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
                   .inner-item
                     .inner-item-label Em bé:
                     .inner-item-price
                       span #{item.quantityBaby}
                       span x
                       span.inner-hl #{item.priceNewBaby.toLocaleString("vi-VN")}
+                  if item.babyAges && item.babyAges.length
+                    .inner-ages-info
+                      each age, idx in item.babyAges
+                        span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
             // End Tour Item
         .inner-list-price
           .inner-item

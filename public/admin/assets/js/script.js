@@ -604,8 +604,18 @@ if (tourCreateForm) {
           </select>
         </div>
         <div class="inner-input-item">
-          <label>Các địa điểm nổi tiếng (mỗi dòng một địa điểm)</label>
-          <textarea class="location-spots" rows="3"></textarea>
+          <label>Các địa điểm nổi tiếng</label>
+          <div class="location-spots-list">
+            <div class="location-spot-item">
+              <div class="spot-input-group">
+                <textarea class="spot-input" placeholder="VD: Tháp Eiffel" rows="2"></textarea>
+                <button type="button" class="spot-remove-btn">Xóa</button>
+              </div>
+            </div>
+          </div>
+          <div class="spot-actions">
+            <button type="button" class="spot-add-btn">+ Thêm địa điểm</button>
+          </div>
         </div>
       </div>
       <div class="location-actions">
@@ -646,8 +656,18 @@ if (tourCreateForm) {
           </select>
         </div>
         <div class="inner-input-item">
-          <label>Các địa điểm nổi tiếng (mỗi dòng một địa điểm)</label>
-          <textarea class="location-spots" rows="3"></textarea>
+          <label>Các địa điểm nổi tiếng</label>
+          <div class="location-spots-list">
+            <div class="location-spot-item">
+              <div class="spot-input-group">
+                <textarea class="spot-input" placeholder="VD: Chùa Linh Ứng" rows="2"></textarea>
+                <button type="button" class="spot-remove-btn">Xóa</button>
+              </div>
+            </div>
+          </div>
+          <div class="spot-actions">
+            <button type="button" class="spot-add-btn">+ Thêm địa điểm</button>
+          </div>
         </div>
       </div>
       <div class="location-actions">
@@ -790,9 +810,8 @@ if (tourCreateForm) {
         } else {
           // Nếu chỉ còn 1 item, chỉ xóa giá trị thay vì xóa item
           const citySelect = locationItem.querySelector(".location-city");
-          const spotsTextarea = locationItem.querySelector(".location-spots");
           if (citySelect) citySelect.value = "";
-          if (spotsTextarea) spotsTextarea.value = "";
+          locationItem.querySelectorAll(".spot-input").forEach(t => t.value = "");
         }
       }
     }
@@ -816,41 +835,57 @@ if (tourCreateForm) {
   }
   // ==== HẾT ĐỊA ĐIỂM CÓ TRONG TOUR (UI) ====
 
-  // ==== NGÀY KHỞI HÀNH (UI) ====
-  const departureDatesWrapper = document.getElementById("departure-dates-wrapper");
-  const departureDateAddBtn = document.getElementById("departure-date-add-btn");
+  // ==== LỊCH KHỞI HÀNH (UI - CREATE): cặp ngày khởi hành + kết thúc ====
+  const departuresWrapper = document.getElementById("departures-wrapper");
+  const departurePairAddBtn = document.getElementById("departure-pair-add-btn");
 
-  function createDepartureDateItem() {
+  function createDeparturePairItem() {
     const div = document.createElement("div");
-    div.className = "departure-date-item";
+    div.className = "departure-pair-item";
     div.setAttribute("data-index", Date.now());
     div.innerHTML = `
-      <input type="date" class="departure-date-input">
-      <button type="button" class="departure-date-remove-btn">Xóa</button>
+      <div class="departure-pair-inputs">
+        <div class="departure-pair-field">
+          <label>Ngày khởi hành</label>
+          <input type="date" class="departure-date-input">
+        </div>
+        <div class="departure-pair-field">
+          <label>Ngày kết thúc</label>
+          <input type="date" class="end-date-input">
+        </div>
+        <div class="departure-pair-field">
+          <label>Tổng số ghế</label>
+          <input type="number" class="seats-total-input" min="0" placeholder="VD: 40">
+        </div>
+        <div class="departure-pair-field">
+          <label>Ghế còn lại</label>
+          <input type="number" class="seats-remaining-input" min="0" placeholder="VD: 40">
+        </div>
+      </div>
+      <button type="button" class="departure-pair-remove-btn">Xóa</button>
     `;
     return div;
   }
 
-  if (departureDateAddBtn && departureDatesWrapper) {
-    departureDateAddBtn.addEventListener("click", () => {
-      departureDatesWrapper.appendChild(createDepartureDateItem());
+  if (departurePairAddBtn && departuresWrapper) {
+    departurePairAddBtn.addEventListener("click", () => {
+      departuresWrapper.appendChild(createDeparturePairItem());
     });
 
-    departureDatesWrapper.addEventListener("click", (e) => {
-      const btn = e.target.closest(".departure-date-remove-btn");
+    departuresWrapper.addEventListener("click", (e) => {
+      const btn = e.target.closest(".departure-pair-remove-btn");
       if (btn) {
-        const item = btn.closest(".departure-date-item");
-        if (item && departureDatesWrapper.children.length > 1) {
+        const item = btn.closest(".departure-pair-item");
+        if (item && departuresWrapper.children.length > 1) {
           item.remove();
-        } else if (item && departureDatesWrapper.children.length === 1) {
-          // Nếu chỉ còn 1 item, chỉ xóa giá trị thay vì xóa item
-          const dateInput = item.querySelector(".departure-date-input");
-          if (dateInput) dateInput.value = "";
+        } else if (item) {
+          item.querySelector(".departure-date-input").value = "";
+          item.querySelector(".end-date-input").value = "";
         }
       }
     });
   }
-  // ==== HẾT NGÀY KHỞI HÀNH (UI) ====
+  // ==== HẾT LỊCH KHỞI HÀNH (UI - CREATE) ====
 
   validator
     .addField("#name", [
@@ -875,10 +910,6 @@ if (tourCreateForm) {
       let priceNewAdult = f.priceNewAdult.value;
       let priceNewChildren = f.priceNewChildren.value;
       let priceNewBaby = f.priceNewBaby.value;
-
-      // Ghế
-      const seatsTotal = f.seatsTotal.value;
-      const seatsRemaining = f.seatsRemaining.value;
 
       // Cấu hình Em bé
       const babyPricingMode = f.babyPricingMode.value || "fixed";
@@ -970,21 +1001,21 @@ if (tourCreateForm) {
       
       console.log("Tour Create - Total locations collected:", locations.length);
 
-      // ==== NGÀY KHỞI HÀNH (mảng) ====
-      const departureDatesWrapper = document.getElementById("departure-dates-wrapper");
-      const departureDates = [];
-      if (departureDatesWrapper) {
-        departureDatesWrapper
-          .querySelectorAll(".departure-date-item")
-          .forEach((item) => {
-            const dateInput = item.querySelector(".departure-date-input");
-            const dateValue = dateInput?.value || "";
-            if (dateValue) {
-              departureDates.push(dateValue);
-            }
-          });
+      // ==== LỊCH KHỞI HÀNH (cặp ngày - CREATE) ====
+      const departuresWrapperC = document.getElementById("departures-wrapper");
+      const departures = [];
+      if (departuresWrapperC) {
+        departuresWrapperC.querySelectorAll(".departure-pair-item").forEach((item) => {
+          const depVal = item.querySelector(".departure-date-input")?.value || "";
+          const endVal = item.querySelector(".end-date-input")?.value || "";
+          const sTotal = parseInt(item.querySelector(".seats-total-input")?.value) || 0;
+          let sRem = parseInt(item.querySelector(".seats-remaining-input")?.value);
+          if (isNaN(sRem)) sRem = sTotal;
+          if (sRem > sTotal) sRem = sTotal;
+          if (depVal) departures.push({ departureDate: depVal, endDate: endVal || null, seatsTotal: sTotal, seatsRemaining: sRem });
+        });
       }
-      // ==== HẾT NGÀY KHỞI HÀNH ====
+      // ==== HẾT LỊCH KHỞI HÀNH ====
 
       // Khác
       const time = f.time.value;
@@ -1023,10 +1054,6 @@ if (tourCreateForm) {
       formData.append("babyPricingMode", babyPricingMode);
       formData.append("babyPricingRulesJson", babyPricingRulesJson);
 
-      // Ghế
-      formData.append("seatsTotal", seatsTotal);
-      formData.append("seatsRemaining", seatsRemaining);
-
       // ==== GỬI THỜI HẠN KHUYẾN MÃI NẾU CÓ ====
       if (hasManualOldPrice && discountFrom && discountTo) {
         formData.append("discountFrom", discountFrom);
@@ -1041,7 +1068,7 @@ if (tourCreateForm) {
       // Khác
       formData.append("time", time);
       formData.append("vehicle", vehicle);
-      formData.append("departureDates", JSON.stringify(departureDates));
+      formData.append("departures", JSON.stringify(departures));
       formData.append("information", information);
       formData.append("schedules", JSON.stringify(schedules));
 
@@ -2588,8 +2615,18 @@ if (tourEditForm) {
           </select>
         </div>
         <div class="inner-input-item">
-          <label>Các địa điểm nổi tiếng (mỗi dòng một địa điểm)</label>
-          <textarea class="location-spots" rows="3"></textarea>
+          <label>Các địa điểm nổi tiếng</label>
+          <div class="location-spots-list">
+            <div class="location-spot-item">
+              <div class="spot-input-group">
+                <textarea class="spot-input" placeholder="VD: Tháp Eiffel" rows="2"></textarea>
+                <button type="button" class="spot-remove-btn">Xóa</button>
+              </div>
+            </div>
+          </div>
+          <div class="spot-actions">
+            <button type="button" class="spot-add-btn">+ Thêm địa điểm</button>
+          </div>
         </div>
       </div>
       <div class="location-actions">
@@ -2622,8 +2659,18 @@ if (tourEditForm) {
           </select>
         </div>
         <div class="inner-input-item">
-          <label>Các địa điểm nổi tiếng (mỗi dòng một địa điểm)</label>
-          <textarea class="location-spots" rows="3"></textarea>
+          <label>Các địa điểm nổi tiếng</label>
+          <div class="location-spots-list">
+            <div class="location-spot-item">
+              <div class="spot-input-group">
+                <textarea class="spot-input" placeholder="VD: Chùa Linh Ứng" rows="2"></textarea>
+                <button type="button" class="spot-remove-btn">Xóa</button>
+              </div>
+            </div>
+          </div>
+          <div class="spot-actions">
+            <button type="button" class="spot-add-btn">+ Thêm địa điểm</button>
+          </div>
         </div>
       </div>
       <div class="location-actions">
@@ -2764,9 +2811,8 @@ if (tourEditForm) {
         } else {
           // Nếu chỉ còn 1 item, chỉ xóa giá trị thay vì xóa item
           const citySelect = locationItem.querySelector(".location-city");
-          const spotsTextarea = locationItem.querySelector(".location-spots");
           if (citySelect) citySelect.value = "";
-          if (spotsTextarea) spotsTextarea.value = "";
+          locationItem.querySelectorAll(".spot-input").forEach(t => t.value = "");
         }
       }
     }
@@ -2789,41 +2835,57 @@ if (tourEditForm) {
   }
   // ==== HẾT ĐỊA ĐIỂM CÓ TRONG TOUR (UI) ====
 
-  // ==== NGÀY KHỞI HÀNH (UI - EDIT) ====
-  const departureDatesWrapperE = document.getElementById("departure-dates-wrapper");
-  const departureDateAddBtnE = document.getElementById("departure-date-add-btn");
+  // ==== LỊCH KHỞI HÀNH (UI - EDIT): cặp ngày khởi hành + kết thúc ====
+  const departuresWrapperE = document.getElementById("departures-wrapper");
+  const departurePairAddBtnE = document.getElementById("departure-pair-add-btn");
 
-  function createDepartureDateItemEdit() {
+  function createDeparturePairItemEdit() {
     const div = document.createElement("div");
-    div.className = "departure-date-item";
+    div.className = "departure-pair-item";
     div.setAttribute("data-index", Date.now());
     div.innerHTML = `
-      <input type="date" class="departure-date-input">
-      <button type="button" class="departure-date-remove-btn">Xóa</button>
+      <div class="departure-pair-inputs">
+        <div class="departure-pair-field">
+          <label>Ngày khởi hành</label>
+          <input type="date" class="departure-date-input">
+        </div>
+        <div class="departure-pair-field">
+          <label>Ngày kết thúc</label>
+          <input type="date" class="end-date-input">
+        </div>
+        <div class="departure-pair-field">
+          <label>Tổng số ghế</label>
+          <input type="number" class="seats-total-input" min="0" placeholder="VD: 40">
+        </div>
+        <div class="departure-pair-field">
+          <label>Ghế còn lại</label>
+          <input type="number" class="seats-remaining-input" min="0" placeholder="VD: 40">
+        </div>
+      </div>
+      <button type="button" class="departure-pair-remove-btn">Xóa</button>
     `;
     return div;
   }
 
-  if (departureDateAddBtnE && departureDatesWrapperE) {
-    departureDateAddBtnE.addEventListener("click", () => {
-      departureDatesWrapperE.appendChild(createDepartureDateItemEdit());
+  if (departurePairAddBtnE && departuresWrapperE) {
+    departurePairAddBtnE.addEventListener("click", () => {
+      departuresWrapperE.appendChild(createDeparturePairItemEdit());
     });
 
-    departureDatesWrapperE.addEventListener("click", (e) => {
-      const btn = e.target.closest(".departure-date-remove-btn");
+    departuresWrapperE.addEventListener("click", (e) => {
+      const btn = e.target.closest(".departure-pair-remove-btn");
       if (btn) {
-        const item = btn.closest(".departure-date-item");
-        if (item && departureDatesWrapperE.children.length > 1) {
+        const item = btn.closest(".departure-pair-item");
+        if (item && departuresWrapperE.children.length > 1) {
           item.remove();
-        } else if (item && departureDatesWrapperE.children.length === 1) {
-          // Nếu chỉ còn 1 item, chỉ xóa giá trị thay vì xóa item
-          const dateInput = item.querySelector(".departure-date-input");
-          if (dateInput) dateInput.value = "";
+        } else if (item) {
+          item.querySelector(".departure-date-input").value = "";
+          item.querySelector(".end-date-input").value = "";
         }
       }
     });
   }
-  // ==== HẾT NGÀY KHỞI HÀNH (UI - EDIT) ====
+  // ==== HẾT LỊCH KHỞI HÀNH (UI - EDIT) ====
 
   validator
     .addField("#name", [
@@ -2852,10 +2914,6 @@ if (tourEditForm) {
       let priceNewAdult = f.priceNewAdult.value;
       let priceNewChildren = f.priceNewChildren.value;
       let priceNewBaby = f.priceNewBaby?.value ?? "";
-
-      // Ghế
-      const seatsTotal = f.seatsTotal?.value ?? "";
-      const seatsRemaining = f.seatsRemaining?.value ?? "";
 
       // Cấu hình Em bé
       const babyPricingMode = f.babyPricingMode?.value || "fixed";
@@ -2946,21 +3004,21 @@ if (tourEditForm) {
       
       console.log("Tour Edit - Total locations collected:", locations.length);
 
-      // ==== NGÀY KHỞI HÀNH (mảng) ====
-      const departureDatesWrapperE = document.getElementById("departure-dates-wrapper");
-      const departureDatesE = [];
-      if (departureDatesWrapperE) {
-        departureDatesWrapperE
-          .querySelectorAll(".departure-date-item")
-          .forEach((item) => {
-            const dateInput = item.querySelector(".departure-date-input");
-            const dateValue = dateInput?.value || "";
-            if (dateValue) {
-              departureDatesE.push(dateValue);
-            }
-          });
+      // ==== LỊCH KHỞI HÀNH (cặp ngày - EDIT) ====
+      const departuresWrapperEdit = document.getElementById("departures-wrapper");
+      const departuresE = [];
+      if (departuresWrapperEdit) {
+        departuresWrapperEdit.querySelectorAll(".departure-pair-item").forEach((item) => {
+          const depVal = item.querySelector(".departure-date-input")?.value || "";
+          const endVal = item.querySelector(".end-date-input")?.value || "";
+          const sTotalE = parseInt(item.querySelector(".seats-total-input")?.value) || 0;
+          let sRemE = parseInt(item.querySelector(".seats-remaining-input")?.value);
+          if (isNaN(sRemE)) sRemE = sTotalE;
+          if (sRemE > sTotalE) sRemE = sTotalE;
+          if (depVal) departuresE.push({ departureDate: depVal, endDate: endVal || null, seatsTotal: sTotalE, seatsRemaining: sRemE });
+        });
       }
-      // ==== HẾT NGÀY KHỞI HÀNH ====
+      // ==== HẾT LỊCH KHỞI HÀNH ====
 
       // Khác
       const time = f.time.value;
@@ -2997,10 +3055,6 @@ if (tourEditForm) {
       formData.append("babyPricingMode", babyPricingMode);
       formData.append("babyPricingRulesJson", babyPricingRulesJson);
 
-      // Ghế
-      formData.append("seatsTotal", seatsTotal);
-      formData.append("seatsRemaining", seatsRemaining);
-
       // ==== GỬI THỜI HẠN KHUYẾN MÃI NẾU CÓ (EDIT) ====
       if (hasManualOldPriceE && discountFromE && discountToE) {
         formData.append("discountFrom", discountFromE);
@@ -3015,7 +3069,7 @@ if (tourEditForm) {
       // Khác
       formData.append("time", time);
       formData.append("vehicle", vehicle);
-      formData.append("departureDates", JSON.stringify(departureDatesE));
+      formData.append("departures", JSON.stringify(departuresE));
       formData.append("information", information);
       formData.append("schedules", JSON.stringify(schedules));
 

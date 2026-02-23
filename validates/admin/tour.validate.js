@@ -34,23 +34,9 @@ module.exports.createPost = async (req, res, next) => {
       otherwise: numericOrEmpty, // tiered -> bỏ qua (không bắt buộc)
     }),
 
-    // Ghế (thay cho stock*)
+    // Ghế nay lưu trong từng departure, top-level do controller tự tính
     seatsTotal: numericOrEmpty,
-    seatsRemaining: numericOrEmpty
-      .custom((value, helpers) => {
-        // nếu rỗng, cho qua; nếu là số, kiểm tra ≤ seatsTotal
-        if (value === "") return value;
-        const v = Number(value);
-        const totalRaw = helpers?.state?.ancestors?.[0]?.seatsTotal;
-        const total = totalRaw === "" ? 0 : Number(totalRaw || 0);
-        if (Number.isFinite(v) && Number.isFinite(total) && v > total) {
-          return helpers.error("any.invalid");
-        }
-        return value;
-      }, "seatsRemaining <= seatsTotal")
-      .messages({
-        "any.invalid": "Số ghế còn lại không được lớn hơn tổng số ghế!",
-      }),
+    seatsRemaining: numericOrEmpty,
 
     // ==== Thời hạn khuyến mãi (giảm theo giá cố định) ====
     // Gửi dạng chuỗi 'YYYY-MM-DD' hoặc để rỗng
@@ -62,12 +48,10 @@ module.exports.createPost = async (req, res, next) => {
     time: Joi.string().allow(""),
     vehicle: Joi.string().allow(""),
     departureDate: Joi.string().allow(""), // Giữ lại để tương thích
-    departureDates: Joi.alternatives().try(
-      Joi.string().allow(""), // JSON string
-      Joi.array().items(Joi.string().allow("")) // Array of date strings
+    departures: Joi.alternatives().try(
+      Joi.string().allow(""), // JSON string [{departureDate, endDate}]
+      Joi.array()
     ).allow(""),
-
-    // 👇 THÊM FIELD NÀY ĐỂ KHÔNG BỊ "departureCity is not allowed"
     departureCity: Joi.string().allow(""),
 
     information: Joi.string().allow(""),

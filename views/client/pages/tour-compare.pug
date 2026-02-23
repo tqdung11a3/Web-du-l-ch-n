@@ -112,7 +112,24 @@ block main
                   i.fa-solid.fa-users
                   | Số chỗ
                 each tour in tours
-                  td.compare-value= (tour.seatsRemaining || tour.stockAdult || 0).toLocaleString('vi-VN') + ' chỗ'
+                  td.compare-value
+                    if tour.departuresWithSeats && tour.departuresWithSeats.length > 0
+                      .compare-departures-seats
+                        each dep in tour.departuresWithSeats
+                          - const isFull = dep.seatsRemaining <= 0
+                          - const isLow  = !isFull && dep.seatsRemaining <= 5
+                          .compare-departures-seats__row(class=isFull ? 'is-full' : (isLow ? 'is-low' : ''))
+                            span.compare-departures-seats__date
+                              i.fa-regular.fa-calendar(style="margin-right:4px;opacity:.7")
+                              = dep.dateFormatted
+                            span.compare-departures-seats__badge
+                              if isFull
+                                span.seats-badge.seats-badge--full Hết chỗ
+                              else
+                                span.seats-badge(class=isLow ? 'seats-badge--low' : 'seats-badge--ok')
+                                  = dep.seatsRemaining + ' chỗ'
+                    else
+                      | N/A
 
               tr
                 td.compare-label

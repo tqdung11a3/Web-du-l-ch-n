@@ -78,40 +78,44 @@ function hasTimeOverlap(searchCheckIn, searchCheckOut, bookingCheckIn, bookingCh
  * @param {Array} allRooms - Tất cả các phòng của hotel (individual rooms)
  * @param {String} roomTypeId - ID của room type cần kiểm tra
  * @param {Array} bookings - Tất cả bookings của hotel
- * @param {Date} checkIn 
- * @param {Date} checkOut 
+ * @param {Date} checkIn
+ * @param {Date} checkOut
  * @returns {Array} - Mảng các room IDs còn trống
  */
 function getAvailableRoomsForType(allRooms, roomTypeId, bookings, checkIn, checkOut) {
   // Lọc phòng thuộc room type này và có status vacant
-  const roomsOfType = allRooms.filter(r => 
-    String(r.roomTypeId) === String(roomTypeId) && 
+  const roomsOfType = allRooms.filter(r =>
+    String(r.roomTypeId) === String(roomTypeId) &&
     r.status === "vacant"
   );
 
-  // ✅ Đếm tổng số PHÒNG đang bị chiếm (không phải số booking)
-  // Vì 1 booking có thể đặt nhiều phòng (booking.rooms)
-  const overlappingRoomsCount = bookings
-    .filter(booking => {
-      // Chỉ xét booking còn hiệu lực, bỏ qua cancelled và checked_out
-      if (booking.status === "cancelled" || booking.status === "checked_out") return false;
-      
-      // ✅ Kiểm tra cả booking chưa assign (roomId = null) và đã assign
-      // Kiểm tra theo roomTypeId để đếm cả booking pending
-      const bookingRoomType = String(booking.roomTypeId);
-      if (bookingRoomType !== String(roomTypeId)) return false;
+  // Tập hợp roomId đã bị chiếm bởi booking có overlap thời gian
+  // Chỉ tính booking đã gán phòng cụ thể (roomId != null)
+  const occupiedRoomIds = new Set(
+    bookings
+      .filter(booking => {
+        if (booking.status === "cancelled" || booking.status === "checked_out") return false;
+        if (!booking.roomId) return false; // chưa gán phòng cụ thể → không chặn phòng nào
+        return hasTimeOverlap(checkIn, checkOut, booking.checkIn, booking.checkOut);
+      })
+      .map(booking => String(booking.roomId))
+  );
 
-      // Kiểm tra overlap thời gian
-      return hasTimeOverlap(checkIn, checkOut, booking.checkIn, booking.checkOut);
-    })
-    .reduce((sum, booking) => sum + (booking.rooms || 1), 0);
+  // Với booking chưa gán phòng (roomId = null) nhưng cùng roomTypeId và overlap:
+  // đây là booking "chờ xếp phòng" — đếm riêng để trừ vào số phòng còn trống
+  const unassignedOverlapCount = bookings.filter(booking => {
+    if (booking.status === "cancelled" || booking.status === "checked_out") return false;
+    if (booking.roomId) return false; // đã có roomId → đã xử lý ở trên
+    if (String(booking.roomTypeId) !== String(roomTypeId)) return false;
+    return hasTimeOverlap(checkIn, checkOut, booking.checkIn, booking.checkOut);
+  }).reduce((sum, b) => sum + (b.rooms || 1), 0);
 
-  // Số phòng khả dụng = Tổng số phòng - Tổng số phòng đang bị chiếm
-  const totalRooms = roomsOfType.length;
-  const availableCount = Math.max(0, totalRooms - overlappingRoomsCount);
+  // Phòng thực sự trống = chưa bị chiếm bởi roomId cụ thể
+  const freeRooms = roomsOfType.filter(r => !occupiedRoomIds.has(String(r._id)));
 
-  // Trả về mảng phòng khả dụng (lấy availableCount phòng đầu tiên)
-  return roomsOfType.slice(0, availableCount).map(r => r._id);
+  // Trừ tiếp số phòng "đang chờ xếp" để tránh over-commit
+  const availableCount = Math.max(0, freeRooms.length - unassignedOverlapCount);
+  return freeRooms.slice(0, availableCount).map(r => r._id);
 }
 
 /**

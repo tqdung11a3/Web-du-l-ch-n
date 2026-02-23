@@ -1,0 +1,248 @@
+extends ../layouts/default.pug
+
+block main
+  .order-pending-page
+    .container
+      .pending-content
+
+        //- Icon & tiêu đề
+        .pending-icon
+          i.fa-solid.fa-clock
+        h1.pending-title Đơn tour đang chờ xác nhận
+        p.pending-message
+          | Cảm ơn bạn đã đặt tour! Đơn hàng đang được giữ chỗ tạm thời.
+          br
+          | Vui lòng hoàn tất thanh toán trước khi hết thời gian.
+
+        //- Countdown timer
+        if orderDetail && orderDetail.isTemporaryHold && orderDetail.paymentStatus === 'unpaid' && orderDetail.holdExpiresAt
+          .hold-warning
+            .warning-icon
+              i.fa-solid.fa-hourglass-half
+            .warning-content
+              p.warning-title ⏰ Thời gian giữ chỗ
+              p.warning-message Vui lòng hoàn tất thanh toán trong vòng:
+              .countdown-timer#countdownTimer
+                span.countdown-minutes 00
+                span.countdown-separator :
+                span.countdown-seconds 00
+              p.warning-note Đơn sẽ tự động hủy và ghế được trả lại nếu không thanh toán đúng hạn.
+
+        if orderDetail
+          .booking-info
+
+            //- ── Thông tin đơn hàng ──
+            .info-card
+              h3.info-title
+                i.fa-solid.fa-file-invoice(style="margin-right:8px;color:#3b82f6")
+                | Thông tin đơn hàng
+              .info-row
+                span.info-label Mã đơn hàng:
+                strong.info-value= orderDetail.code
+              .info-row
+                span.info-label Ngày đặt:
+                span.info-value= orderDetail.createdAtFormat
+              .info-row
+                span.info-label Họ tên:
+                span.info-value= orderDetail.fullName
+              .info-row
+                span.info-label Số điện thoại:
+                span.info-value= orderDetail.phone
+              .info-row
+                span.info-label Phương thức thanh toán:
+                span.info-value= orderDetail.paymentMethodName
+              .info-row
+                span.info-label Trạng thái:
+                span.info-value
+                  span.badge-pending Chưa thanh toán
+
+            //- ── Danh sách tour ──
+            .info-card
+              h3.info-title
+                i.fa-solid.fa-map-location-dot(style="margin-right:8px;color:#3b82f6")
+                | Danh sách tour
+              each item in orderDetail.items
+                .pending-tour-item
+                  if item.avatar
+                    img.pending-tour-img(src=item.avatar alt=item.name)
+                  .pending-tour-body
+                    .pending-tour-name= item.name
+                    .pending-tour-meta
+                      if item.departureDateFormat
+                        span
+                          i.fa-solid.fa-calendar-day
+                          |  Khởi hành: #{item.departureDateFormat}
+                      if item.cityName
+                        span
+                          i.fa-solid.fa-location-dot
+                          |  Tại: #{item.cityName}
+                    .pending-tour-qty
+                      if item.quantityAdult
+                        span
+                          i.fa-solid.fa-user
+                          |  #{item.quantityAdult} người lớn
+                          |  × #{Number(item.priceNewAdult).toLocaleString('vi-VN')}đ
+                      if item.quantityChildren
+                        span
+                          i.fa-solid.fa-child
+                          |  #{item.quantityChildren} trẻ em
+                          |  × #{Number(item.priceNewChildren).toLocaleString('vi-VN')}đ
+                      if item.quantityBaby
+                        span
+                          i.fa-solid.fa-baby
+                          |  #{item.quantityBaby} em bé
+                          |  × #{Number(item.priceNewBaby).toLocaleString('vi-VN')}đ
+
+            //- ── Tổng tiền ──
+            .info-card.info-card--total
+              .info-row
+                span.info-label Tạm tính:
+                span.info-value= Number(orderDetail.subTotal).toLocaleString('vi-VN') + 'đ'
+              if orderDetail.discount > 0
+                .info-row
+                  span.info-label Giảm giá:
+                  span.info-value.text-green -#{Number(orderDetail.discount).toLocaleString('vi-VN')}đ
+              .info-row.info-row--total
+                span.info-label Tổng thanh toán:
+                strong.info-value.total-amount= Number(orderDetail.total).toLocaleString('vi-VN') + 'đ'
+
+        //- ── Hướng dẫn thanh toán & CTA ──
+        .pending-actions
+          if orderDetail && orderDetail.paymentStatus === 'unpaid'
+            if orderDetail.paymentMethod === 'vnpay'
+              .payment-info.payment-info--highlight
+                p
+                  i.fa-solid.fa-circle-info
+                  |  Bạn đã chọn thanh toán qua VNPay. Vui lòng bấm nút bên dưới để hoàn tất.
+              a.btn-payment.btn-vnpay(href=`/order/payment-vnpay?orderCode=${orderDetail.code}&phone=${phone}`)
+                i.fa-solid.fa-credit-card
+                |  Thanh toán ngay qua VNPay
+
+            else if orderDetail.paymentMethod === 'bank'
+              .payment-info
+                p
+                  i.fa-solid.fa-building-columns
+                  strong  Chuyển khoản ngân hàng
+                p Vui lòng chuyển khoản theo thông tin bên dưới và gửi ảnh chứng từ cho chúng tôi qua hotline/email. Đơn hàng sẽ được xác nhận sau khi nhận được thanh toán.
+
+            else
+              .payment-info
+                p
+                  i.fa-solid.fa-money-bill-wave
+                  strong  Thanh toán tiền mặt
+                p Nhân viên sẽ liên hệ với bạn để xác nhận và hướng dẫn thanh toán. Vui lòng giữ điện thoại để nhận cuộc gọi.
+
+          a.btn-primary(href="/tour") Tìm thêm tour
+          a.btn-secondary(href="/") Về trang chủ
+          if orderDetail && orderDetail.isTemporaryHold && orderDetail.paymentStatus === 'unpaid'
+            button#btnCancelHold.btn-cancel-hold(type="button")
+              i.fa-solid.fa-xmark
+              |  Hủy đơn & trả lại ghế
+
+  //- sendBeacon: hủy đơn khi user thực sự rời đi (không thanh toán, không refresh)
+  if orderDetail && orderDetail.isTemporaryHold && orderDetail.paymentStatus === 'unpaid'
+    script.
+      (function () {
+        var orderCode     = "!{orderDetail.code}";
+        var phone         = "!{phone}";
+        var goingToPayment = false;
+
+        // Đánh dấu khi user click nút thanh toán → KHÔNG hủy đơn
+        var payBtn = document.querySelector('.btn-payment, .btn-vnpay');
+        if (payBtn) {
+          payBtn.addEventListener('click', function () { goingToPayment = true; });
+        }
+
+        // Nút "Hủy đơn" → gọi API với header explicit rồi về trang chủ
+        var cancelBtn = document.getElementById('btnCancelHold');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', function () {
+            if (!confirm('Bạn chắc chắn muốn hủy đơn và trả lại ghế?')) return;
+            goingToPayment = true; // tắt beacon tránh gọi 2 lần
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = 'Đang hủy...';
+            fetch('/order/cancel-hold?orderCode=' + encodeURIComponent(orderCode) +
+                  '&phone=' + encodeURIComponent(phone), {
+                    headers: { 'X-Cancel-Reason': 'explicit' }
+                  })
+              .finally(function () { window.location.href = '/'; });
+          });
+        }
+
+        // Breadcrumb để phát hiện F5 refresh:
+        // Mỗi lần pageshow (load bình thường), đặt flag trong sessionStorage.
+        // Khi pagehide xảy ra do refresh, pageshow sẽ xóa flag ngay sau;
+        // khi pagehide do điều hướng thật, flag vẫn còn → gửi beacon.
+        var REFRESH_KEY = 'pendingRefresh_' + orderCode;
+
+        window.addEventListener('pageshow', function (e) {
+          // Xóa flag "vừa refresh" nếu có (load thành công sau F5)
+          sessionStorage.removeItem(REFRESH_KEY);
+        });
+
+        window.addEventListener('pagehide', function (e) {
+          if (e.persisted)    return; // BFCache – user có thể quay lại
+          if (goingToPayment) return; // đang thanh toán – giữ đơn
+
+          // Đánh dấu có thể là refresh, đợi pageshow xóa đi
+          sessionStorage.setItem(REFRESH_KEY, '1');
+
+          // Dùng setTimeout 0 để gửi beacon SAU khi trình duyệt xử lý xong.
+          // Nếu đây là refresh, pageshow sẽ xóa key trước khi beacon thực sự được
+          // xử lý trên server (tuy nhiên sendBeacon không thể bị hủy sau khi gửi).
+          // Giải pháp: server CHECK lại holdExpiresAt trước khi cancel —
+          // chỉ cancel nếu đã hết hạn. Nếu chưa hết hạn & user refresh → server
+          // giữ nguyên đơn. Cron job xử lý sau.
+          var body = 'orderCode=' + encodeURIComponent(orderCode) +
+                     '&phone='     + encodeURIComponent(phone);
+          navigator.sendBeacon('/order/cancel-hold', body);
+        });
+      })();
+
+  //- JavaScript countdown timer
+  if orderDetail && orderDetail.isTemporaryHold && orderDetail.paymentStatus === 'unpaid' && orderDetail.holdExpiresAt
+    script.
+      (function () {
+        var holdExpiresAt = new Date("!{orderDetail.holdExpiresAt}");
+        var orderCode     = "!{orderDetail.code}";
+        var phone         = "!{phone}";
+        var countdownEl   = document.getElementById('countdownTimer');
+        if (!countdownEl) return;
+
+        var minutesEl  = countdownEl.querySelector('.countdown-minutes');
+        var secondsEl  = countdownEl.querySelector('.countdown-seconds');
+
+        function updateCountdown() {
+          var now  = new Date();
+          var diff = holdExpiresAt - now;
+
+          if (diff <= 0) {
+            minutesEl.textContent = '00';
+            secondsEl.textContent = '00';
+            clearInterval(interval);
+
+            // Gọi API hủy đơn, rồi thông báo và về trang chủ
+            fetch('/order/cancel-hold?orderCode=' + orderCode + '&phone=' + phone)
+              .catch(function () {})
+              .finally(function () {
+                alert('⏰ Đơn giữ chỗ đã hết hạn! Ghế đã được trả lại. Vui lòng đặt lại.');
+                window.location.href = '/';
+              });
+            return;
+          }
+
+          var totalSeconds = Math.floor(diff / 1000);
+          var minutes = Math.floor(totalSeconds / 60);
+          var seconds = totalSeconds % 60;
+
+          minutesEl.textContent = String(minutes).padStart(2, '0');
+          secondsEl.textContent = String(seconds).padStart(2, '0');
+        }
+
+        updateCountdown();
+        var interval = setInterval(updateCountdown, 1000);
+
+        window.addEventListener('beforeunload', function () {
+          clearInterval(interval);
+        });
+      })();

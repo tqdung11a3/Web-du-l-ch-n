@@ -53,10 +53,6 @@ mixin product-item(item)
 
       // ===== THÔNG TIN CƠ BẢN =====
       .inner-desc
-        if item.departureDateFormat
-          .inner-desc-item
-            | Ngày Khởi Hành:
-            b #{item.departureDateFormat}
         if item.time
           .inner-desc-item
             | Thời Gian:
@@ -87,6 +83,30 @@ mixin product-item(item)
               span.inner-countdown-number(data-role="seconds") 00
               span.inner-countdown-unit Giây
 
+      // ===== LỊCH KHỞI HÀNH + SỐ CHỖ THEO TỪNG NGÀY =====
+      if item.departuresWithSeats && item.departuresWithSeats.length > 0
+        .inner-departures-seats
+          .inner-departures-seats__head
+            span.inner-departures-seats__col--date Ngày khởi hành
+            span.inner-departures-seats__col--seats Chỗ còn
+          each dep in item.departuresWithSeats
+            - const isFull = dep.seatsRemaining <= 0
+            - const isLow  = !isFull && dep.seatsRemaining <= 5
+            .inner-departures-seats__row(class=isFull ? 'is-full' : (isLow ? 'is-low' : ''))
+              span.inner-departures-seats__col--date
+                i.fa-regular.fa-calendar(style="margin-right:4px;opacity:.7")
+                = dep.dateFormatted
+              span.inner-departures-seats__col--seats
+                if isFull
+                  span.seats-badge.seats-badge--full Hết chỗ
+                else
+                  span.seats-badge(class=isLow ? 'seats-badge--low' : 'seats-badge--ok')
+                    = dep.seatsRemaining + ' chỗ'
+      else if item.departureDateFormat
+        .inner-desc-item
+          | Ngày Khởi Hành:
+          b #{item.departureDateFormat}
+
       // ===== META: SAO, SỐ CHỖ, CÔNG TY =====
       .inner-meta
         // === XẾP HẠNG SAO ===
@@ -100,9 +120,6 @@ mixin product-item(item)
           span.inner-number #{avg.toFixed(1)}
           if cnt > 0
             span.inner-count &nbsp;(#{cnt})
-        .inner-stock
-          .inner-label Số chỗ còn:
-          .inner-number #{(Number(item.seatsRemaining) || 0).toLocaleString('vi-VN')}
 
         // === THÔNG TIN CÔNG TY ===
         if item.company

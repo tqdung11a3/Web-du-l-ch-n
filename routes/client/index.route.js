@@ -13,6 +13,7 @@ const companyRoutes = require("./company.route");
 const reviewRoutes = require("./review.route");
 const hotelRoutes = require("./hotel.route");
 const newsRoutes = require("./news.route");
+const uploadRoutes = require("./upload.route");
 const settingMiddleware = require("../../middlewares/client/setting.middleware");
 const categoryMiddleware = require("../../middlewares/client/category.middleware");
 const cityMiddleware = require("../../middlewares/client/city.middleware");
@@ -34,5 +35,6 @@ router.use("/order", orderRoutes);
 router.use("/review", reviewRoutes);
 router.use("/hotel", hotelRoutes);
 router.use("/news", newsRoutes);
+router.use("/upload", uploadRoutes);
 
 module.exports = router;

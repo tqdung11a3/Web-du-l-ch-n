@@ -43,6 +43,16 @@ block main
           i.fa-solid.fa-users
           span Khách hàng
 
+      - const isTourHoldsActive = bookingsData && bookingsData.activeTab === 'tour-holds'
+      if isTourHoldsActive
+        a.sub-menu-item.active(href=`/${pathAdmin}/hotel/booking/tour-holds?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-link
+          span Giữ phòng Tour
+      else
+        a.sub-menu-item(href=`/${pathAdmin}/hotel/booking/tour-holds?hotelId=${currentHotelId}`)
+          i.fa-solid.fa-link
+          span Giữ phòng Tour
+
     //- Main Content
     .booking-main-content
       //- Tab: Danh sách
@@ -81,6 +91,7 @@ block main
                 tr
                   th Mã
                   th Khách hàng
+                  th Thời gian đặt
                   th Lưu trú
                   th Loại phòng
                   th Người
@@ -99,6 +110,8 @@ block main
                         .customer-info
                           .customer-name= booking.customerName
                           .customer-email= booking.customerEmail
+                      td
+                        .booking-created-at= booking.createdAtFormat
                       td
                         .stay-info
                           .check-in= booking.checkIn
@@ -134,9 +147,11 @@ block main
                             i.fa-solid.fa-eye
                           button.action-btn.edit-btn(data-booking-id=booking._id data-status=booking.statusValue data-payment-status=booking.paymentStatusValue title="Chỉnh sửa trạng thái")
                             i.fa-solid.fa-pencil
+                          button.action-btn.delete-booking-btn(data-booking-id=booking._id data-booking-code=booking.bookingId title="Xóa đơn đặt phòng")
+                            i.fa-regular.fa-trash-can
                 else
                   tr
-                    td(colspan="10" style="text-align: center; padding: 40px;")
+                    td(colspan="11" style="text-align: center; padding: 40px;")
                       .empty-message Không có đặt phòng nào
           
           //- Modal chỉnh sửa trạng thái booking
@@ -192,7 +207,7 @@ block main
                         span.room-type= booking.roomType + ' × ' + booking.roomCount + ' phòng'
                       .booking-dates
                         span Check-in: #{booking.checkInDisplay} | Check-out: #{booking.checkOutDisplay}
-                    button.btn-assign-room(type="button" data-booking-id=booking.bookingId data-room-type-id=booking.roomTypeId)
+                    button.btn-assign-room(type="button" data-booking-id=booking.bookingId data-room-type-id=booking.roomTypeId data-check-in=booking.checkIn data-check-out=booking.checkOut)
                       i.fa-solid.fa-door-open
                       span Xếp phòng
             else
@@ -200,21 +215,89 @@ block main
 
           //- Room Status Section
           .room-status-section
-            h2.section-title Tình trạng phòng
-            
+            .room-status-section__header
+              h2.section-title Tình trạng phòng
+
+            //- Bộ lọc ngày
+            form.rm-date-filter(method="GET" action=`/${pathAdmin}/hotel/booking/room-management`)
+              input(type="hidden" name="hotelId" value=bookingsData.selectedHotelId || selectedHotelId)
+              .rm-date-filter__fields
+                .rm-date-filter__field
+                  label.rm-date-filter__label
+                    i.fa-solid.fa-calendar-check
+                    |  Check-in từ
+                  input.rm-date-filter__input(
+                    type="date"
+                    name="filterFrom"
+                    value=bookingsData.filterFrom
+                  )
+                .rm-date-filter__field
+                  label.rm-date-filter__label
+                    i.fa-solid.fa-calendar-xmark
+                    |  Đến ngày checkout
+                  input.rm-date-filter__input(
+                    type="date"
+                    name="filterTo"
+                    value=bookingsData.filterTo
+                  )
+                button.rm-date-filter__btn(type="submit")
+                  i.fa-solid.fa-magnifying-glass
+                  |  Lọc
+                if bookingsData.isFiltered
+                  a.rm-date-filter__clear(href=`/${pathAdmin}/hotel/booking/room-management?hotelId=${bookingsData.selectedHotelId || selectedHotelId}`)
+                    i.fa-solid.fa-xmark
+                    |  Xoá lọc
+
+            if bookingsData.isFiltered
+              .rm-filter-notice
+                i.fa-solid.fa-circle-info
+                |  Đang hiển thị booking có lịch giao nhau với khoảng&nbsp;
+                strong #{bookingsData.filterFrom || '…'} → #{bookingsData.filterTo || '…'}
+
             if bookingsData.rooms && bookingsData.rooms.length > 0
+              //- Bộ lọc có/không có booking + thống kê
+              .rm-booking-filter
+                button.rm-booking-filter__btn.rm-booking-filter__btn--active(
+                  type="button"
+                  data-filter="all"
+                  onclick="applyRoomBookingFilter('all')"
+                )
+                  span.rm-booking-filter__label Tất cả
+                  span.rm-booking-filter__count#rm-count-all= bookingsData.rooms.length
+                button.rm-booking-filter__btn(
+                  type="button"
+                  data-filter="has"
+                  onclick="applyRoomBookingFilter('has')"
+                )
+                  i.fa-solid.fa-calendar-check(style="color:#22c55e;font-size:11px")
+                  span.rm-booking-filter__label  Có booking
+                  span.rm-booking-filter__count#rm-count-has 0
+                button.rm-booking-filter__btn(
+                  type="button"
+                  data-filter="none"
+                  onclick="applyRoomBookingFilter('none')"
+                )
+                  i.fa-solid.fa-calendar-xmark(style="color:#94a3b8;font-size:11px")
+                  span.rm-booking-filter__label  Trống
+                  span.rm-booking-filter__count#rm-count-none 0
+
               .rooms-table-wrapper
-                table.rooms-table
+                table.rooms-table#rm-rooms-table
                   thead
                     tr
                       th Số phòng
                       th Loại phòng
                       th Tầng
                       th Tình trạng
-                      th Booking hiện tại
+                      th= bookingsData.isFiltered ? 'Booking trong khoảng lọc' : 'Booking hiện tại'
                   tbody
                     each room in bookingsData.rooms
-                      tr(class=`room-row ${room.statusClass}` data-room-id=room._id data-room-type-id=room.roomTypeId)
+                      tr(
+                        class=`room-row ${room.statusClass}`
+                        data-room-id=room._id
+                        data-room-type-id=room.roomTypeId
+                        data-has-booking=(room.bookingCount > 0 ? '1' : '0')
+                      )
                         td
                           .room-number= room.number
                         td
@@ -233,6 +316,36 @@ block main
                                 span Xem chi tiết
                           else
                             | —
+
+              script.
+                (function() {
+                  var allRows   = Array.from(document.querySelectorAll('#rm-rooms-table tbody tr'));
+                  var countAll  = allRows.length;
+                  var countHas  = allRows.filter(function(r) { return r.dataset.hasBooking === '1'; }).length;
+                  var countNone = countAll - countHas;
+
+                  document.getElementById('rm-count-all').textContent  = countAll;
+                  document.getElementById('rm-count-has').textContent  = countHas;
+                  document.getElementById('rm-count-none').textContent = countNone;
+                })();
+
+                function applyRoomBookingFilter(filter) {
+                  // Cập nhật nút active
+                  document.querySelectorAll('.rm-booking-filter__btn').forEach(function(btn) {
+                    btn.classList.toggle('rm-booking-filter__btn--active', btn.dataset.filter === filter);
+                  });
+
+                  // Hiển thị/ẩn hàng
+                  var rows = document.querySelectorAll('#rm-rooms-table tbody tr');
+                  rows.forEach(function(row) {
+                    var has = row.dataset.hasBooking === '1';
+                    var show = filter === 'all'
+                      || (filter === 'has'  && has)
+                      || (filter === 'none' && !has);
+                    row.style.display = show ? '' : 'none';
+                  });
+                }
+
             else
               .empty-message Chưa có phòng nào
 
@@ -275,7 +388,7 @@ block main
                     .date-cell
                       = dayName + ' ' + day
               
-              //- Room rows
+              //- Room rows (booking khách hàng thật)
               if bookingsData.rooms && bookingsData.rooms.length > 0
                 each room in bookingsData.rooms
                   .calendar-row
@@ -283,7 +396,6 @@ block main
                       .room-number= 'Phòng ' + room.roomNumber
                       .room-type= room.roomType
                     .dates-cell
-                      //- Render dates cells với bookings
                       - const year = bookingsData.currentYear || new Date().getFullYear()
                       - const month = bookingsData.currentMonthNum || (new Date().getMonth() + 1)
                       - const daysInMonth = moment(`${year}-${month}`, "YYYY-M").daysInMonth()
@@ -296,26 +408,730 @@ block main
                               - const currentDate = moment(`${year}-${month}-${day}`, "YYYY-M-DD")
                               - const isInRange = currentDate.isSameOrAfter(bookingStart, 'day') && currentDate.isBefore(bookingEnd, 'day')
                               if isInRange
-                                - const guestName = booking.guestName || (booking.guest && booking.guest.fullName) || 'N/A'
+                                - const guestName = booking.guestName || 'N/A'
                                 - const bookingCode = booking.bookingId || booking.code || 'N/A'
-                                .booking-bar(class=booking.status === 'confirmed' ? 'booked-color' : booking.status === 'checked_in' ? 'checked-in-color' : 'booked-color')
-                                  span= guestName + ' (' + bookingCode + ')'
+                                - const barClass = booking.isTourHold ? (booking.isAssigned ? (booking.status === 'checked_in' ? 'tour-checkedin-color' : booking.status === 'checked_out' ? 'tour-checkedout-color' : 'tour-assigned-color') : 'tour-hold-color') : (booking.status === 'checked_in' ? 'checked-in-color' : booking.status === 'checked_out' ? 'checked-out-color' : 'booked-color')
+                                .booking-bar(
+                                  class=barClass
+                                  data-guest=guestName
+                                  data-tour-name=booking.tourName || ''
+                                  data-tour-code=booking.tourShortCode || ''
+                                  data-phone=booking.phone || ''
+                                  data-check-in=booking.checkInFmt || ''
+                                  data-check-out=booking.checkOutFmt || ''
+                                  data-code=bookingCode
+                                  data-is-tour=booking.isTourHold ? '1' : '0'
+                                  data-is-assigned=booking.isAssigned ? '1' : '0'
+                                  data-status=booking.status || ''
+                                  onclick="showBookingPopup(event, this)"
+                                  style="cursor:pointer"
+                                )
+                                  if booking.isTourHold && booking.isAssigned && booking.status === 'checked_in'
+                                    i.fa-solid.fa-door-open(style="font-size:9px;margin-right:2px;opacity:.9")
+                                    span= guestName
+                                    span.booking-bar-tour-code  #{booking.tourShortCode}
+                                  else if booking.isTourHold && booking.isAssigned && booking.status === 'checked_out'
+                                    i.fa-solid.fa-circle-check(style="font-size:9px;margin-right:2px;opacity:.8")
+                                    span= guestName
+                                    span.booking-bar-tour-code  #{booking.tourShortCode}
+                                  else if booking.isTourHold && booking.isAssigned
+                                    i.fa-solid.fa-user(style="font-size:9px;margin-right:2px;opacity:.8")
+                                    span= guestName
+                                    span.booking-bar-tour-code  #{booking.tourShortCode}
+                                  else if booking.isTourHold
+                                    i.fa-solid.fa-link(style="font-size:9px;margin-right:2px;opacity:.8")
+                                    span= booking.tourShortCode || 'Tour'
+                                  else if booking.status === 'checked_out'
+                                    i.fa-solid.fa-circle-check(style="font-size:9px;margin-right:2px;opacity:.8")
+                                    span= guestName + ' (' + bookingCode + ')'
+                                  else
+                                    span= guestName + ' (' + bookingCode + ')'
+                                  //- Tooltip hiện khi hover
+                                  .bar-tooltip
+                                    if booking.isTourHold
+                                      .bar-tooltip__row
+                                        i.fa-solid.fa-link
+                                        span  Tour: #{booking.tourName || 'Tour hold'} (#{booking.tourShortCode})
+                                      if booking.isAssigned
+                                        .bar-tooltip__row
+                                          i.fa-solid.fa-user
+                                          span  Khách: #{guestName}
+                                        if booking.phone
+                                          .bar-tooltip__row
+                                            i.fa-solid.fa-phone
+                                            span  #{booking.phone}
+                                        if booking.status === 'checked_in'
+                                          .bar-tooltip__row.bar-tooltip__row--checkedin
+                                            i.fa-solid.fa-door-open
+                                            span  Đã nhận phòng
+                                        else if booking.status === 'checked_out'
+                                          .bar-tooltip__row.bar-tooltip__row--checkedout
+                                            i.fa-solid.fa-circle-check
+                                            span  Đã trả phòng
+                                        else
+                                          .bar-tooltip__row.bar-tooltip__row--waiting
+                                            i.fa-solid.fa-clock
+                                            span  Chờ nhận phòng
+                                      else
+                                        .bar-tooltip__row.bar-tooltip__row--muted
+                                          i.fa-solid.fa-hourglass-half
+                                          span  Chưa gán khách
+                                    else
+                                      .bar-tooltip__row
+                                        i.fa-solid.fa-user
+                                        span  #{guestName}
+                                      if booking.phone
+                                        .bar-tooltip__row
+                                          i.fa-solid.fa-phone
+                                          span  #{booking.phone}
+                                      .bar-tooltip__row
+                                        i.fa-solid.fa-hashtag
+                                        span  #{bookingCode}
+                                      if booking.status === 'checked_in'
+                                        .bar-tooltip__row.bar-tooltip__row--checkedin
+                                          i.fa-solid.fa-door-open
+                                          span  Đang ở
+                                      else if booking.status === 'checked_out'
+                                        .bar-tooltip__row.bar-tooltip__row--checkedout
+                                          i.fa-solid.fa-circle-check
+                                          span  Đã trả phòng
+                                    .bar-tooltip__row
+                                      i.fa-solid.fa-calendar-days
+                                      span  #{booking.checkInFmt} → #{booking.checkOutFmt}
               else
                 .calendar-row.empty-state
                   .room-cell(colspan="2" style="text-align: center; padding: 40px;")
                     p Không có phòng nào
 
-          //- Legend
+
+          //- Legend trạng thái
           .calendar-legend
             .legend-item
               .legend-color.booked-color
-              span Đã xác nhận
+              span Đặt phòng thường (chờ nhận)
             .legend-item
               .legend-color.checked-in-color
-              span Đã nhận phòng
+              span Đặt phòng thường (đang ở)
+            .legend-item
+              .legend-color.checked-out-color
+              span Đặt phòng thường (đã trả phòng)
+            .legend-item
+              .legend-color.tour-hold-color
+              span Tour – chưa gán khách
+            .legend-item
+              .legend-color.tour-assigned-color
+              span Tour – chờ nhận phòng
+            .legend-item
+              .legend-color.tour-checkedin-color
+              span Tour – đang nhận phòng
+            .legend-item
+              .legend-color.tour-checkedout-color
+              span Tour – đã trả phòng
             .legend-item
               .legend-color.available-color
               span Còn trống
+
+          //- Bảng chú thích mã tour hold
+          if bookingsData.tourHoldLegend && bookingsData.tourHoldLegend.length > 0
+            .tour-hold-legend-box
+              h3.tour-hold-legend-title
+                i.fa-solid.fa-link
+                |  Chú thích – Phòng giữ cho Tour
+              table.tour-hold-legend-table
+                thead
+                  tr
+                    th ID tour (6 ký tự cuối)
+                    th Tên tour
+                    th Khung thời gian lưu trú
+                    th Tổng phòng
+                    th Sức chứa
+                tbody
+                  each entry in bookingsData.tourHoldLegend
+                    tr
+                      td
+                        span.tour-short-code= entry.shortCode
+                      td= entry.tourName
+                      td
+                        if entry.timeSegments && entry.timeSegments.length > 0
+                          each seg, i in entry.timeSegments
+                            span.time-seg-badge= seg.fromDate + ' → ' + seg.toDate
+                            if i < entry.timeSegments.length - 1
+                              br
+                        else
+                          | —
+                      td= entry.totalRooms + ' phòng'
+                      td= entry.totalPeople + ' người'
+
+      //- Tab: Giữ phòng Tour
+      else if bookingsData.activeTab === 'tour-holds'
+        .tour-holds-page
+          .page-header
+            .header-left
+              h1.page-title Giữ phòng cho Tour
+              p.page-subtitle Các phòng đang được giữ cho đoàn tour. Quản lý ở tab "Liên kết Tour – Khách sạn".
+
+          if !bookingsData.tourHoldGroups || bookingsData.tourHoldGroups.length === 0
+            .empty-state-box
+              i.fa-solid.fa-circle-info
+              p  Chưa có phòng nào đang được giữ cho tour tại khách sạn này.
+
+          else
+            .th-search-bar
+              .th-search-bar__inner
+                i.fa-solid.fa-magnifying-glass.th-search-bar__icon
+                input#thSearchInput.th-search-bar__input(
+                  type="text"
+                  placeholder="Tìm theo tên tour, ID tour hoặc mã giữ phòng…"
+                  oninput="filterTourHoldGroups(this.value)"
+                  autocomplete="off"
+                )
+                button.th-search-bar__clear(
+                  type="button"
+                  title="Xóa tìm kiếm"
+                  onclick="clearTourHoldSearch()"
+                  style="display:none"
+                )
+                  i.fa-solid.fa-xmark
+              span#thSearchCount.th-search-bar__count
+
+            each group in bookingsData.tourHoldGroups
+              - var allCodes = group.bookings.map(function(b){ return b.code.toLowerCase(); }).join(' ')
+              .tour-hold-group(data-tour-name=group.tourName.toLowerCase() data-tour-id=group.tourShortId.toLowerCase() data-booking-codes=allCodes)
+                - var unassignedBookings = group.bookings.filter(function(b){ return !b.isAssigned; })
+                - var unassignedIds = unassignedBookings.map(function(b){ return b.id; })
+                .tour-hold-group__header
+                  .tour-hold-group__title
+                    i.fa-solid.fa-map-location-dot
+                    strong  #{group.tourName}
+                    span.tour-short-id-badge ##{group.tourShortId}
+                  .tour-hold-group__meta
+                    span.badge(class=group.segmentStatus === 'confirmed' ? 'badge--green' : 'badge--yellow')
+                      = group.segmentStatus === 'confirmed' ? 'Đã xác nhận' : 'Bản nháp'
+                    span.th-sep  |
+                    span
+                      i.fa-solid.fa-calendar-day
+                      |  Khởi hành: #{group.departureDate}  →  #{group.endDate}
+                    span.th-sep  |
+                    span
+                      i.fa-solid.fa-users
+                      |  Yêu cầu: #{group.paxRequired} người
+                    span.th-sep  |
+                    if group.timeFrames && group.timeFrames.length > 1
+                      span
+                        i.fa-solid.fa-layer-group(style="margin-right:4px;color:#6366f1")
+                        | #{group.timeFrames.length} khung thời gian &nbsp;·&nbsp; #{group.totalPeople} người (#{group.totalRooms} phòng tổng)
+                    else if group.timeFrames && group.timeFrames.length === 1
+                      span
+                        i.fa-regular.fa-calendar(style="margin-right:4px")
+                        | #{group.timeFrames[0].checkIn} → #{group.timeFrames[0].checkOut}
+                        |  &nbsp;·&nbsp; #{group.totalPeople} người (#{group.totalRooms} phòng)
+                    else
+                      span
+                        i.fa-solid.fa-bed
+                        |  Đã giữ: #{group.totalPeople} người (#{group.totalRooms} phòng)
+                  if unassignedIds.length > 0
+                    button.btn-release-holds(
+                      type="button"
+                      data-panel-id="release-panel-" + group.segmentId
+                      data-unassigned-ids=unassignedIds.join(',')
+                      onclick="showReleasePanel(this)"
+                    )
+                      i.fa-solid.fa-unlock
+                      |  Giải phóng #{unassignedIds.length} phòng chưa gán
+
+                if group.timeFrames && group.timeFrames.length > 1
+                  //- ── Accordion: mỗi khung là 1 nút bấm toggle ──
+                  .tf-accordion
+                    each tf, tfi in group.timeFrames
+                      - var tfPanelId = 'tf-panel-' + group.segmentId + '-' + tfi
+                      - var tfBookings = group.bookings.filter(function(b){ return b.tfKey === (tf.checkIn + '_' + tf.checkOut); })
+                      - var tfUnassigned = tfBookings.filter(function(b){ return !b.isAssigned; })
+                      .tf-accordion-item
+                        button.tf-toggle-btn(
+                          type="button"
+                          data-panel-id=tfPanelId
+                          onclick="toggleTfPanel(this.dataset.panelId, this)"
+                          aria-expanded="false"
+                          aria-controls=tfPanelId
+                        )
+                          if tf.segmentLabel
+                            span.tf-toggle-badge= tf.segmentLabel
+                          else
+                            span.tf-toggle-badge Đợt #{tfi + 1}
+                          span.tf-toggle-dates
+                            i.fa-regular.fa-calendar
+                            |  #{tf.checkIn}
+                            span.tf-toggle-arrow  →
+                            | #{tf.checkOut}
+                          .tf-toggle-stats
+                            span
+                              i.fa-solid.fa-users(style="font-size:11px")
+                              |  #{tf.totalPeople} người
+                            span
+                              i.fa-solid.fa-door-open(style="font-size:11px")
+                              |  #{tf.totalRooms} phòng
+                            if tfUnassigned.length > 0
+                              span.badge.badge--yellow #{tfUnassigned.length} chưa gán
+                          i.fa-solid.fa-chevron-down.tf-toggle-icon
+                        .tf-panel(id=tfPanelId)
+                          table.tour-hold-table
+                            thead
+                              tr
+                                th Mã giữ phòng
+                                th Loại phòng
+                                th Phòng số
+                                th Khách đã gán
+                                th Nhận phòng
+                                th Trả phòng
+                                th Trạng thái
+                                th Thao tác
+                            tbody
+                              each b in tfBookings
+                                - var effectiveStatus = !b.isAssigned ? 'confirmed' : b.status
+                                tr(data-booking-id=b.id data-booking-code=b.code)
+                                  td
+                                    span.booking-code= b.code
+                                  td= b.roomTypeName
+                                  td
+                                    if b.roomNumber && b.roomNumber !== '—'
+                                      span.room-number-badge= b.roomNumber
+                                    else
+                                      span.text-muted —
+                                  td
+                                    if b.isAssigned
+                                      .th-guest-info
+                                        span.th-guest-name= b.guestName
+                                        if b.guestPhone
+                                          span.th-guest-phone
+                                            i.fa-solid.fa-phone(style="font-size:10px")
+                                            |  #{b.guestPhone}
+                                    else
+                                      span.badge.badge--yellow Chưa gán khách
+                                  td= b.checkIn
+                                  td= b.checkOut
+                                  td
+                                    - var statusLabel = effectiveStatus === 'confirmed' ? 'Chờ nhận phòng' : effectiveStatus === 'checked_in' ? 'Đang ở' : effectiveStatus === 'checked_out' ? 'Đã trả phòng' : effectiveStatus
+                                    - var statusClass = effectiveStatus === 'confirmed' ? 'badge--blue' : effectiveStatus === 'checked_in' ? 'badge--green' : effectiveStatus === 'checked_out' ? 'badge--gray' : 'badge--yellow'
+                                    span.badge(class=statusClass)= statusLabel
+                                  td.th-action-cell
+                                    if effectiveStatus === 'confirmed'
+                                      if b.isAssigned
+                                        button.btn-th-checkin(
+                                          type="button"
+                                          data-booking-id=b.id
+                                          onclick="tourHoldCheckin(this)"
+                                          title="Xác nhận khách đã đến nhận phòng"
+                                        )
+                                          i.fa-solid.fa-door-open
+                                          |  Nhận phòng
+                                      else
+                                        button.btn-release-single(
+                                          type="button"
+                                          data-booking-id=b.id
+                                          onclick="releaseOneHold(this)"
+                                          title="Giải phóng phòng này để nhận đặt phòng thông thường"
+                                        )
+                                          i.fa-solid.fa-unlock
+                                          |  Giải phóng
+                                    else if effectiveStatus === 'checked_in'
+                                      .th-action-cell__group
+                                        button.btn-th-checkout(
+                                          type="button"
+                                          data-booking-id=b.id
+                                          onclick="tourHoldCheckout(this)"
+                                          title="Xác nhận khách đã trả phòng"
+                                        )
+                                          i.fa-solid.fa-right-from-bracket
+                                          |  Trả phòng
+                                        button.btn-th-revert(
+                                          type="button"
+                                          data-booking-id=b.id
+                                          onclick="tourHoldRevertCheckin(this)"
+                                          title="Hoàn tác: trở về Chờ nhận phòng"
+                                        )
+                                          i.fa-solid.fa-rotate-left
+                                          |  Hoàn tác
+                                    else if effectiveStatus === 'checked_out'
+                                      .th-action-cell__group
+                                        span.badge.badge--gray
+                                          i.fa-solid.fa-circle-check
+                                          |  Hoàn tất
+                                        button.btn-th-revert(
+                                          type="button"
+                                          data-booking-id=b.id
+                                          onclick="tourHoldRevertCheckout(this)"
+                                          title="Hoàn tác: trở về Đang ở"
+                                        )
+                                          i.fa-solid.fa-rotate-left
+                                          |  Hoàn tác
+
+                else
+                  //- ── Chỉ 1 khung thời gian: hiển thị header ngày + bảng trực tiếp ──
+                  - var singleTf = group.timeFrames && group.timeFrames.length === 1 ? group.timeFrames[0] : null
+                  if singleTf
+                    .th-timeframe-header
+                      .th-timeframe-header__label
+                        if singleTf.segmentLabel
+                          span.tf-toggle-badge= singleTf.segmentLabel
+                        else
+                          span.tf-toggle-badge Khung thời gian
+                      .th-timeframe-header__dates
+                        i.fa-regular.fa-calendar
+                        |  #{singleTf.checkIn}
+                        span.tf-toggle-arrow  →
+                        | #{singleTf.checkOut}
+                      .tf-toggle-stats
+                        span
+                          i.fa-solid.fa-users(style="font-size:11px")
+                          |  #{singleTf.totalPeople} người
+                        span
+                          i.fa-solid.fa-door-open(style="font-size:11px")
+                          |  #{singleTf.totalRooms} phòng
+                  table.tour-hold-table
+                    thead
+                      tr
+                        th Mã giữ phòng
+                        th Loại phòng
+                        th Phòng số
+                        th Khách đã gán
+                        th Nhận phòng
+                        th Trả phòng
+                        th Trạng thái
+                        th Thao tác
+                    tbody
+                      each b in group.bookings
+                        - var effectiveStatus = !b.isAssigned ? 'confirmed' : b.status
+                        tr(data-booking-id=b.id data-booking-code=b.code)
+                          td
+                            span.booking-code= b.code
+                          td= b.roomTypeName
+                          td
+                            if b.roomNumber && b.roomNumber !== '—'
+                              span.room-number-badge= b.roomNumber
+                            else
+                              span.text-muted —
+                          td
+                            if b.isAssigned
+                              .th-guest-info
+                                span.th-guest-name= b.guestName
+                                if b.guestPhone
+                                  span.th-guest-phone
+                                    i.fa-solid.fa-phone(style="font-size:10px")
+                                    |  #{b.guestPhone}
+                            else
+                              span.badge.badge--yellow Chưa gán khách
+                          td= b.checkIn
+                          td= b.checkOut
+                          td
+                            - var statusLabel = effectiveStatus === 'confirmed' ? 'Chờ nhận phòng' : effectiveStatus === 'checked_in' ? 'Đang ở' : effectiveStatus === 'checked_out' ? 'Đã trả phòng' : effectiveStatus
+                            - var statusClass = effectiveStatus === 'confirmed' ? 'badge--blue' : effectiveStatus === 'checked_in' ? 'badge--green' : effectiveStatus === 'checked_out' ? 'badge--gray' : 'badge--yellow'
+                            span.badge(class=statusClass)= statusLabel
+                          td.th-action-cell
+                            if effectiveStatus === 'confirmed'
+                              if b.isAssigned
+                                button.btn-th-checkin(
+                                  type="button"
+                                  data-booking-id=b.id
+                                  onclick="tourHoldCheckin(this)"
+                                  title="Xác nhận khách đã đến nhận phòng"
+                                )
+                                  i.fa-solid.fa-door-open
+                                  |  Nhận phòng
+                              else
+                                button.btn-release-single(
+                                  type="button"
+                                  data-booking-id=b.id
+                                  onclick="releaseOneHold(this)"
+                                  title="Giải phóng phòng này để nhận đặt phòng thông thường"
+                                )
+                                  i.fa-solid.fa-unlock
+                                  |  Giải phóng
+                            else if effectiveStatus === 'checked_in'
+                              .th-action-cell__group
+                                button.btn-th-checkout(
+                                  type="button"
+                                  data-booking-id=b.id
+                                  onclick="tourHoldCheckout(this)"
+                                  title="Xác nhận khách đã trả phòng"
+                                )
+                                  i.fa-solid.fa-right-from-bracket
+                                  |  Trả phòng
+                                button.btn-th-revert(
+                                  type="button"
+                                  data-booking-id=b.id
+                                  onclick="tourHoldRevertCheckin(this)"
+                                  title="Hoàn tác: trở về Chờ nhận phòng"
+                                )
+                                  i.fa-solid.fa-rotate-left
+                                  |  Hoàn tác
+                            else if effectiveStatus === 'checked_out'
+                              .th-action-cell__group
+                                span.badge.badge--gray
+                                  i.fa-solid.fa-circle-check
+                                  |  Hoàn tất
+                                button.btn-th-revert(
+                                  type="button"
+                                  data-booking-id=b.id
+                                  onclick="tourHoldRevertCheckout(this)"
+                                  title="Hoàn tác: trở về Đang ở"
+                                )
+                                  i.fa-solid.fa-rotate-left
+                                  |  Hoàn tác
+
+                if unassignedIds.length > 0
+                  .release-confirm-panel(id="release-panel-" + group.segmentId style="display:none")
+                    .release-confirm-panel__header
+                      i.fa-solid.fa-triangle-exclamation
+                      strong  Xác nhận giải phóng phòng chưa gán
+                    p.release-confirm-panel__desc Các phòng dưới đây chưa có khách được phân công. Sau khi giải phóng, chúng sẽ trở về trạng thái trống và có thể nhận đặt phòng thông thường.
+                    ul.release-confirm-panel__list
+                      each b in group.bookings
+                        if !b.isAssigned && b.status === 'confirmed'
+                          li
+                            i.fa-solid.fa-door-closed(style="color:#f59e0b;margin-right:6px")
+                            | #{b.roomTypeName}
+                            if b.roomNumber && b.roomNumber !== '—'
+                              span.room-number-badge(style="margin:0 6px")  #{b.roomNumber}
+                            | &nbsp;(#{b.checkIn} → #{b.checkOut})
+                    .release-confirm-panel__actions
+                      button.btn-release-cancel-panel(
+                        type="button"
+                        onclick="hideReleasePanel('" + group.segmentId + "')"
+                      ) Hủy
+                      button.btn-release-confirm(
+                        type="button"
+                        data-booking-ids=unassignedIds.join(',')
+                        onclick="confirmRelease(this)"
+                      )
+                        i.fa-solid.fa-unlock
+                        |  Xác nhận giải phóng #{unassignedIds.length} phòng
+
+          script.
+            // ── Tour Hold Search ──
+            function filterTourHoldGroups(keyword) {
+              var q = (keyword || '').trim().toLowerCase();
+              var groups = document.querySelectorAll('.tour-holds-page .tour-hold-group');
+              var visibleGroups = 0;
+              var visibleRows   = 0;
+
+              groups.forEach(function(g) {
+                var name = (g.dataset.tourName || '').toLowerCase();
+                var id   = (g.dataset.tourId   || '').toLowerCase();
+                var matchesMeta = !q || name.indexOf(q) !== -1 || id.indexOf(q) !== -1;
+
+                // Tìm trong các row booking
+                var rows = g.querySelectorAll('tr[data-booking-code]');
+                var hasRowMatch = false;
+                if (!matchesMeta && q) {
+                  rows.forEach(function(row) {
+                    if ((row.dataset.bookingCode || '').toLowerCase().indexOf(q) !== -1) {
+                      hasRowMatch = true;
+                    }
+                  });
+                }
+
+                var showGroup = matchesMeta || hasRowMatch;
+                g.style.display = showGroup ? '' : 'none';
+
+                if (showGroup) {
+                  visibleGroups++;
+
+                  // Lọc từng row
+                  rows.forEach(function(row) {
+                    if (matchesMeta || !q) {
+                      // Khớp theo tên/ID tour → hiện tất cả row
+                      row.style.display = '';
+                    } else {
+                      // Khớp theo mã → chỉ hiện row đúng mã
+                      var code = (row.dataset.bookingCode || '').toLowerCase();
+                      var show = code.indexOf(q) !== -1;
+                      row.style.display = show ? '' : 'none';
+                      if (show) visibleRows++;
+                    }
+                  });
+
+                  // Tự mở accordion chứa row khớp
+                  if (!matchesMeta && hasRowMatch) {
+                    var panels = g.querySelectorAll('.tf-panel');
+                    panels.forEach(function(panel) {
+                      var panelRows = panel.querySelectorAll('tr[data-booking-code]');
+                      var hasVisible = false;
+                      panelRows.forEach(function(r) {
+                        if (r.style.display !== 'none') hasVisible = true;
+                      });
+                      if (hasVisible && !panel.classList.contains('tf-panel--open')) {
+                        panel.classList.add('tf-panel--open');
+                        var btn = g.querySelector('[data-panel-id="' + panel.id + '"]');
+                        if (btn) {
+                          btn.classList.add('tf-toggle-btn--active');
+                          btn.setAttribute('aria-expanded', 'true');
+                          var icon = btn.querySelector('.tf-toggle-icon');
+                          if (icon) icon.style.transform = 'rotate(180deg)';
+                        }
+                      }
+                    });
+                  }
+                } else {
+                  // Group bị ẩn → reset tất cả row về mặc định
+                  rows.forEach(function(row) { row.style.display = ''; });
+                }
+              });
+
+              var countEl = document.getElementById('thSearchCount');
+              if (countEl) {
+                if (!q) {
+                  countEl.textContent = '';
+                } else if (visibleRows > 0) {
+                  countEl.textContent = 'Tìm thấy ' + visibleRows + ' phòng';
+                } else {
+                  countEl.textContent = 'Tìm thấy ' + visibleGroups + ' / ' + groups.length + ' nhóm';
+                }
+              }
+              var clearBtn = document.querySelector('.th-search-bar__clear');
+              if (clearBtn) clearBtn.style.display = q ? '' : 'none';
+            }
+            function clearTourHoldSearch() {
+              var inp = document.getElementById('thSearchInput');
+              if (inp) { inp.value = ''; inp.focus(); }
+              filterTourHoldGroups('');
+            }
+
+            function toggleTfPanel(panelId, btn) {
+              var panel = document.getElementById(panelId);
+              if (!panel) return;
+              var icon = btn.querySelector('.tf-toggle-icon');
+              var isOpen = panel.classList.contains('tf-panel--open');
+              if (isOpen) {
+                panel.classList.remove('tf-panel--open');
+                btn.classList.remove('tf-toggle-btn--active');
+                btn.setAttribute('aria-expanded', 'false');
+                if (icon) icon.style.transform = '';
+              } else {
+                panel.classList.add('tf-panel--open');
+                btn.classList.add('tf-toggle-btn--active');
+                btn.setAttribute('aria-expanded', 'true');
+                if (icon) icon.style.transform = 'rotate(180deg)';
+              }
+            }
+            function _tourHoldUpdateStatus(btn, newStatus, labelProcessing, labelReset, confirmMsg) {
+              var bookingId = btn.dataset.bookingId;
+              if (!bookingId) return;
+              var msg = confirmMsg || (newStatus === 'checked_in'
+                ? 'Xác nhận khách tour đã đến nhận phòng?'
+                : newStatus === 'checked_out'
+                  ? 'Xác nhận khách tour đã trả phòng?'
+                  : 'Xác nhận hoàn tác thao tác này?');
+              if (!confirm(msg)) return;
+              btn.disabled = true;
+              btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+              fetch('/!{pathAdmin}/hotel/booking/update-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookingId: bookingId, status: newStatus }),
+              })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                  if (data.code === 'success') {
+                    location.reload();
+                  } else {
+                    alert('Lỗi: ' + (data.message || 'Không thể cập nhật trạng thái'));
+                    btn.disabled = false;
+                    btn.innerHTML = labelReset;
+                  }
+                })
+                .catch(function() {
+                  alert('Có lỗi kết nối, vui lòng thử lại.');
+                  btn.disabled = false;
+                  btn.innerHTML = labelReset;
+                });
+            }
+            function releaseOneHold(btn) {
+              var bookingId = btn.dataset.bookingId;
+              if (!bookingId) return;
+              if (!confirm('Giải phóng phòng này? Phòng sẽ trở về trạng thái trống và có thể nhận đặt phòng thông thường.')) return;
+              btn.disabled = true;
+              btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+              fetch('/!{pathAdmin}/hotel/booking/release-holds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookingIds: [bookingId] }),
+              })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                  if (data.code === 'success') {
+                    location.reload();
+                  } else {
+                    alert('Lỗi: ' + (data.message || 'Không thể giải phóng phòng'));
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-unlock"></i> Giải phóng';
+                  }
+                })
+                .catch(function() {
+                  alert('Có lỗi kết nối, vui lòng thử lại.');
+                  btn.disabled = false;
+                  btn.innerHTML = '<i class="fa-solid fa-unlock"></i> Giải phóng';
+                });
+            }
+            function tourHoldCheckin(btn) {
+              _tourHoldUpdateStatus(btn, 'checked_in',
+                '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...',
+                '<i class="fa-solid fa-door-open"></i> Nhận phòng');
+            }
+            function tourHoldCheckout(btn) {
+              _tourHoldUpdateStatus(btn, 'checked_out',
+                '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...',
+                '<i class="fa-solid fa-right-from-bracket"></i> Trả phòng');
+            }
+            function tourHoldRevertCheckin(btn) {
+              _tourHoldUpdateStatus(btn, 'confirmed',
+                '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...',
+                '<i class="fa-solid fa-rotate-left"></i> Hoàn tác nhận phòng',
+                'Hoàn tác lại về trạng thái "Chờ nhận phòng"?');
+            }
+            function tourHoldRevertCheckout(btn) {
+              _tourHoldUpdateStatus(btn, 'checked_in',
+                '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...',
+                '<i class="fa-solid fa-rotate-left"></i> Hoàn tác trả phòng',
+                'Hoàn tác lại về trạng thái "Đang ở"?');
+            }
+            function showReleasePanel(btn) {
+              var panelId = btn.dataset.panelId;
+              var panel = document.getElementById(panelId);
+              if (panel) {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+              }
+            }
+            function hideReleasePanel(segmentId) {
+              var panel = document.getElementById('release-panel-' + segmentId);
+              if (panel) panel.style.display = 'none';
+            }
+            function confirmRelease(btn) {
+              var ids = (btn.dataset.bookingIds || '').split(',').filter(Boolean);
+              if (!ids.length) return;
+              btn.disabled = true;
+              btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+              fetch('/!{pathAdmin}/hotel/booking/release-holds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookingIds: ids }),
+              })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                  if (data.code === 'success') {
+                    alert(data.message || 'Giải phóng phòng thành công!');
+                    location.reload();
+                  } else {
+                    alert('Lỗi: ' + (data.message || 'Không thể giải phóng phòng'));
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-unlock"></i> Xác nhận giải phóng';
+                  }
+                })
+                .catch(function() {
+                  alert('Có lỗi kết nối, vui lòng thử lại.');
+                  btn.disabled = false;
+                  btn.innerHTML = '<i class="fa-solid fa-unlock"></i> Xác nhận giải phóng';
+                });
+            }
 
       //- Tab: Khách hàng
       else if bookingsData.activeTab === 'guest-list'
@@ -384,6 +1200,11 @@ block main
                     tr
                       td
                         .guest-name= guest.guestName
+                        if guest.cccdImages && guest.cccdImages.length
+                          .cccd-gallery.cccd-gallery--inline
+                            each img in guest.cccdImages
+                              a.cccd-gallery-item(href=img target="_blank")
+                                img(src=img alt="CCCD")
                       td
                         .guest-email= guest.guestEmail
                       td
@@ -416,10 +1237,98 @@ block main
                     td(colspan="11" style="text-align: center; padding: 40px;")
                       .empty-message Chưa có khách hàng nào được xếp phòng
 
+    //- Popup card dùng chung cho calendar
+    #booking-info-popup.booking-info-popup(style="display:none")
+      button.booking-info-popup__close(type="button" onclick="closeBookingPopup()" aria-label="Đóng")
+        i.fa-solid.fa-xmark
+      .booking-info-popup__body
+
     //- JavaScript cho calendar navigation
     - const defaultYear = bookingsData.currentYear || new Date().getFullYear()
     - const defaultMonth = bookingsData.currentMonthNum || (new Date().getMonth() + 1)
     script.
+      // ── Popup thông tin booking khi bấm vào thanh lịch ──────────────────────
+      function showBookingPopup(e, bar) {
+        e.stopPropagation();
+        var popup = document.getElementById('booking-info-popup');
+        if (!popup) return;
+
+        var isTour     = bar.dataset.isTour === '1';
+        var isAssigned = bar.dataset.isAssigned === '1';
+        var guest      = bar.dataset.guest || '';
+        var tourName   = bar.dataset.tourName || '';
+        var tourCode   = bar.dataset.tourCode || '';
+        var phone      = bar.dataset.phone || '';
+        var checkIn    = bar.dataset.checkIn || '';
+        var checkOut   = bar.dataset.checkOut || '';
+        var code       = bar.dataset.code || '';
+        var status     = bar.dataset.status || '';
+
+        var rows = '';
+
+        if (isTour) {
+          rows += '<div class="bip-row bip-row--tour"><i class="fa-solid fa-link"></i><div><span class="bip-label">Tour</span><span class="bip-value">' + (tourName || tourCode || 'Tour hold') + (tourCode ? ' <span class="bip-code">(' + tourCode + ')</span>' : '') + '</span></div></div>';
+          if (isAssigned && guest && guest !== 'N/A') {
+            rows += '<div class="bip-row"><i class="fa-solid fa-user"></i><div><span class="bip-label">Khách</span><span class="bip-value bip-value--name">' + guest + '</span></div></div>';
+          }
+          if (phone) {
+            rows += '<div class="bip-row"><i class="fa-solid fa-phone"></i><div><span class="bip-label">SĐT</span><span class="bip-value">' + phone + '</span></div></div>';
+          }
+          if (!isAssigned) {
+            rows += '<div class="bip-row bip-row--muted"><i class="fa-solid fa-hourglass-half"></i><div><span class="bip-value">Chưa gán khách</span></div></div>';
+          } else if (status === 'checked_in') {
+            rows += '<div class="bip-row bip-row--checkedin"><i class="fa-solid fa-door-open"></i><div><span class="bip-value bip-status--checkedin">Đã nhận phòng</span></div></div>';
+          } else if (status === 'checked_out') {
+            rows += '<div class="bip-row bip-row--checkedout"><i class="fa-solid fa-circle-check"></i><div><span class="bip-value bip-status--checkedout">Đã trả phòng</span></div></div>';
+          } else {
+            rows += '<div class="bip-row bip-row--waiting"><i class="fa-solid fa-clock"></i><div><span class="bip-value bip-status--waiting">Chờ nhận phòng</span></div></div>';
+          }
+        } else {
+          if (guest && guest !== 'N/A') {
+            rows += '<div class="bip-row"><i class="fa-solid fa-user"></i><div><span class="bip-label">Khách</span><span class="bip-value bip-value--name">' + guest + '</span></div></div>';
+          }
+          if (phone) {
+            rows += '<div class="bip-row"><i class="fa-solid fa-phone"></i><div><span class="bip-label">SĐT</span><span class="bip-value">' + phone + '</span></div></div>';
+          }
+          rows += '<div class="bip-row"><i class="fa-solid fa-hashtag"></i><div><span class="bip-label">Mã</span><span class="bip-value bip-code">' + code + '</span></div></div>';
+        }
+
+        if (checkIn || checkOut) {
+          rows += '<div class="bip-row"><i class="fa-solid fa-calendar-days"></i><div><span class="bip-label">Ngày</span><span class="bip-value">' + checkIn + ' → ' + checkOut + '</span></div></div>';
+        }
+
+        popup.querySelector('.booking-info-popup__body').innerHTML = rows;
+
+        // Định vị popup gần vị trí bấm, tránh ra ngoài màn hình
+        popup.style.display = 'block';
+        var pw = popup.offsetWidth  || 240;
+        var ph = popup.offsetHeight || 160;
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var x  = e.clientX + 12;
+        var y  = e.clientY + 12;
+        if (x + pw > vw - 10) x = e.clientX - pw - 12;
+        if (y + ph > vh - 10) y = e.clientY - ph - 12;
+        popup.style.left = Math.max(8, x) + 'px';
+        popup.style.top  = Math.max(8, y) + 'px';
+      }
+
+      function closeBookingPopup() {
+        var popup = document.getElementById('booking-info-popup');
+        if (popup) popup.style.display = 'none';
+      }
+
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('.booking-bar') && !e.target.closest('#booking-info-popup')) {
+          closeBookingPopup();
+        }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeBookingPopup();
+      });
+
+      // ── Calendar navigation ──────────────────────────────────────────────────
       document.addEventListener('DOMContentLoaded', function() {
         const prevBtn = document.querySelector('.prev-btn');
         const nextBtn = document.querySelector('.next-btn');

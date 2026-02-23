@@ -57,4 +57,6 @@ html
     script(src="/admin/assets/js/notify.js")
     script(src="/admin/assets/js/script.js")
     script(src="/admin/assets/js/hotel-booking.js")
-    script(src="/admin/assets/js/notification.js") 
+    script(src="/admin/assets/js/notification.js")
+    if pageTitle && (pageTitle.includes('Liên kết Tour') || pageTitle.includes('Cấu hình khung'))
+      script(src="/admin/assets/js/tour-hotel.js")

@@ -84,6 +84,17 @@ function decorateTour(t, company) {
       ? t.seatsRemainingEff
       : Number(t.seatsRemaining ?? 0);
 
+  const departuresWithSeats =
+    Array.isArray(t.departures) && t.departures.length > 0
+      ? t.departures
+          .filter((d) => d && d.departureDate)
+          .map((d) => ({
+            dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+            seatsTotal: d.seatsTotal ?? 0,
+            seatsRemaining: d.seatsRemaining ?? 0,
+          }))
+      : [];
+
   const companyInfo = {
     _id: company?._id,
     name: company?.name || "",
@@ -100,6 +111,7 @@ function decorateTour(t, company) {
     discountFromFormat,
     discountToFormat,
     seatsRemaining,
+    departuresWithSeats,
     company: companyInfo,
   };
 }
@@ -565,6 +577,17 @@ module.exports.toursByCompany = async (req, res) => {
         seatsRemaining = a + c + b;
       }
 
+      const departuresWithSeats =
+        Array.isArray(t.departures) && t.departures.length > 0
+          ? t.departures
+              .filter((d) => d && d.departureDate)
+              .map((d) => ({
+                dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+                seatsTotal: d.seatsTotal ?? 0,
+                seatsRemaining: d.seatsRemaining ?? 0,
+              }))
+          : [];
+
       return {
         ...t,
         discount,
@@ -573,6 +596,7 @@ module.exports.toursByCompany = async (req, res) => {
         discountToFormat,
         discountExpireISO,
         seatsRemaining,
+        departuresWithSeats,
         company: {
           _id: company._id,
           name: company.name,

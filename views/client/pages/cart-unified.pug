@@ -24,14 +24,6 @@ block main
           .section-11(page-cart)
             .inner-wrap
               .inner-tour-list(cart-list)
-              .inner-coupon
-                form#coupon-form(action="")
-                  input#coupon-input(
-                    name="coupon" 
-                    placeholder="Nhập mã giảm giá" 
-                    type="text"
-                  )
-                  button Dùng Mã
               .inner-list-price
                 .inner-item
                   .inner-label Tạm tính:
@@ -66,6 +58,27 @@ block main
                         name="phone" 
                         type="text"
                       )
+                    .inner-group
+                      input#email-input(
+                        placeholder="Email" 
+                        name="email" 
+                        type="email"
+                        value=(account && account.email ? account.email : "")
+                      )
+                    .inner-group.inner-two-col
+                      label.cccd-label
+                        i.fa-solid.fa-id-card
+                        |  Ảnh CCCD / Hộ chiếu
+                      .cccd-upload-area#cccd-upload-area
+                        input#cccd-file-input(
+                          type="file"
+                          multiple
+                          accept="image/*"
+                        )
+                        .cccd-upload-placeholder
+                          i.fa-solid.fa-cloud-arrow-up
+                          span Chọn hoặc kéo thả ảnh vào đây
+                      .cccd-preview#cccd-preview
                     .inner-group.inner-two-col
                       textarea(
                         placeholder="Ghi chú" 
@@ -115,6 +128,8 @@ block main
                 p Thêm phòng khách sạn vào giỏ hàng để tiếp tục
                 a.btn-primary(href="/hotel/search") Tìm kiếm khách sạn
             else
+              //- Cảnh báo phòng hết: hiển thị bởi JS sau khi check-availability
+              #hotelAvailabilityWarning(style="display:none")
               .cart-grid
                 .cart-items
                   if hotelInfo
@@ -299,6 +314,20 @@ block main
                     .form-group
                       label(for="hotel-email-input") Email *
                       input#hotel-email-input.form-input(type="email" name="email" placeholder="Nhập email" required value=(account && account.email ? account.email : ""))
+                    .form-group.form-group--full
+                      label
+                        i.fa-solid.fa-id-card
+                        |  Ảnh CCCD / Hộ chiếu
+                      .cccd-upload-area#hotel-cccd-upload-area
+                        input#hotel-cccd-file-input(
+                          type="file"
+                          multiple
+                          accept="image/*"
+                        )
+                        .cccd-upload-placeholder
+                          i.fa-solid.fa-cloud-arrow-up
+                          span Chọn hoặc kéo thả ảnh vào đây
+                      .cccd-preview#hotel-cccd-preview
                     .form-group
                       label(for="hotel-note-input") Ghi chú
                       textarea#hotel-note-input.form-input(name="note" rows="3" placeholder="Yêu cầu đặc biệt, giờ nhận phòng dự kiến...")

@@ -11,14 +11,6 @@ block main
             | Quay lại mua hàng
             i.fa-solid.fa-angle-right
         .inner-tour-list(cart-list)
-        .inner-coupon
-          form#coupon-form(action="")
-            input#coupon-input(
-              name="coupon" 
-              placeholder="Nhập mã giảm giá" 
-              type="text"
-              )
-            button Dùng Mã
         .inner-list-price
           .inner-item
             .inner-label Tạm tính:
@@ -55,6 +47,27 @@ block main
                   name="phone" 
                   type="text"
                   )
+              .inner-group
+                input#email-input(
+                  placeholder="Email" 
+                  name="email" 
+                  type="email"
+                  value=(account && account.email ? account.email : "")
+                  )
+              .inner-group.inner-two-col
+                label.cccd-label
+                  i.fa-solid.fa-id-card
+                  |  Ảnh CCCD / Hộ chiếu
+                .cccd-upload-area#cccd-upload-area
+                  input#cccd-file-input(
+                    type="file"
+                    multiple
+                    accept="image/*"
+                  )
+                  .cccd-upload-placeholder
+                    i.fa-solid.fa-cloud-arrow-up
+                    span Chọn hoặc kéo thả ảnh vào đây
+                .cccd-preview#cccd-preview
               .inner-group.inner-two-col
                 textarea(
                   placeholder="Ghi chú" 

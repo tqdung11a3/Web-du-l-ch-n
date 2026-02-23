@@ -135,6 +135,17 @@ module.exports.home = async (req, res) => {
       const b = Number(t.stockBaby || 0);
       t.seatsRemaining = a + c + b;
     }
+
+    t.departuresWithSeats =
+      Array.isArray(t.departures) && t.departures.length > 0
+        ? t.departures
+            .filter((d) => d && d.departureDate)
+            .map((d) => ({
+              dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+              seatsTotal: d.seatsTotal ?? 0,
+              seatsRemaining: d.seatsRemaining ?? 0,
+            }))
+        : [];
   }
 
   // Ghép công ty cho Section 2
@@ -203,6 +214,17 @@ module.exports.home = async (req, res) => {
         Number(item.stockChildren || 0) +
         Number(item.stockBaby || 0);
     }
+
+    item.departuresWithSeats =
+      Array.isArray(item.departures) && item.departures.length > 0
+        ? item.departures
+            .filter((d) => d && d.departureDate)
+            .map((d) => ({
+              dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+              seatsTotal: d.seatsTotal ?? 0,
+              seatsRemaining: d.seatsRemaining ?? 0,
+            }))
+        : [];
   });
 
   const validCompanyObjectIds = Array.from(

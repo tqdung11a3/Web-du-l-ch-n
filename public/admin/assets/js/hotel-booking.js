@@ -20,11 +20,11 @@
   // Helper function để map status sang text và badge class
   function getStatusDisplay(status) {
     const statusMap = {
-      'pending': { text: 'Chờ xác nhận', class: 'badge-yellow' },
-      'confirmed': { text: 'Đã xác nhận', class: 'badge-blue' },
-      'checked_in': { text: 'Đã nhận phòng', class: 'badge-green' },
-      'checked_out': { text: 'Đã trả phòng', class: 'badge-gray' },
-      'cancelled': { text: 'Đã hủy', class: 'badge-red' }
+      'pending':     { text: 'Chờ xác nhận',  class: 'badge-yellow' },
+      'confirmed':   { text: 'Đã xác nhận',   class: 'badge-blue'   },
+      'checked_in':  { text: 'Đã nhận phòng', class: 'badge-green'  },
+      'checked_out': { text: 'Đã trả phòng',  class: 'badge-gray'   },
+      'cancelled':   { text: 'Đã hủy',        class: 'badge-red'    },
     };
     return statusMap[status] || { text: 'Chờ xác nhận', class: 'badge-yellow' };
   }
@@ -43,19 +43,54 @@
             ${bookings.length > 0 ? `
               <div class="bookings-list">
                 ${bookings.map(booking => {
-                  const statusDisplay = getStatusDisplay(booking.status);
+                  const isTourHold    = booking.isTourHold;
+                  const tourAssigned  = booking.tourAssigned;
+                  // Nếu tour hold chưa gán khách → luôn hiển thị "confirmed" bất kể DB
+                  const effectiveStatus = (isTourHold && !tourAssigned) ? 'confirmed' : booking.status;
+                  const statusDisplay = getStatusDisplay(effectiveStatus);
+
+                  // Badge tour hold
+                  const tourBadge = isTourHold
+                    ? tourAssigned
+                      ? `<span class="booking-status-badge badge-green" style="margin-left:6px">
+                           <i class="fa-solid fa-person-shelter"></i> Tour – Đã phân công
+                         </span>`
+                      : `<span class="booking-status-badge badge-purple" style="margin-left:6px">
+                           <i class="fa-solid fa-lock"></i> Tour – Chưa phân công
+                         </span>`
+                    : '';
+
+                  // Nút huỷ xếp phòng: booking thường, chưa nhận/trả phòng
+                  const canUnassign = !isTourHold
+                    && booking.bookingId
+                    && effectiveStatus !== 'checked_in'
+                    && effectiveStatus !== 'checked_out'
+                    && effectiveStatus !== 'cancelled';
+
+                  // Nút xóa booking: chỉ khi đã trả phòng hoặc đã hủy
+                  const canDelete = !isTourHold
+                    && booking.bookingId
+                    && (effectiveStatus === 'checked_out' || effectiveStatus === 'cancelled');
+
                   return `
-                    <div class="booking-detail-card">
+                    <div class="booking-detail-card${isTourHold ? ' booking-detail-card--tour' : ''}${canDelete ? ' booking-detail-card--finished' : ''}">
                       <div class="booking-detail-header">
                         <span class="booking-code">${booking.code}</span>
                         <span class="booking-status-badge ${statusDisplay.class}">${statusDisplay.text}</span>
+                        ${tourBadge}
+                        ${canUnassign ? `<button class="btn-unassign-room" data-booking-id="${booking.bookingId}" onclick="unassignRoom(this)" title="Huỷ xếp phòng này"><i class="fa-solid fa-rotate-left"></i> Huỷ xếp phòng</button>` : ''}
+                        ${canDelete ? `<button class="btn-delete-room-booking" data-booking-id="${booking.bookingId}" data-booking-code="${booking.code}" title="Xóa booking này"><i class="fa-regular fa-trash-can"></i> Xóa</button>` : ''}
                       </div>
                       <div class="booking-detail-body">
                         <div class="detail-row">
                           <i class="fa-solid fa-user"></i>
-                          <span><strong>Khách hàng:</strong> ${booking.customerName}</span>
+                          <span><strong>${isTourHold ? 'Khách tour:' : 'Khách hàng:'}</strong> ${
+                            isTourHold && !tourAssigned
+                              ? '<em style="color:#9ca3af">Chưa phân công</em>'
+                              : booking.customerName
+                          }</span>
                         </div>
-                        ${booking.customerPhone ? `
+                        ${booking.customerPhone && tourAssigned ? `
                           <div class="detail-row">
                             <i class="fa-solid fa-phone"></i>
                             <span><strong>SĐT:</strong> ${booking.customerPhone}</span>
@@ -69,13 +104,25 @@
                           <i class="fa-solid fa-calendar-xmark"></i>
                           <span><strong>Check-out:</strong> ${booking.checkOut}</span>
                         </div>
-                        ${booking.rooms > 0 ? `
+                        ${booking.rooms > 0 && !isTourHold ? `
                           <div class="detail-row">
                             <i class="fa-solid fa-bed"></i>
                             <span><strong>Số phòng:</strong> ${booking.rooms}</span>
                           </div>
                         ` : ''}
-                        ${booking.roomsDetails && booking.roomsDetails.length > 0 ? `
+                        ${isTourHold && booking.tourName ? `
+                          <div class="detail-row" style="margin-top:4px">
+                            <i class="fa-solid fa-route" style="color:#7c3aed"></i>
+                            <span><strong>Tour:</strong> ${booking.tourName}</span>
+                          </div>
+                        ` : ''}
+                        ${isTourHold && booking.tourDeparture ? `
+                          <div class="detail-row" style="color:#6b7280;font-size:13px">
+                            <i class="fa-solid fa-plane-departure"></i>
+                            <span>${booking.tourDeparture}${booking.tourEndDate ? ' → ' + booking.tourEndDate : ''}</span>
+                          </div>
+                        ` : ''}
+                        ${booking.roomsDetails && booking.roomsDetails.length > 0 && !isTourHold ? `
                           <div class="detail-row">
                             <i class="fa-solid fa-users"></i>
                             <span><strong>Chi tiết từng phòng:</strong></span>
@@ -116,6 +163,43 @@
     modal.addEventListener('click', function(e) {
       if (e.target === modal) closeModal();
     });
+
+    // Xóa booking đã trả phòng / đã hủy trực tiếp trong modal
+    modal.addEventListener('click', async function(e) {
+      const btn = e.target.closest('.btn-delete-room-booking');
+      if (!btn) return;
+
+      const bookingId   = btn.dataset.bookingId;
+      const bookingCode = btn.dataset.bookingCode || bookingId;
+      if (!confirm(`Xóa booking ${bookingCode}?\nHành động này không thể hoàn tác!`)) return;
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+      try {
+        const res  = await fetch(`/${pathAdmin}/hotel/booking/delete`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ bookingId }),
+        });
+        const data = await res.json();
+        if (data.code === 'success') {
+          const card = btn.closest('.booking-detail-card');
+          if (card) card.remove();
+          const remaining = modal.querySelectorAll('.booking-detail-card');
+          if (remaining.length === 0) {
+            const list = modal.querySelector('.bookings-list');
+            if (list) list.innerHTML = '<p class="empty-message">Không có booking nào</p>';
+          }
+        } else {
+          throw new Error(data.message || 'Có lỗi xảy ra!');
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-regular fa-trash-can"></i> Xóa';
+        alert(err.message || 'Không thể xóa booking!');
+      }
+    });
   }
 
   // ========== XẾP PHÒNG ==========
@@ -124,54 +208,75 @@
   
   assignButtons.forEach(btn => {
     btn.addEventListener('click', function() {
-      const bookingId = this.dataset.bookingId;
+      const bookingId  = this.dataset.bookingId;
       const roomTypeId = this.dataset.roomTypeId;
+      const bookingCheckIn  = this.dataset.checkIn  || '';  // "YYYY-MM-DD"
+      const bookingCheckOut = this.dataset.checkOut || '';  // "YYYY-MM-DD"
       
       // Lấy thông tin booking từ card
       const bookingCard = this.closest('.pending-booking-card');
-      const bookingCode = bookingCard.querySelector('.booking-code').textContent;
+      const bookingCode    = bookingCard.querySelector('.booking-code').textContent;
       const bookingDetails = bookingCard.querySelector('.booking-details').textContent;
-      const bookingDates = bookingCard.querySelector('.booking-dates').textContent;
+      const bookingDates   = bookingCard.querySelector('.booking-dates').textContent;
       
       // Lấy số lượng phòng cần đặt
       const roomCountText = bookingDetails.match(/×\s*(\d+)\s*phòng/);
       const roomCount = roomCountText ? parseInt(roomCountText[1]) : 1;
-      
-      // Lấy TẤT CẢ các phòng cùng loại (không chỉ trống hiện tại)
-      // Backend sẽ validate phòng nào trống trong khoảng thời gian booking
+
+      // Helper: parse "DD/MM/YYYY" → Date (midnight UTC)
+      function parseDMY(str) {
+        if (!str) return null;
+        const [d, m, y] = str.split('/');
+        if (!d || !m || !y) return null;
+        return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+      }
+
+      // Kiểm tra hai khoảng [a,b) và [c,d) có overlap không
+      function overlapsHalfOpen(aStr, bStr, cStr, dStr) {
+        const a = aStr ? new Date(aStr) : null;
+        const b = bStr ? new Date(bStr) : null;
+        const c = parseDMY(cStr);
+        const d = parseDMY(dStr);
+        if (!a || !b || !c || !d) return false;
+        return a < d && c < b;
+      }
+
+      // Lọc chỉ những phòng cùng loại VÀ không có booking overlap với khoảng booking này
       const allRooms = Array.from(document.querySelectorAll('.room-row'))
         .filter(row => row.dataset.roomTypeId === roomTypeId);
+
+      const availableRooms = allRooms.filter(row => {
+        if (!bookingCheckIn || !bookingCheckOut) return true; // nếu không có ngày, hiện tất cả
+        // Lấy bookings của phòng từ nút "Xem chi tiết" (data-bookings là JSON)
+        const viewBtn = row.querySelector('[data-bookings]');
+        if (!viewBtn) return true;
+        let bookings = [];
+        try { bookings = JSON.parse(viewBtn.dataset.bookings); } catch(e) { return true; }
+        // Nếu không có booking nào overlap → phòng trống → hiển thị
+        return !bookings.some(b => overlapsHalfOpen(bookingCheckIn, bookingCheckOut, b.checkIn, b.checkOut));
+      });
       
-      if (allRooms.length === 0) {
+      if (availableRooms.length === 0) {
         if (typeof Notyf !== 'undefined') {
-          const notyf = new Notyf({
-            duration: 3000,
-            position: { x: 'right', y: 'top' }
-          });
-          notyf.error('Không có phòng nào phù hợp!');
+          const notyf = new Notyf({ duration: 4000, position: { x: 'right', y: 'top' } });
+          notyf.error('Không còn phòng trống nào cho khoảng thời gian này!');
         } else {
-          alert('Không có phòng nào phù hợp!');
+          alert('Không còn phòng trống nào cho khoảng thời gian này!');
         }
         return;
       }
       
-      // Kiểm tra đủ phòng không (validation cuối cùng sẽ ở backend)
-      if (allRooms.length < roomCount) {
+      if (availableRooms.length < roomCount) {
         if (typeof Notyf !== 'undefined') {
-          const notyf = new Notyf({
-            duration: 3000,
-            position: { x: 'right', y: 'top' }
-          });
-          notyf.error(`Loại phòng này chỉ có ${allRooms.length} phòng!`);
+          const notyf = new Notyf({ duration: 4000, position: { x: 'right', y: 'top' } });
+          notyf.error(`Chỉ còn ${availableRooms.length} phòng trống, booking cần ${roomCount} phòng!`);
         } else {
-          alert(`Loại phòng này chỉ có ${allRooms.length} phòng!`);
+          alert(`Chỉ còn ${availableRooms.length} phòng trống, booking cần ${roomCount} phòng!`);
         }
         return;
       }
       
-      // Tạo và hiển thị modal với tất cả phòng cùng loại
-      // Backend sẽ validate phòng nào available trong khoảng thời gian
-      showAssignRoomModal(bookingId, bookingCode, bookingDetails, bookingDates, allRooms, roomCount);
+      showAssignRoomModal(bookingId, bookingCode, bookingDetails, bookingDates, availableRooms, roomCount);
     });
   });
   
@@ -456,6 +561,45 @@
   }
 })();
 
+// ==================== UNASSIGN ROOM ====================
+window.unassignRoom = async function(btn) {
+  const bookingId = btn.dataset.bookingId;
+  if (!bookingId) return;
+
+  if (!confirm('Huỷ xếp phòng này? Booking sẽ trở về danh sách cần xếp phòng.')) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+
+  try {
+    const res  = await fetch('/admin/hotel/booking/unassign-room', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ bookingId }),
+    });
+    const data = await res.json();
+
+    if (data.code === 'success') {
+      if (typeof Notyf !== 'undefined') {
+        new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } }).success(data.message || 'Đã huỷ xếp phòng!');
+      } else {
+        alert(data.message || 'Đã huỷ xếp phòng!');
+      }
+      setTimeout(() => window.location.reload(), 1000);
+    } else {
+      throw new Error(data.message || 'Có lỗi xảy ra!');
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-rotate-left"></i> Huỷ xếp phòng';
+    if (typeof Notyf !== 'undefined') {
+      new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } }).error(err.message || 'Không thể huỷ xếp phòng!');
+    } else {
+      alert(err.message || 'Không thể huỷ xếp phòng!');
+    }
+  }
+};
+
 // ==================== BOOKING LIST - SEARCH ====================
 
 (function() {
@@ -507,6 +651,56 @@
     if (!e.target.value.trim()) {
       // Nếu input trống, có thể thêm nút clear ở đây
       // Hoặc tự động search khi xóa hết
+    }
+  });
+})();
+
+// ==================== DELETE BOOKING ====================
+(function() {
+  const bookingListPage = document.querySelector('.booking-list-page');
+  if (!bookingListPage) return;
+
+  document.addEventListener('click', async function(e) {
+    const btn = e.target.closest('.delete-booking-btn');
+    if (!btn) return;
+
+    const bookingId   = btn.dataset.bookingId;
+    const bookingCode = btn.dataset.bookingCode || bookingId;
+
+    if (!confirm(`Bạn có chắc muốn xóa đơn đặt phòng ${bookingCode}?\nHành động này không thể hoàn tác!`)) return;
+
+    btn.disabled = true;
+    const icon = btn.querySelector('i');
+    if (icon) { icon.className = 'fa-solid fa-spinner fa-spin'; }
+
+    try {
+      const res  = await fetch(`/${pathAdmin}/hotel/booking/delete`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ bookingId }),
+      });
+      const data = await res.json();
+
+      if (data.code === 'success') {
+        if (typeof Notyf !== 'undefined') {
+          new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } }).success(data.message || 'Đã xóa đơn đặt phòng!');
+        } else {
+          alert(data.message || 'Đã xóa đơn đặt phòng!');
+        }
+        // Xóa hàng khỏi bảng mà không cần reload
+        const row = btn.closest('tr');
+        if (row) row.remove();
+      } else {
+        throw new Error(data.message || 'Có lỗi xảy ra!');
+      }
+    } catch (err) {
+      btn.disabled = false;
+      if (icon) { icon.className = 'fa-regular fa-trash-can'; }
+      if (typeof Notyf !== 'undefined') {
+        new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } }).error(err.message || 'Không thể xóa đơn đặt phòng!');
+      } else {
+        alert(err.message || 'Không thể xóa đơn đặt phòng!');
+      }
     }
   });
 })();

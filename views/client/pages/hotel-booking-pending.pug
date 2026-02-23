@@ -22,7 +22,7 @@ block main
                 span.countdown-minutes 00
                 span.countdown-separator :
                 span.countdown-seconds 00
-              p.warning-note Đơn sẽ tự động hủy nếu không thanh toán đúng hạn.
+              p.warning-note Đơn sẽ tự động hủy và phòng được trả lại nếu không thanh toán đúng hạn.
 
         if bookingDetail
           .booking-info
@@ -68,68 +68,119 @@ block main
           //- Hiển thị nút thanh toán nếu chưa thanh toán
           if bookingDetail && bookingDetail.paymentStatus === 'unpaid'
             if bookingDetail.paymentMethod === 'vnpay'
+              .payment-info.payment-info--highlight
+                p
+                  i.fa-solid.fa-circle-info
+                  |  Bạn đã chọn thanh toán qua VNPay. Vui lòng bấm nút bên dưới để hoàn tất.
               a.btn-payment.btn-vnpay(href=`/hotel-booking/payment-vnpay?bookingCode=${bookingDetail.code}&phone=${bookingDetail.phone}`)
                 i.fa-solid.fa-credit-card
                 |  Thanh toán ngay qua VNPay
             else if bookingDetail.paymentMethod === 'bank'
               .payment-info
                 p
-                  strong Phương thức thanh toán: 
-                  | Chuyển khoản ngân hàng
+                  i.fa-solid.fa-building-columns
+                  strong  Chuyển khoản ngân hàng
                 p Vui lòng chuyển khoản theo thông tin bên dưới và gửi ảnh chứng từ cho chúng tôi.
             else if bookingDetail.paymentMethod === 'money'
               .payment-info
                 p
-                  strong Phương thức thanh toán: 
-                  | Tiền mặt khi nhận phòng
+                  i.fa-solid.fa-money-bill-wave
+                  strong  Tiền mặt khi nhận phòng
                 p Vui lòng đến khách sạn đúng giờ để nhận phòng và thanh toán.
           
           a.btn-primary(href="/hotel/search") Tìm kiếm khách sạn khác
           a.btn-secondary(href="/") Về trang chủ
-  
-  //- JavaScript cho countdown timer
-  if bookingDetail && bookingDetail.isTemporaryHold && bookingDetail.paymentStatus === 'unpaid' && bookingDetail.holdExpiresAt
+          if bookingDetail && bookingDetail.isTemporaryHold && bookingDetail.paymentStatus === 'unpaid'
+            button#btnCancelHold.btn-cancel-hold(type="button")
+              i.fa-solid.fa-xmark
+              |  Hủy đặt phòng & trả lại phòng
+
+  //- sendBeacon: hủy khi user rời trang (trừ khi đang thanh toán hoặc refresh)
+  if bookingDetail && bookingDetail.isTemporaryHold && bookingDetail.paymentStatus === 'unpaid'
     script.
-      (function() {
-        const holdExpiresAt = new Date("#{bookingDetail.holdExpiresAt}");
-        const countdownTimer = document.getElementById('countdownTimer');
-        
-        if (!countdownTimer) return;
-        
-        const minutesEl = countdownTimer.querySelector('.countdown-minutes');
-        const secondsEl = countdownTimer.querySelector('.countdown-seconds');
-        
-        function updateCountdown() {
-          const now = new Date();
-          const diff = holdExpiresAt - now;
-          
-          if (diff <= 0) {
-            // Hết thời gian
-            minutesEl.textContent = '00';
-            secondsEl.textContent = '00';
-            
-            // Hiển thị thông báo và reload trang
-            alert('Đơn đặt phòng đã hết hạn! Vui lòng đặt lại.');
-            window.location.href = '/hotel/search';
-            return;
-          }
-          
-          const minutes = Math.floor(diff / 60000);
-          const seconds = Math.floor((diff % 60000) / 1000);
-          
-          minutesEl.textContent = String(minutes).padStart(2, '0');
-          secondsEl.textContent = String(seconds).padStart(2, '0');
+      (function () {
+        var bookingCode   = "!{bookingDetail.code}";
+        var phone         = "!{bookingDetail.phone}";
+        var goingToPayment = false;
+
+        // Đánh dấu khi user click nút thanh toán → KHÔNG hủy
+        var payBtn = document.querySelector('.btn-payment, .btn-vnpay');
+        if (payBtn) {
+          payBtn.addEventListener('click', function () { goingToPayment = true; });
         }
-        
-        // Cập nhật ngay lập tức
-        updateCountdown();
-        
-        // Cập nhật mỗi giây
-        const interval = setInterval(updateCountdown, 1000);
-        
-        // Cleanup khi rời trang
-        window.addEventListener('beforeunload', function() {
-          clearInterval(interval);
+
+        // Nút "Hủy đặt phòng" → gọi API explicit rồi về trang chủ
+        var cancelBtn = document.getElementById('btnCancelHold');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', function () {
+            if (!confirm('Bạn chắc chắn muốn hủy đặt phòng và trả lại phòng?')) return;
+            goingToPayment = true;
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = 'Đang hủy...';
+            fetch('/hotel-booking/cancel-hold?bookingCode=' + encodeURIComponent(bookingCode) +
+                  '&phone=' + encodeURIComponent(phone), {
+                    headers: { 'X-Cancel-Reason': 'explicit' }
+                  })
+              .finally(function () { window.location.href = '/'; });
+          });
+        }
+
+        // pagehide: gửi beacon khi đóng tab / điều hướng ra ngoài
+        // Server chỉ cancel nếu đơn đã hết hạn (tránh hủy khi F5 hoặc mở tab mới)
+        window.addEventListener('pagehide', function (e) {
+          if (e.persisted)    return; // BFCache – user có thể quay lại
+          if (goingToPayment) return; // đang sang VNPay – giữ đơn
+
+          var body = 'bookingCode=' + encodeURIComponent(bookingCode) +
+                     '&phone='      + encodeURIComponent(phone);
+          navigator.sendBeacon('/hotel-booking/cancel-hold', body);
         });
       })();
 
+  //- JavaScript countdown timer
+  if bookingDetail && bookingDetail.isTemporaryHold && bookingDetail.paymentStatus === 'unpaid' && bookingDetail.holdExpiresAt
+    script.
+      (function () {
+        var holdExpiresAt = new Date("!{bookingDetail.holdExpiresAt}");
+        var bookingCode   = "!{bookingDetail.code}";
+        var phone         = "!{bookingDetail.phone}";
+        var countdownEl   = document.getElementById('countdownTimer');
+        if (!countdownEl) return;
+
+        var minutesEl = countdownEl.querySelector('.countdown-minutes');
+        var secondsEl = countdownEl.querySelector('.countdown-seconds');
+
+        function updateCountdown() {
+          var now  = new Date();
+          var diff = holdExpiresAt - now;
+
+          if (diff <= 0) {
+            minutesEl.textContent = '00';
+            secondsEl.textContent = '00';
+            clearInterval(interval);
+
+            // Gọi API hủy (GET = explicit), rồi thông báo và về trang tìm kiếm
+            fetch('/hotel-booking/cancel-hold?bookingCode=' + bookingCode + '&phone=' + phone)
+              .catch(function () {})
+              .finally(function () {
+                alert('⏰ Đơn đặt phòng đã hết hạn! Phòng đã được trả lại. Vui lòng đặt lại.');
+                window.location.href = '/hotel/search';
+              });
+            return;
+          }
+
+          var totalSeconds = Math.floor(diff / 1000);
+          var minutes = Math.floor(totalSeconds / 60);
+          var seconds = totalSeconds % 60;
+
+          minutesEl.textContent = String(minutes).padStart(2, '0');
+          secondsEl.textContent = String(seconds).padStart(2, '0');
+        }
+
+        updateCountdown();
+        var interval = setInterval(updateCountdown, 1000);
+
+        window.addEventListener('beforeunload', function () {
+          clearInterval(interval);
+        });
+      })();

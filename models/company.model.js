@@ -38,6 +38,13 @@ const companySchema = new mongoose.Schema(
     contactPerson: { type: String, default: "" },
     contactPhone: { type: String, default: "" },
 
+    // Cấu hình mức tuổi hành khách cho tour (áp dụng cho toàn bộ tour của công ty)
+    tourAgeBands: {
+      babyMaxAge:      { type: Number, default: 3  }, // Em bé: 0 → babyMaxAge tuổi
+      childrenMaxAge:  { type: Number, default: 11 }, // Trẻ em: (babyMaxAge+1) → childrenMaxAge tuổi
+      // Người lớn: (childrenMaxAge+1) trở lên
+    },
+
     // Chính sách
     cancelPolicyTour: { type: String, default: "" }, // Chính sách hủy tour
     cancelPolicyHotel: { type: String, default: "" }, // Chính sách hủy đặt phòng khách sạn

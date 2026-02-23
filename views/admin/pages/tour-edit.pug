@@ -166,16 +166,7 @@ block main
           value=tourDetail.babyPricingRulesJson
         )
 
-      //- GHẾ (thay cho Còn lại theo nhóm tuổi)
-      .inner-group
-        label(class="inner-label") Ghế
-        .inner-input-list
-          .inner-input-item
-            label(for="seatsTotal") Tổng số ghế
-            input(type="number" id="seatsTotal" name="seatsTotal" value=(tourDetail.seatsTotal || 0))
-          .inner-input-item
-            label(for="seatsRemaining") Ghế còn lại
-            input(type="number" id="seatsRemaining" name="seatsRemaining" value=(tourDetail.seatsRemaining || 0))
+      //- (ghế đã chuyển vào từng lịch khởi hành bên dưới)
 
       //- ĐIỂM KHỞI HÀNH
       .inner-group
@@ -300,27 +291,47 @@ block main
         label(for="vehicle" class="inner-label") Phương tiện
         input(type="text" id="vehicle" name="vehicle" value=tourDetail.vehicle)
 
-      .inner-group
-        label(class="inner-label") Ngày khởi hành
-        .departure-dates-wrapper#departure-dates-wrapper
-          if (tourDetail.departureDatesBlocks && tourDetail.departureDatesBlocks.length > 0)
-            each dateItem, idx in tourDetail.departureDatesBlocks
-              .departure-date-item(data-index=idx)
-                input(type="date" class="departure-date-input" value=dateItem.dateFormat)
-                button(type="button" class="departure-date-remove-btn") Xóa
-          else if tourDetail.departureDateFormat
-            //- Tương thích với dữ liệu cũ (departureDate)
-            .departure-date-item(data-index="0")
-              input(type="date" class="departure-date-input" value=tourDetail.departureDateFormat)
-              button(type="button" class="departure-date-remove-btn") Xóa
+      .inner-group.inner-two-col
+        label(class="inner-label") Ngày khởi hành & Ngày kết thúc
+        .inner-desc Mỗi dòng là một lịch khởi hành. Ngày kết thúc phải sau ngày khởi hành.
+        .departures-wrapper#departures-wrapper
+          if (tourDetail.departuresBlocks && tourDetail.departuresBlocks.length > 0)
+            each pair, idx in tourDetail.departuresBlocks
+              .departure-pair-item(data-index=idx)
+                .departure-pair-inputs
+                  .departure-pair-field
+                    label Ngày khởi hành
+                    input(type="date" class="departure-date-input" value=pair.departureDateFormat)
+                  .departure-pair-field
+                    label Ngày kết thúc
+                    input(type="date" class="end-date-input" value=pair.endDateFormat)
+                  .departure-pair-field
+                    label Tổng số ghế
+                    input(type="number" class="seats-total-input" min="0" value=pair.seatsTotal)
+                  .departure-pair-field
+                    label Ghế còn lại
+                    input(type="number" class="seats-remaining-input" min="0" value=pair.seatsRemaining)
+                button(type="button" class="departure-pair-remove-btn") Xóa
           else
-            .departure-date-item(data-index="0")
-              input(type="date" class="departure-date-input")
-              button(type="button" class="departure-date-remove-btn") Xóa
-        .departure-dates-actions
-          button(type="button" id="departure-date-add-btn") + Thêm ngày khởi hành
-        //- Input ẩn: JS sẽ ghi JSON departureDates trước khi submit
-        input(type="hidden" id="departureDatesJson" name="departureDates")
+            .departure-pair-item(data-index="0")
+              .departure-pair-inputs
+                .departure-pair-field
+                  label Ngày khởi hành
+                  input(type="date" class="departure-date-input")
+                .departure-pair-field
+                  label Ngày kết thúc
+                  input(type="date" class="end-date-input")
+                .departure-pair-field
+                  label Tổng số ghế
+                  input(type="number" class="seats-total-input" min="0" value="0")
+                .departure-pair-field
+                  label Ghế còn lại
+                  input(type="number" class="seats-remaining-input" min="0" value="0")
+              button(type="button" class="departure-pair-remove-btn") Xóa
+        .departures-actions
+          button(type="button" id="departure-pair-add-btn") + Thêm lịch khởi hành
+        //- Input ẩn: JS sẽ ghi JSON mảng [{departureDate, endDate, seatsTotal, seatsRemaining}]
+        input(type="hidden" id="departuresJson" name="departures")
 
       .inner-group.inner-two-col
         label(for="information" class="inner-label") Thông tin tour
@@ -762,4 +773,5 @@ block main
         excludesList.appendChild(createExcludeItem());
       });
     });
+    
   //- End Section 8

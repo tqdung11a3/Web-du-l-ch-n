@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const Order = require("../../models/order.model");
 const Tour = require("../../models/tour.model");
 const City = require("../../models/city.model");
+const TourSegment  = require("../../models/tour-segment.model");
+const HotelBooking = require("../../models/hotel-booking.model");
 const {
   pathAdmin,
   paymentMethodList,
@@ -77,10 +79,27 @@ function babyUnitAt(ctx, idx) {
 module.exports.list = async (req, res) => {
   const account = req.account || {};
   const companyId = account.companyId || null;
+  const keyword     = (req.query.keyword     || "").trim();
+  const searchName  = (req.query.searchName  || "").trim();
+  const searchPhone = (req.query.searchPhone || "").trim();
+  const searchTour  = (req.query.searchTour  || "").trim();
 
   const find = { deleted: false };
   if (companyId) {
     find["items.companyId"] = companyId;
+  }
+
+  // Gộp tất cả điều kiện tìm kiếm bằng $and để mỗi trường lọc độc lập
+  const searchConditions = [];
+  if (keyword)     searchConditions.push({ code:          { $regex: keyword,     $options: "i" } });
+  if (searchName)  searchConditions.push({ fullName:       { $regex: searchName,  $options: "i" } });
+  if (searchPhone) searchConditions.push({ phone:          { $regex: searchPhone, $options: "i" } });
+  if (searchTour)  searchConditions.push({ "items.name":  { $regex: searchTour,  $options: "i" } });
+
+  if (searchConditions.length === 1) {
+    Object.assign(find, searchConditions[0]);
+  } else if (searchConditions.length > 1) {
+    find.$and = searchConditions;
   }
 
   const rawOrders = await Order.find(find).sort({ createdAt: "desc" }).lean();
@@ -177,6 +196,10 @@ module.exports.list = async (req, res) => {
   return res.render("admin/pages/order-list", {
     pageTitle: "Quản lý đơn hàng",
     orderList,
+    keyword,
+    searchName,
+    searchPhone,
+    searchTour,
     pathAdmin,
   });
 };
@@ -249,9 +272,10 @@ module.exports.edit = async (req, res) => {
     let subTotalView = 0;
 
     const items = visibleItems.map((i) => {
-      const departureDateFormat = i.departureDate
-        ? moment(i.departureDate).format("DD/MM/YYYY")
-        : "";
+      // Ưu tiên departureDateDisplay (đã lưu sẵn DD/MM/YYYY từ client),
+      // fallback về departureDate cũ cho các đơn hàng trước đây
+      const departureDateFormat = i.departureDateDisplay
+        || (i.departureDate ? moment(i.departureDate).format("DD/MM/YYYY") : "");
 
       const cityId = i.departureCity || i.locationFrom || null;
       const cityName = cityId ? cityMap[String(cityId)] || "" : "";
@@ -349,6 +373,11 @@ module.exports.editPatch = async (req, res) => {
     const filter = { _id: id, deleted: false };
     if (companyId) filter["items.companyId"] = companyId;
 
+    // Đọc đơn hàng trước khi cập nhật để lấy dữ liệu cho việc khôi phục ghế/phòng
+    const orderBefore = allow.status === "cancel"
+      ? await Order.findOne({ ...filter, status: { $ne: "cancel" } }).lean()
+      : null;
+
     const result = await Order.updateOne(filter, {
       $set: { ...allow, updatedBy: req.account.id, updatedAt: new Date() },
     });
@@ -360,6 +389,20 @@ module.exports.editPatch = async (req, res) => {
       });
     }
 
+    // Khi hủy đơn tour → khôi phục ghế và giải phóng phòng khách sạn
+    if (allow.status === "cancel" && orderBefore) {
+      try {
+        await restoreSeatsForOrder(orderBefore);
+      } catch (err) {
+        console.error("[editPatch] restoreSeatsForOrder error:", err);
+      }
+      try {
+        await releaseHotelHoldsForOrder(id);
+      } catch (err) {
+        console.error("[editPatch] releaseHotelHoldsForOrder error:", err);
+      }
+    }
+
     return res.json({
       code: "success",
       message: "Cập nhật đơn hàng thành công!",
@@ -368,6 +411,108 @@ module.exports.editPatch = async (req, res) => {
     return res.json({ code: "error", message: "Dữ liệu không hợp lệ!" });
   }
 };
+
+/**
+ * Khôi phục số ghế còn lại cho từng tour item trong đơn hàng bị hủy.
+ * Logic giống client-side _cancelHoldAndRestoreSeats nhưng không kiểm tra paymentStatus.
+ */
+async function restoreSeatsForOrder(order) {
+  for (const item of order.items || []) {
+    if (!item.tourId) continue;
+
+    const seatsToRestore =
+      Number(item.quantityAdult    || 0) +
+      Number(item.quantityChildren || 0) +
+      (item.babySeat ? Number(item.quantityBaby || 0) : 0);
+
+    if (seatsToRestore <= 0) continue;
+
+    // Khôi phục top-level seatsRemaining và stock (tương thích ngược)
+    await Tour.updateOne(
+      { _id: item.tourId },
+      {
+        $inc: {
+          stockAdult:     Number(item.quantityAdult    || 0),
+          stockChildren:  Number(item.quantityChildren || 0),
+          stockBaby:      Number(item.quantityBaby     || 0),
+          seatsRemaining: seatsToRestore,
+        },
+      }
+    );
+
+    // Khôi phục seatsRemaining cho đúng ngày khởi hành trong departures[]
+    const depDisplay = item.departureDateDisplay
+      || (item.departureDate ? moment(item.departureDate).format("DD/MM/YYYY") : "");
+    if (depDisplay) {
+      const depMoment = moment(depDisplay, "DD/MM/YYYY");
+      if (depMoment.isValid()) {
+        await Tour.updateOne(
+          { _id: item.tourId },
+          { $inc: { "departures.$[dep].seatsRemaining": seatsToRestore } },
+          {
+            arrayFilters: [{
+              "dep.departureDate": {
+                $gte: depMoment.clone().startOf("day").toDate(),
+                $lte: depMoment.clone().endOf("day").toDate(),
+              },
+            }],
+          }
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Giải phóng các phòng khách sạn đã được phân công cho một đơn hàng tour.
+ * - Xoá entry trong TourSegment.assignments
+ * - Reset HotelBooking về trạng thái "[Tour Hold]" (chưa gán khách)
+ */
+async function releaseHotelHoldsForOrder(orderId) {
+  // Tìm tất cả TourSegment có assignment cho đơn này
+  const segments = await TourSegment.find({
+    "assignments.orderId": orderId,
+  }).select("_id tourId departureDate endDate assignments").lean();
+
+  if (!segments.length) return;
+
+  for (const seg of segments) {
+    // Lấy các holdBookingId cần reset
+    const toRelease = (seg.assignments || []).filter(
+      (a) => String(a.orderId) === String(orderId)
+    );
+    const holdBookingIds = toRelease
+      .map((a) => a.holdBookingId)
+      .filter(Boolean);
+
+    // Xoá assignment khỏi TourSegment
+    await TourSegment.updateOne(
+      { _id: seg._id },
+      { $pull: { assignments: { orderId: new mongoose.Types.ObjectId(orderId) } } }
+    );
+
+    // Reset các HotelBooking về placeholder Tour Hold
+    if (holdBookingIds.length) {
+      const tourDoc = await Tour.findById(seg.tourId).select("name").lean();
+      const tourName   = tourDoc?.name || "Tour";
+      const depDateFmt = moment(seg.departureDate).format("DD/MM/YYYY");
+      const endDateFmt = moment(seg.endDate).format("DD/MM/YYYY");
+      const resetNote  = `[Tour Hold] ${tourName} | ${depDateFmt} – ${endDateFmt}`;
+
+      await HotelBooking.updateMany(
+        { _id: { $in: holdBookingIds } },
+        {
+          $set: {
+            "guest.fullName": "[Tour Hold]",
+            "guest.phone":    "",
+            note:             resetNote,
+            status:           "confirmed",
+          },
+        }
+      );
+    }
+  }
+}
 
 module.exports.deletePatch = async (req, res) => {
   try {

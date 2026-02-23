@@ -208,11 +208,15 @@ block main
                 #editRoomsContainer.edit-guests-rooms-container
                   // Phòng sẽ được render bằng JavaScript
                 .edit-guests-popup__add-room
-                  button#editAddRoomBtn.edit-guests-popup__add-room-btn(type="button") Thêm phòng khác
+                  button#editAddRoomBtn.edit-guests-popup__add-room-btn(type="button") + Thêm phòng khác
                 input(type="hidden" name="roomsData" id="editRoomsDataInput" value=(searchInfo && searchInfo.roomsData) || "")
                 input(type="hidden" name="rooms" id="editRoomsInput" value=(searchInfo && searchInfo.rooms) || "1")
                 input(type="hidden" name="adults" id="editAdultsInput" value=(searchInfo && searchInfo.adults) || "1")
                 input(type="hidden" name="children" id="editChildrenInput" value=(searchInfo && searchInfo.children) || "0")
+                .edit-guests-popup__done-row
+                  button#editGuestsDoneBtn.edit-guests-popup__done-btn(type="button")
+                    i.fa-solid.fa-check
+                    |  Xong
             .form-group.form-group--actions
               button.btn-cancel(type="button") Hủy
               button.btn-submit(type="submit") Áp dụng
@@ -1228,7 +1232,17 @@ block main
               successCount++;
             } else {
               errorCount++;
-              console.error('Failed to add room type:', result.message);
+              const errMsg = result.message || 'Có lỗi xảy ra';
+              const isHeldByOther = result.type === 'room_held_by_other';
+              if (typeof Notyf !== 'undefined') {
+                const notyf = new Notyf({
+                  duration: isHeldByOther ? 6000 : 4000,
+                  position: { x: 'right', y: 'top' },
+                  dismissible: true,
+                });
+                notyf.error(errMsg);
+              }
+              console.error('Failed to add room type:', errMsg);
             }
           } catch (error) {
             errorCount++;
@@ -1245,19 +1259,10 @@ block main
             });
             notyf.success(`Đã thêm ${successCount} loại phòng vào giỏ hàng`);
           }
-          
           // Redirect to cart after a short delay
           setTimeout(() => {
             window.location.href = '/cart?tab=hotel';
           }, 1000);
-        } else if (errorCount > 0) {
-          if (typeof Notyf !== 'undefined') {
-            const notyf = new Notyf({
-              duration: 3000,
-              position: { x: 'right', y: 'top' }
-            });
-            notyf.error('Có lỗi xảy ra khi thêm vào giỏ hàng');
-          }
         }
       });
     });

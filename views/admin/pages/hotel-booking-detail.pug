@@ -27,6 +27,15 @@ block main
               .info-item
                 .label Email:
                 .value= bookingDetail.guest.email || "—"
+            if bookingDetail.guest.cccdImages && bookingDetail.guest.cccdImages.length
+              .cccd-section
+                .label
+                  i.fa-solid.fa-id-card
+                  |  Ảnh CCCD / Hộ chiếu
+                .cccd-gallery.cccd-gallery--detail
+                  each img in bookingDetail.guest.cccdImages
+                    a.cccd-gallery-item(href=img target="_blank" title="Xem ảnh gốc")
+                      img(src=img alt="CCCD")
 
         //- Thông tin khách sạn
         .booking-section
@@ -205,6 +214,14 @@ block main
         p Không tìm thấy thông tin đơn đặt phòng
 
   style.
+    .cccd-section { margin-top: 16px; }
+    .cccd-section .label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 10px; }
+    .cccd-section .label i { color: #6366f1; }
+    .cccd-gallery--detail { display: flex; flex-wrap: wrap; gap: 12px; }
+    .cccd-gallery--detail .cccd-gallery-item { display: block; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; box-shadow: 0 1px 4px rgba(0,0,0,.08); transition: box-shadow .15s; }
+    .cccd-gallery--detail .cccd-gallery-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+    .cccd-gallery--detail .cccd-gallery-item img { display: block; width: 200px; height: 130px; object-fit: cover; }
+
     .services-subtitle {
       font-size: 14px;
       font-weight: 600;

@@ -145,7 +145,11 @@ module.exports.detail = async (req, res) => {
   // Gắn thông tin công ty tổ chức cho tourDetail để view hiển thị
   try {
     if (company) {
-      // Đã có company từ slug trong URL
+      // Đã có company từ slug trong URL (company đã được fetch đầy đủ ở trên)
+      // Cần fetch lại với tourAgeBands nếu company chỉ có một số field
+      const companyFull = await Company.findById(company._id)
+        .select("name slug logo hotline address tourAgeBands")
+        .lean();
       tourDetail.company = {
         _id: company._id,
         name: company.name,
@@ -154,10 +158,11 @@ module.exports.detail = async (req, res) => {
         hotline: company.hotline || "",
         address: company.address || "",
       };
+      tourDetail.tourAgeBands = companyFull?.tourAgeBands || { babyMaxAge: 3, childrenMaxAge: 11 };
     } else if (tourDetail.companyId) {
       // Fallback: lấy theo companyId của tour (phòng trường hợp dùng route cũ)
       const companyDoc = await Company.findById(tourDetail.companyId)
-        .select("name slug logo hotline address")
+        .select("name slug logo hotline address tourAgeBands")
         .lean();
       if (companyDoc) {
         tourDetail.company = {
@@ -168,7 +173,12 @@ module.exports.detail = async (req, res) => {
           hotline: companyDoc.hotline || "",
           address: companyDoc.address || "",
         };
+        tourDetail.tourAgeBands = companyDoc.tourAgeBands || { babyMaxAge: 3, childrenMaxAge: 11 };
       }
+    }
+    // Đảm bảo luôn có giá trị mặc định
+    if (!tourDetail.tourAgeBands) {
+      tourDetail.tourAgeBands = { babyMaxAge: 3, childrenMaxAge: 11 };
     }
   } catch (e) {
     console.error("tour.detail attach company error:", e);
@@ -200,13 +210,25 @@ module.exports.detail = async (req, res) => {
     );
   }
 
-  // Nếu có mảng departureDates thì format toàn bộ để view hiển thị
-  if (Array.isArray(tourDetail.departureDates)) {
-    tourDetail.departureDatesFormatted = tourDetail.departureDates
-      .filter((d) => d)
-      .map((d) => moment(d).format("DD/MM/YYYY"));
+  // Format mảng departures (cặp ngày khởi hành - kết thúc) để view hiển thị
+  if (Array.isArray(tourDetail.departures) && tourDetail.departures.length > 0) {
+    const validDeps = tourDetail.departures.filter((d) => d && d.departureDate);
 
-    // Nếu chưa có departureDateFormat thì lấy ngày đầu tiên trong mảng
+    tourDetail.departureDatesFormatted = validDeps.map((d) =>
+      moment(d.departureDate).format("DD/MM/YYYY")
+    );
+
+    // Map date string -> { seatsTotal, seatsRemaining } để hiển thị số chỗ khi chọn ngày
+    tourDetail.departureSeatsByDate = {};
+    for (const d of validDeps) {
+      const key = moment(d.departureDate).format("DD/MM/YYYY");
+      tourDetail.departureSeatsByDate[key] = {
+        seatsTotal: d.seatsTotal ?? 0,
+        seatsRemaining: d.seatsRemaining ?? 0,
+      };
+    }
+
+    // Nếu chưa có departureDateFormat thì lấy ngày đầu tiên
     if (
       (!tourDetail.departureDateFormat ||
         String(tourDetail.departureDateFormat).trim() === "") &&
@@ -388,6 +410,19 @@ module.exports.listDiscount = async (req, res) => {
         clone.departureDateFormat = moment(clone.departureDate).format(
           "DD/MM/YYYY"
         );
+      }
+
+      // Danh sách ghế theo từng lịch khởi hành
+      if (Array.isArray(clone.departures) && clone.departures.length > 0) {
+        clone.departuresWithSeats = clone.departures
+          .filter((d) => d && d.departureDate)
+          .map((d) => ({
+            dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+            seatsTotal: d.seatsTotal ?? 0,
+            seatsRemaining: d.seatsRemaining ?? 0,
+          }));
+      } else {
+        clone.departuresWithSeats = [];
       }
 
       if (clone.discountFrom) {
@@ -622,6 +657,18 @@ module.exports.compare = async (req, res) => {
       if (tour.departureDate) {
         tour.departureDateFormat = moment(tour.departureDate).format("DD/MM/YYYY");
       }
+
+      // Tính departuresWithSeats để hiển thị số chỗ theo từng ngày khởi hành
+      tour.departuresWithSeats =
+        Array.isArray(tour.departures) && tour.departures.length > 0
+          ? tour.departures
+              .filter((d) => d && d.departureDate)
+              .map((d) => ({
+                dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+                seatsTotal: d.seatsTotal ?? 0,
+                seatsRemaining: d.seatsRemaining ?? 0,
+              }))
+          : [];
     });
 
     return res.render("client/pages/tour-compare", {

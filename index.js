@@ -10,6 +10,8 @@ const {
   startReminderScheduler,
   runReminderJobOnce,
 } = require("./scripts/remind-upcoming-tours");
+const { startExpiredOrdersCleanup } = require("./scripts/cleanup-expired-orders");
+const { startExpiredHotelBookingsCleanup } = require("./scripts/cleanup-expired-hotel-bookings");
 
 // ⬇️ import middleware client để gắn user vào res.locals
 const clientAuth = require("./middlewares/client/auth.middleware");
@@ -35,6 +37,8 @@ global.pathAdmin = variableConfig.pathAdmin;
 
 // Cho phép gửi dữ liệu lên dạng JSON
 app.use(express.json());
+// Cho phép đọc body text/plain (sendBeacon từ pending page)
+app.use(express.text());
 
 // Lấy biến trong cookie
 app.use(cookieParser());
@@ -52,4 +56,6 @@ app.get("/dev/test-remind", async (req, res) => {
 app.listen(port, () => {
   console.log(`Website đang chạy ở cổng ${port}`);
   startReminderScheduler();
+  startExpiredOrdersCleanup();        // tự động hủy đơn tour tạm hết hạn
+  startExpiredHotelBookingsCleanup(); // tự động hủy đặt phòng khách sạn tạm hết hạn
 });

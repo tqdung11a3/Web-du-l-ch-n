@@ -93,9 +93,26 @@ module.exports.addToCart = async (req, res) => {
     const maxAvailable = availableRooms.length;
     
     if (qty > maxAvailable) {
+      if (maxAvailable === 0) {
+        // Kiểm tra xem có booking đang ở trạng thái pending/confirmed (khách khác đang giữ chỗ) không
+        const pendingHolds = hotelBookings.filter(b => {
+          const isForThisType = b.items?.some(i => String(i.roomTypeId) === String(roomTypeId))
+            || String(b.roomTypeId) === String(roomTypeId);
+          return (b.status === "pending" || b.status === "confirmed") && isForThisType;
+        });
+        const hasPendingHold = pendingHolds.length > 0;
+        return res.json({
+          code: "error",
+          type: hasPendingHold ? "room_held_by_other" : "no_rooms_left",
+          message: hasPendingHold
+            ? "Có khách hàng khác đang trong quá trình đặt phòng này. Vui lòng thử lại sau ít phút hoặc chọn phòng khác."
+            : "Loại phòng này hiện đã hết phòng trống. Vui lòng chọn loại phòng khác.",
+        });
+      }
       return res.json({
         code: "error",
-        message: `Chỉ còn ${maxAvailable} phòng trống cho loại phòng này`
+        type: "not_enough_rooms",
+        message: `Chỉ còn ${maxAvailable} phòng trống cho loại phòng này. Vui lòng giảm số lượng.`,
       });
     }
 
@@ -128,7 +145,8 @@ module.exports.addToCart = async (req, res) => {
       if (newQty > maxAvailable) {
         return res.json({
           code: "error",
-          message: `Chỉ còn ${maxAvailable} phòng trống cho loại phòng này`
+          type: "not_enough_rooms",
+          message: `Chỉ còn ${maxAvailable} phòng trống cho loại phòng này. Vui lòng giảm số lượng.`,
         });
       }
       cart.items[existingItemIndex].quantity = newQty;
@@ -321,6 +339,63 @@ module.exports.getCount = async (req, res) => {
       code: "error",
       count: 0
     });
+  }
+};
+
+/**
+ * GET /hotel-cart/check-availability
+ * Kiểm tra tất cả item trong giỏ hàng còn đủ phòng trống không.
+ * Trả về danh sách item nào bị vấn đề để hiển thị cảnh báo trên UI.
+ */
+module.exports.checkAvailability = async (req, res) => {
+  try {
+    const cart = await getOrCreateCart(req, res);
+
+    if (!cart || !cart.items || cart.items.length === 0) {
+      return res.json({ code: "success", items: [] });
+    }
+
+    const hotel = await Hotel.findOne({ _id: cart.hotelId, deleted: false }).lean();
+    if (!hotel) {
+      return res.json({ code: "success", items: [] });
+    }
+
+    const results = [];
+
+    for (const item of cart.items) {
+      const checkInMoment  = moment(item.checkInDate);
+      const checkOutMoment = moment(item.checkOutDate);
+
+      const hotelBookings = await HotelBooking.find({
+        "hotel.hotelId": cart.hotelId,
+        status: { $nin: ["cancelled", "checked_out"] },
+        $or: [{ checkIn: { $lt: checkOutMoment.toDate() }, checkOut: { $gt: checkInMoment.toDate() } }],
+      }).lean();
+
+      const individualRooms = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+      const availableRooms  = getAvailableRoomsForType(
+        individualRooms,
+        item.roomTypeId,
+        hotelBookings,
+        checkInMoment.toDate(),
+        checkOutMoment.toDate()
+      );
+
+      const available = availableRooms.length;
+      results.push({
+        roomTypeId:   String(item.roomTypeId),
+        roomTypeName: item.roomTypeName,
+        requested:    item.quantity,
+        available,
+        ok: available >= item.quantity,
+      });
+    }
+
+    const allOk = results.every((r) => r.ok);
+    return res.json({ code: "success", allOk, items: results });
+  } catch (err) {
+    console.error("hotel-cart.checkAvailability error:", err);
+    return res.json({ code: "error", message: "Có lỗi xảy ra khi kiểm tra phòng trống" });
   }
 };
 
