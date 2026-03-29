@@ -7,6 +7,7 @@ const Review = require("../../models/review.model");
 const Order = require("../../models/order.model");
 const City = require("../../models/city.model");
 const News = require("../../models/news.model"); // Thêm model News
+const Hotel = require("../../models/hotel.model");
 const moment = require("moment");
 const categoryHelper = require("../../helpers/category.helper");
 
@@ -348,6 +349,55 @@ module.exports.home = async (req, res) => {
     };
   });
 
+  // ====== SECTION HOTELS: DANH SÁCH KHÁCH SẠN NỔI BẬT ======
+  const hotelsRaw = await Hotel.find({ deleted: false, status: "active" })
+    .populate("companyId", "name logo")
+    .sort({ isFeatured: -1, starRating: -1, createdAt: -1 })
+    .limit(8)
+    .lean();
+
+  const hotelListHome = hotelsRaw.map((h) => {
+    const thumb =
+      h.avatar ||
+      (Array.isArray(h.images) && h.images[0]) ||
+      "/images/no-image.jpg";
+
+    let tags = [];
+    if (Array.isArray(h.amenities) && h.amenities.length > 0) {
+      tags = h.amenities
+        .slice(0, 4)
+        .map((a) => (typeof a === "string" ? a : a.name || ""))
+        .filter(Boolean);
+    }
+
+    const roomTypesCount = Array.isArray(h.roomTypes) ? h.roomTypes.length : 0;
+    const totalRooms     = Array.isArray(h.rooms)     ? h.rooms.length     : 0;
+    const vacantRooms    = Array.isArray(h.rooms)
+      ? h.rooms.filter((r) => r && r.status === "vacant").length
+      : 0;
+
+    const company     = h.companyId || {};
+    const companyName = company.name || "";
+
+    return {
+      id:               String(h._id),
+      name:             h.name           || "",
+      address:          h.address        || "",
+      cityName:         h.cityName       || "",
+      starRating:       h.starRating     || 0,
+      rating:           h.ratingOverall  || null,
+      thumbnail:        thumb,
+      pricePerNight:    Number(h.basePrice || 0),
+      currency:         h.currency       || "VND",
+      shortDescription: h.shortDescription || "",
+      tags,
+      roomTypesCount,
+      totalRooms,
+      vacantRooms,
+      companyName,
+    };
+  });
+
   // ====== SECTION 10: THỐNG KÊ NGẮN ======
   const [totalTours, totalPartners, totalCustomers, ratingAgg] = await Promise.all([
     Tour.countDocuments({ deleted: { $ne: true }, status: "active" }),
@@ -371,6 +421,7 @@ module.exports.home = async (req, res) => {
     tourListSection2,
     tourListSection4,
     categorySection4,
+    hotelListHome,
     featuredNews,
     regularNews,
     partnerCompanies,

@@ -13,7 +13,7 @@ block main
           data-aos-duration="800" 
           data-aos="fade-up"
           )
-          | Du lịch Châu Á - Khám phá Mỹ, Úc, Âu
+          | Du lịch trong nước – Trọn vẹn Việt Nam
           br
           | Đi nơi đâu bạn muốn
         p.inner-desc(
@@ -110,55 +110,55 @@ block main
           a.btn-view-all(href="/tour/discount") Xem tất cả tour khuyến mãi
   // End Section 2
   // Section 3
-  .section-3
-    .container
-      h2.box-title(
-        data-aos-duration="800" 
-        data-aos="fade-up"
-        ) Khuyến Mại Bùng Nổ - Đánh Tan Nóng Bức
-      .inner-wrap(
-        data-aos-delay="150" 
-        data-aos-duration="800" 
-        data-aos="fade-up"
-        )
-        .swiper.swiper-section-3
-          .swiper-wrapper
-            .swiper-slide
-              .inner-item
-                a(href="#")
-                  img(
-                    alt="" 
-                    src="/assets/images/banner-1.png"
-                    )
-            .swiper-slide
-              .inner-item
-                a(href="#")
-                  img(
-                    alt="" 
-                    src="/assets/images/banner-2.png"
-                    )
-            .swiper-slide
-              .inner-item
-                a(href="#")
-                  img(
-                    alt="" 
-                    src="/assets/images/banner-3.png"
-                    )
-            .swiper-slide
-              .inner-item
-                a(href="#")
-                  img(
-                    alt="" 
-                    src="/assets/images/banner-2.png"
-                    )
-            .swiper-slide
-              .inner-item
-                a(href="#")
-                  img(
-                    alt="" 
-                    src="/assets/images/banner-3.png"
-                    )
-          .swiper-pagination
+  //- .section-3
+  //-   .container
+  //-     h2.box-title(
+  //-       data-aos-duration="800" 
+  //-       data-aos="fade-up"
+  //-       ) Khuyến Mại Bùng Nổ - Đánh Tan Nóng Bức
+  //-     .inner-wrap(
+  //-       data-aos-delay="150" 
+  //-       data-aos-duration="800" 
+  //-       data-aos="fade-up"
+  //-       )
+  //-       .swiper.swiper-section-3
+  //-         .swiper-wrapper
+  //-           .swiper-slide
+  //-             .inner-item
+  //-               a(href="#")
+  //-                 img(
+  //-                   alt="" 
+  //-                   src="/assets/images/banner-1.png"
+  //-                   )
+  //-           .swiper-slide
+  //-             .inner-item
+  //-               a(href="#")
+  //-                 img(
+  //-                   alt="" 
+  //-                   src="/assets/images/banner-2.png"
+  //-                   )
+  //-           .swiper-slide
+  //-             .inner-item
+  //-               a(href="#")
+  //-                 img(
+  //-                   alt="" 
+  //-                   src="/assets/images/banner-3.png"
+  //-                   )
+  //-           .swiper-slide
+  //-             .inner-item
+  //-               a(href="#")
+  //-                 img(
+  //-                   alt="" 
+  //-                   src="/assets/images/banner-2.png"
+  //-                   )
+  //-           .swiper-slide
+  //-             .inner-item
+  //-               a(href="#")
+  //-                 img(
+  //-                   alt="" 
+  //-                   src="/assets/images/banner-3.png"
+  //-                   )
+  //-         .swiper-pagination
   // End Section 3
   // Section 4
   if(categorySection4)
@@ -189,6 +189,94 @@ block main
           )
           a.button-outline(href=`/category/${categorySection4.slug}`) Xem tất cả
   // End Section 4
+  // Section Hotels
+  if hotelListHome && hotelListHome.length > 0
+    .section-hotels
+      .container
+        h2.box-title(
+          data-aos-duration="800"
+          data-aos="fade-up"
+        ) Khách Sạn Nổi Bật
+        .hotel-list(
+          data-aos-delay="150"
+          data-aos-duration="800"
+          data-aos="fade-up"
+        )
+          each hotel in hotelListHome
+            .hotel-card-search
+              .hotel-card-search__image
+                if hotel.thumbnail
+                  img(src=hotel.thumbnail alt=hotel.name)
+                else
+                  img(src="/images/no-image.jpg" alt=hotel.name)
+              .hotel-card-search__content
+                h3.hotel-card-search__title= hotel.name
+                if hotel.address
+                  p.hotel-card-search__address
+                    i.fa-solid.fa-location-dot
+                    span= hotel.address
+                if hotel.companyName
+                  p.hotel-card-search__company
+                    i.fa-solid.fa-building
+                    span= hotel.companyName
+                .hotel-card-search__rating-row
+                  if hotel.rating
+                    .hotel-card-search__rating
+                      span.hotel-card-search__rating-score= hotel.rating
+                      span.hotel-card-search__rating-text Rất tốt
+                  if hotel.starRating > 0
+                    .hotel-card-search__stars
+                      - for (let i = 0; i < 5; i++)
+                        i.fa-solid.fa-star(class=(i < hotel.starRating ? 'active' : ''))
+                if hotel.shortDescription
+                  p.hotel-card-search__description= hotel.shortDescription
+                .hotel-card-search__info
+                  if hotel.roomTypesCount > 0
+                    .hotel-card-search__info-item
+                      i.fa-solid.fa-door-open
+                      span #{hotel.roomTypesCount} loại phòng
+                  if hotel.totalRooms > 0
+                    .hotel-card-search__info-item
+                      i.fa-solid.fa-bed
+                      span #{hotel.totalRooms} phòng
+                  if hotel.vacantRooms > 0
+                    .hotel-card-search__info-item.hotel-card-search__info-item--available
+                      i.fa-solid.fa-check-circle
+                      span Còn #{hotel.vacantRooms} phòng trống
+                if hotel.tags && hotel.tags.length > 0
+                  .hotel-card-search__amenities
+                    each tag in hotel.tags
+                      span.hotel-card-search__amenity-tag= tag
+              .hotel-card-search__price
+                - const priceStr = Number(hotel.pricePerNight || 0).toLocaleString('vi-VN')
+                .hotel-card-search__price-value #{priceStr}
+                .hotel-card-search__price-unit #{hotel.currency}
+                .hotel-card-search__price-label mỗi đêm
+                .hotel-card-search__actions
+                  button.hotel-compare-btn(
+                    type="button"
+                    data-hotel-id=hotel.id
+                    data-hotel-name=hotel.name
+                    data-hotel-slug=hotel.id
+                    data-hotel-avatar=(hotel.thumbnail || '')
+                    data-hotel-price=hotel.pricePerNight
+                    data-hotel-city=hotel.cityName
+                    data-hotel-address=hotel.address
+                    data-hotel-rating=hotel.rating
+                    data-hotel-star=hotel.starRating
+                    data-hotel-company=hotel.companyName
+                    title="So sánh khách sạn"
+                  )
+                    i.fa-solid.fa-code-compare
+                    span.compare-btn-text  So sánh
+                  a.hotel-card-search__button(href=`/hotel/detail/${hotel.id}`) Xem chi tiết
+        .section-hotels__more(
+          data-aos-delay="300"
+          data-aos-duration="800"
+          data-aos="fade-up"
+        )
+          a.button-outline(href="/hotel/search") Xem tất cả khách sạn
+  // End Section Hotels
   // Section 5
   +section-5("/assets/images/banner-4.png")
   // End Section 5

@@ -520,7 +520,7 @@ button {
 /* Section 1 */
 .section-1 {
   padding: 106px 0 108px 0;
-  background-image: url("../images/background-1.jpg");
+  background-image: url("../images/background-2.jpg");
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center;
@@ -533,7 +533,7 @@ button {
 
 .section-1 .inner-title {
   font-weight: 700;
-  font-size: 36px;
+  font-size: 34px;
   color: var(--color-primary);
   margin-top: 0;
   margin-bottom: 20px;
@@ -543,7 +543,7 @@ button {
 }
 
 .section-1 .inner-desc {
-  font-weight: 400;
+  font-weight: 600;
   font-size: 16px;
   color: #25282b;
   line-height: 1.25;
@@ -1677,6 +1677,7 @@ button {
 
 /* Section 4 */
 .section-4 {
+  margin-top: 40px;
   padding-bottom: 60px;
 }
 
@@ -1721,6 +1722,28 @@ button {
   }
 }
 /* End Section 4 */
+
+/* Section Hotels */
+.section-hotels {
+  padding: 60px 0;
+  background-color: #f8fafc;
+}
+
+.section-hotels .hotel-list {
+  margin-top: 10px;
+}
+
+.section-hotels__more {
+  margin-top: 36px;
+  text-align: center;
+}
+
+@media (max-width: 575.98px) {
+  .section-hotels {
+    padding: 40px 0;
+  }
+}
+/* End Section Hotels */
 
 /* Button Outline */
 .button-outline {
