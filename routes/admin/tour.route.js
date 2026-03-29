@@ -4,16 +4,14 @@ const tourValidate = require("../../validates/admin/tour.validate");
 const multer = require("multer");
 const cloudinaryHelper = require("../../helpers/cloudinary.helper");
 const upload = multer({ storage: cloudinaryHelper.storage });
-const auth = require("../../middlewares/admin/auth.middleware");
 
-router.get("/", auth.verifyToken, tourController.list);
-router.get("/list", auth.verifyToken, tourController.list);
+router.get("/", tourController.list);
+router.get("/list", tourController.list);
 
-router.get("/create", auth.verifyToken, tourController.create);
+router.get("/create", tourController.create);
 
 router.post(
   "/create",
-  auth.verifyToken,
   upload.fields([
     { name: "avatar", maxCount: 1 },
     { name: "images", maxCount: 10 },
@@ -22,22 +20,20 @@ router.post(
   tourController.createPost
 );
 
-router.get("/discounts", auth.verifyToken, tourController.listDiscounts);
+router.get("/discounts", tourController.listDiscounts);
 
-router.patch("/discount/:id", auth.verifyToken, tourController.updateDiscount);
+router.patch("/discount/:id", tourController.updateDiscount);
 router.patch(
   "/discount/:id/cancel",
-  auth.verifyToken,
   tourController.cancelDiscount
 );
 
-router.get("/trash", auth.verifyToken, tourController.trash);
+router.get("/trash", tourController.trash);
 
-router.get("/edit/:id", auth.verifyToken, tourController.edit);
+router.get("/edit/:id", tourController.edit);
 
 router.patch(
   "/edit/:id",
-  auth.verifyToken,
   upload.fields([
     { name: "avatar", maxCount: 1 },
     { name: "images", maxCount: 10 },
@@ -47,23 +43,21 @@ router.patch(
 );
 
 // Cấu hình mức tuổi hành khách (áp dụng toàn bộ tour công ty)
-router.patch("/age-bands", auth.verifyToken, tourController.saveAgeBands);
+router.patch("/age-bands", tourController.saveAgeBands);
 
-router.patch("/delete/:id", auth.verifyToken, tourController.deletePatch);
+router.patch("/delete/:id", tourController.deletePatch);
 
-router.patch("/undo/:id", auth.verifyToken, tourController.undoPatch);
+router.patch("/undo/:id", tourController.undoPatch);
 
-router.delete("/destroy/:id", auth.verifyToken, tourController.destroyDelete);
+router.delete("/destroy/:id", tourController.destroyDelete);
 
 router.patch(
   "/change-multi",
-  auth.verifyToken,
   tourController.changeMultiPatch
 );
 
 router.post(
   "/bulk-discount",
-  auth.verifyToken,
   tourController.applyCompanyDiscount
 );
 

@@ -40,6 +40,7 @@ if (loginForm) {
       })
         .then((res) => res.json())
         .then((data) => {
+          console.log("[login response]", data);
           if (data.code == "error") {
             notify.error(data.message);
           }

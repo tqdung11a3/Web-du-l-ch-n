@@ -3,7 +3,6 @@ const settingController = require("../../controllers/admin/setting.controller");
 const multer = require("multer");
 const cloudinaryHelper = require("../../helpers/cloudinary.helper");
 const upload = multer({ storage: cloudinaryHelper.storage });
-const auth = require("../../middlewares/admin/auth.middleware");
 
 router.get("/list", settingController.list);
 
@@ -20,32 +19,27 @@ router.patch(
 
 router.get(
   "/account-admin/list",
-  auth.verifyToken,
   settingController.accountAdminList
 );
 
 router.get(
   "/account-admin/create",
-  auth.verifyToken,
   settingController.accountAdminCreate
 );
 
 router.post(
   "/account-admin/create",
-  auth.verifyToken,
   upload.single("avatar"),
   settingController.accountAdminCreatePost
 );
 
 router.get(
   "/account-admin/edit/:id",
-  auth.verifyToken,
   settingController.accountAdminEdit
 );
 
 router.patch(
   "/account-admin/edit/:id",
-  auth.verifyToken,
   upload.single("avatar"),
   settingController.accountAdminEditPatch
 );
