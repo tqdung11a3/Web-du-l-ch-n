@@ -427,17 +427,10 @@ async function restoreSeatsForOrder(order) {
 
     if (seatsToRestore <= 0) continue;
 
-    // Khôi phục top-level seatsRemaining và stock (tương thích ngược)
+    // Khôi phục top-level seatsRemaining
     await Tour.updateOne(
       { _id: item.tourId },
-      {
-        $inc: {
-          stockAdult:     Number(item.quantityAdult    || 0),
-          stockChildren:  Number(item.quantityChildren || 0),
-          stockBaby:      Number(item.quantityBaby     || 0),
-          seatsRemaining: seatsToRestore,
-        },
-      }
+      { $inc: { seatsRemaining: seatsToRestore } }
     );
 
     // Khôi phục seatsRemaining cho đúng ngày khởi hành trong departures[]

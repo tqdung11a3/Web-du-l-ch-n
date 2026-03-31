@@ -128,14 +128,7 @@ module.exports.home = async (req, res) => {
       t.discountExpireISO = moment(t.discountTo).endOf("day").toISOString();
     }
 
-    if (typeof t.seatsRemaining === "number") {
-      t.seatsRemaining = t.seatsRemaining;
-    } else {
-      const a = Number(t.stockAdult || 0);
-      const c = Number(t.stockChildren || 0);
-      const b = Number(t.stockBaby || 0);
-      t.seatsRemaining = a + c + b;
-    }
+    t.seatsRemaining = Number(t.seatsRemaining) || 0;
 
     t.departuresWithSeats =
       Array.isArray(t.departures) && t.departures.length > 0
@@ -209,12 +202,7 @@ module.exports.home = async (req, res) => {
         "DD/MM/YYYY"
       );
     }
-    if (typeof item.seatsRemaining === "undefined") {
-      item.seatsRemaining =
-        Number(item.stockAdult || 0) +
-        Number(item.stockChildren || 0) +
-        Number(item.stockBaby || 0);
-    }
+    item.seatsRemaining = Number(item.seatsRemaining) || 0;
 
     item.departuresWithSeats =
       Array.isArray(item.departures) && item.departures.length > 0

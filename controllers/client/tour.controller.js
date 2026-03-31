@@ -437,14 +437,7 @@ module.exports.listDiscount = async (req, res) => {
           .toISOString();
       }
 
-      if (typeof clone.seatsRemaining === "number") {
-        clone.seatsRemaining = clone.seatsRemaining;
-      } else {
-        const a = Number(clone.stockAdult || 0);
-        const c = Number(clone.stockChildren || 0);
-        const b = Number(clone.stockBaby || 0);
-        clone.seatsRemaining = a + c + b;
-      }
+      clone.seatsRemaining = Number(clone.seatsRemaining) || 0;
 
       return clone;
     });

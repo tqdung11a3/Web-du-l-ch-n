@@ -38,14 +38,7 @@ async function cleanupExpiredOrders() {
 
         await Tour.updateOne(
           { _id: item.tourId },
-          {
-            $inc: {
-              stockAdult:     Number(item.quantityAdult    || 0),
-              stockChildren:  Number(item.quantityChildren || 0),
-              stockBaby:      Number(item.quantityBaby     || 0),
-              seatsRemaining: seatsToRestore,
-            },
-          }
+          { $inc: { seatsRemaining: seatsToRestore } }
         );
       }
 

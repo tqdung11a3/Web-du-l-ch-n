@@ -61,17 +61,10 @@ async function _cancelHoldAndRestoreSeats(order) {
         Number(item.quantityChildren || 0) +
         (item.babySeat ? Number(item.quantityBaby || 0) : 0);
 
-      // 1. Khôi phục top-level seatsRemaining (tương thích ngược)
+      // 1. Khôi phục top-level seatsRemaining
       await Tour.updateOne(
         { _id: item.tourId },
-        {
-          $inc: {
-            stockAdult:     Number(item.quantityAdult    || 0),
-            stockChildren:  Number(item.quantityChildren || 0),
-            stockBaby:      Number(item.quantityBaby     || 0),
-            seatsRemaining: seatsToRestore,
-          },
-        }
+        { $inc: { seatsRemaining: seatsToRestore } }
       );
 
       // 2. Khôi phục seatsRemaining cho đúng ngày khởi hành trong departures[]
@@ -181,12 +174,7 @@ module.exports.createPost = async (req, res) => {
           seatsRemaining: { $gte: seatsUsed }, // CHỈ update nếu còn đủ ghế
         },
         {
-          $inc: {
-            stockAdult:    -quantityAdult,
-            stockChildren: -quantityChildren,
-            stockBaby:     -quantityBaby,
-            seatsRemaining: -seatsUsed,
-          },
+          $inc: { seatsRemaining: -seatsUsed },
         }
       );
 

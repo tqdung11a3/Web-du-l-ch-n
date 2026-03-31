@@ -398,20 +398,7 @@ module.exports.companyDetail = async (req, res) => {
           $addFields: {
             _priceAdult: toNumberExpr("$priceAdult"),
             _priceNewAdult: toNumberExpr("$priceNewAdult"),
-            _stockAdult: toNumberExpr("$stockAdult"),
-            _stockChildren: toNumberExpr("$stockChildren"),
-            _seatsRemaining: toNumberExpr("$seatsRemaining"),
-          },
-        },
-        {
-          $addFields: {
-            seatsRemainingEff: {
-              $cond: [
-                { $gt: ["$_seatsRemaining", 0] },
-                "$_seatsRemaining",
-                { $add: ["$_stockAdult", "$_stockChildren"] },
-              ],
-            },
+            seatsRemainingEff: toNumberExpr("$seatsRemaining"),
           },
         },
         { $sort: { position: 1 } },
@@ -567,15 +554,7 @@ module.exports.toursByCompany = async (req, res) => {
         discountExpireISO = moment(t.discountTo).endOf("day").toISOString();
       }
 
-      let seatsRemaining;
-      if (typeof t.seatsRemaining === "number") {
-        seatsRemaining = t.seatsRemaining;
-      } else {
-        const a = Number(t.stockAdult || 0);
-        const c = Number(t.stockChildren || 0);
-        const b = Number(t.stockBaby || 0);
-        seatsRemaining = a + c + b;
-      }
+      const seatsRemaining = Number(t.seatsRemaining) || 0;
 
       const departuresWithSeats =
         Array.isArray(t.departures) && t.departures.length > 0
@@ -650,20 +629,7 @@ module.exports.toursByCompany = async (req, res) => {
         $addFields: {
           _priceAdult: toNumberExpr("$priceAdult"),
           _priceNewAdult: toNumberExpr("$priceNewAdult"),
-          _stockAdult: toNumberExpr("$stockAdult"),
-          _stockChildren: toNumberExpr("$stockChildren"),
-          _seatsRemaining: toNumberExpr("$seatsRemaining"),
-        },
-      },
-      {
-        $addFields: {
-          seatsRemainingEff: {
-            $cond: [
-              { $gt: ["$_seatsRemaining", 0] },
-              "$_seatsRemaining",
-              { $add: ["$_stockAdult", "$_stockChildren"] },
-            ],
-          },
+          seatsRemainingEff: toNumberExpr("$seatsRemaining"),
         },
       },
     ];
@@ -922,14 +888,7 @@ module.exports.discountTourList = async (req, res) => {
       }
 
       // Số chỗ còn
-      if (typeof t.seatsRemaining === "number") {
-        t.seatsRemaining = t.seatsRemaining;
-      } else {
-        const a = Number(t.stockAdult || 0);
-        const c = Number(t.stockChildren || 0);
-        const b = Number(t.stockBaby || 0);
-        t.seatsRemaining = a + c + b;
-      }
+      t.seatsRemaining = Number(t.seatsRemaining) || 0;
 
       // Thông tin công ty để product-item hiển thị logo/tên
       t.company = {

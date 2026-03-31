@@ -130,12 +130,7 @@ module.exports.list = async (req, res) => {
         );
       }
 
-      // fallback seatsRemaining nếu chưa có
-      if (typeof item.seatsRemaining === "undefined") {
-        const a = Number(item.stockAdult || 0);
-        const c = Number(item.stockChildren || 0);
-        item.seatsRemaining = a + c;
-      }
+      item.seatsRemaining = Number(item.seatsRemaining) || 0;
 
       item.departuresWithSeats =
         Array.isArray(item.departures) && item.departures.length > 0

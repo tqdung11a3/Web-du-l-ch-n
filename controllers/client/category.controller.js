@@ -142,20 +142,7 @@ module.exports.list = async (req, res) => {
         $addFields: {
           _priceAdult: toNumberExpr("$priceAdult"),
           _priceNewAdult: toNumberExpr("$priceNewAdult"),
-          _stockAdult: toNumberExpr("$stockAdult"),
-          _stockChildren: toNumberExpr("$stockChildren"),
-          _seatsRemaining: toNumberExpr("$seatsRemaining"),
-        },
-      },
-      {
-        $addFields: {
-          seatsRemainingEff: {
-            $cond: [
-              { $gt: ["$_seatsRemaining", 0] },
-              "$_seatsRemaining",
-              { $add: ["$_stockAdult", "$_stockChildren"] },
-            ],
-          },
+          seatsRemainingEff: toNumberExpr("$seatsRemaining"),
         },
       },
     ];
