@@ -593,7 +593,7 @@ if (boxTourDetail) {
 
   // ======== GIÁ EM BÉ THEO TỪNG VỊ TRÍ (1-based) ========
   function babyUnitAt(idx) {
-    if (babyMode !== "tiered" || !babyRules.length) return priceBabyFixed;
+    if (babyMode !== "tiered" || !babyRules.length) return priceBabyFixed; // dùng khi mode=fixed, hoặc không có rules
 
     const rule = babyRules.find((r) => {
       const from = Number(r.from);
@@ -602,8 +602,8 @@ if (boxTourDetail) {
     });
     if (!rule) return 0;
 
-    const base = rule.ref === "adult" ? priceAdultBase : priceChildBase;
-    const pct = Number(rule.percent) || 0;
+    const base = rule.ref === "adult" ? priceAdultBase : priceChildBase; // dùng khi ref=adult hoặc ref=children
+    const pct = Number(rule.percent) || 0; // dùng khi %=0, không có % thì giá em bé = 0
     return Math.round((base * pct) / 100);
   }
 
@@ -617,7 +617,7 @@ if (boxTourDetail) {
     child = Math.max(0, child);
     baby = Math.max(0, baby);
 
-    const includeBabySeat = seatBabyCheckbox && seatBabyCheckbox.checked;
+    const includeBabySeat = seatBabyCheckbox && seatBabyCheckbox.checked; // true nếu đã tick "đặt chỗ riêng"
 
     // ----- RÀNG BUỘC GHẾ -----
     if (maxSeats > 0) {
@@ -640,7 +640,7 @@ if (boxTourDetail) {
           const other = adult + child;
           baby = Math.max(0, maxSeats - other);
           inputBaby.value = baby;
-        } else {
+        } else { // không phải là inputAdult, inputChild, inputBaby, 
           let overflow = usedSeats - maxSeats;
           if (includeBabySeat && baby > 0 && overflow > 0) {
             const dec = Math.min(baby, overflow);
@@ -679,10 +679,10 @@ if (boxTourDetail) {
     // ----- TÍNH GIÁ EM BÉ -----
     let babyTotal = 0;
     for (let i = 1; i <= baby; i++) {
-      babyTotal += babyUnitAt(i);
+      babyTotal += babyUnitAt(i); // tính giá em bé thứ i
     }
 
-    const unitForUi = babyUnitAt(Math.max(1, baby || 1));
+    const unitForUi = babyUnitAt(Math.max(1, baby || 1)); // Nếu baby === 0 → baby || 1 = 1 → lấy babyUnitAt(1) (giá “bé thứ 1” làm tham chiếu khi chưa chọn số lượng). Nếu baby >= 1 → dùng babyUnitAt(baby) — tức hiển thị mức giá áp cho em bé thứ baby (thường là bé “cuối” trong dãy), không phải trung bình.
 
     if (inputBaby) inputBaby.setAttribute("data-price", String(unitForUi));
     if (babyUnitSpan)
@@ -829,6 +829,7 @@ if (boxTourDetail) {
     });
 
     // === Nạp lại từ localStorage (không còn locationFrom) ===
+    // User thêm tour A vào giỏ (hoặc sửa số lượng ở chỗ khác), rồi quay lại trang chi tiết tour A — form sẽ hiển thị đúng những gì đang trong giỏ, không reset về mặc định.
     const cartData = getLocalCart();
     const existItem = cartData.find((item) => item.tourId == tourId);
     if (existItem) {

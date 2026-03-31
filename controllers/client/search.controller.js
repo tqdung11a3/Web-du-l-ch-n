@@ -33,15 +33,12 @@ function nameContainsTokens(q) {
           // 1) Tiêu đề tour
           { name: regex },
 
-          // 2) Tên tỉnh/thành trong locations (tuỳ bạn đang lưu)
+          // 2) Tên tỉnh/thành trong locations
           { "locations.cityName": regex },
           { "locations.cityLabel": regex },
 
-          // 3) Các điểm nổi tiếng trong từng tỉnh/thành
-          //    - nếu lưu dạng array: spots: ["Lăng Chủ tịch Hồ Chí Minh", ...]
+          // 3) Các điểm nổi tiếng — mảng spots trong từng phần tử locations
           { "locations.spots": regex },
-          //    - nếu lưu dạng chuỗi nhiều dòng: spotsText: "Lăng...\nVăn Miếu..."
-          { "locations.spotsText": regex },
         ],
       };
     }),
@@ -70,7 +67,7 @@ module.exports.list = async (req, res) => {
 
     // 1. Tìm theo tiêu đề tour (name)
     const nameCond = nameContainsTokens(q);
-    if (nameCond) Object.assign(find, nameCond);
+    if (nameCond) Object.assign(find, nameCond); // gắn điều kiện vào find
 
     // 2. Ngày khởi hành
     if (departureDate) {
