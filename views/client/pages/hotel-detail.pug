@@ -1193,6 +1193,13 @@ block main
           console.error('Failed to parse roomsData:', e);
         }
         
+        // Xóa giỏ KS cũ trước để ghi đè (không cộng dồn vào giỏ cũ)
+        try {
+          await fetch('/hotel-cart/clear', { method: 'DELETE' });
+        } catch (clearErr) {
+          console.warn('Không thể xóa giỏ cũ:', clearErr);
+        }
+
         // Add each room type to cart
         let successCount = 0;
         let errorCount = 0;

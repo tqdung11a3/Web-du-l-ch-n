@@ -65,20 +65,22 @@ block main
                         type="email"
                         value=(account && account.email ? account.email : "")
                       )
-                    .inner-group.inner-two-col
-                      label.cccd-label
-                        i.fa-solid.fa-id-card
-                        |  Ảnh CCCD / Hộ chiếu
-                      .cccd-upload-area#cccd-upload-area
-                        input#cccd-file-input(
-                          type="file"
-                          multiple
-                          accept="image/*"
-                        )
-                        .cccd-upload-placeholder
-                          i.fa-solid.fa-cloud-arrow-up
-                          span Chọn hoặc kéo thả ảnh vào đây
-                      .cccd-preview#cccd-preview
+                    //- Tạm ẩn: ảnh CCCD / Hộ chiếu (giỏ tour) — xóa `if false` để bật lại
+                    if false
+                      .inner-group.inner-two-col
+                        label.cccd-label
+                          i.fa-solid.fa-id-card
+                          |  Ảnh CCCD / Hộ chiếu
+                        .cccd-upload-area#cccd-upload-area
+                          input#cccd-file-input(
+                            type="file"
+                            multiple
+                            accept="image/*"
+                          )
+                          .cccd-upload-placeholder
+                            i.fa-solid.fa-cloud-arrow-up
+                            span Chọn hoặc kéo thả ảnh vào đây
+                        .cccd-preview#cccd-preview
                     .inner-group.inner-two-col
                       textarea(
                         placeholder="Ghi chú" 
@@ -314,20 +316,22 @@ block main
                     .form-group
                       label(for="hotel-email-input") Email *
                       input#hotel-email-input.form-input(type="email" name="email" placeholder="Nhập email" required value=(account && account.email ? account.email : ""))
-                    .form-group.form-group--full
-                      label
-                        i.fa-solid.fa-id-card
-                        |  Ảnh CCCD / Hộ chiếu
-                      .cccd-upload-area#hotel-cccd-upload-area
-                        input#hotel-cccd-file-input(
-                          type="file"
-                          multiple
-                          accept="image/*"
-                        )
-                        .cccd-upload-placeholder
-                          i.fa-solid.fa-cloud-arrow-up
-                          span Chọn hoặc kéo thả ảnh vào đây
-                      .cccd-preview#hotel-cccd-preview
+                    //- Tạm ẩn: ảnh CCCD / Hộ chiếu (giỏ KS) — xóa `if false` để bật lại
+                    if false
+                      .form-group.form-group--full
+                        label
+                          i.fa-solid.fa-id-card
+                          |  Ảnh CCCD / Hộ chiếu
+                        .cccd-upload-area#hotel-cccd-upload-area
+                          input#hotel-cccd-file-input(
+                            type="file"
+                            multiple
+                            accept="image/*"
+                          )
+                          .cccd-upload-placeholder
+                            i.fa-solid.fa-cloud-arrow-up
+                            span Chọn hoặc kéo thả ảnh vào đây
+                        .cccd-preview#hotel-cccd-preview
                     .form-group
                       label(for="hotel-note-input") Ghi chú
                       textarea#hotel-note-input.form-input(name="note" rows="3" placeholder="Yêu cầu đặc biệt, giờ nhận phòng dự kiến...")

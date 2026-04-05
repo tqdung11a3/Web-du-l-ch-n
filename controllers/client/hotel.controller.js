@@ -500,6 +500,8 @@ module.exports.detail = async (req, res) => {
       
       if (checkInMoment.isValid() && checkOutMoment.isValid()) {
         // Lấy bookings của hotel trong khoảng thời gian
+        // hotelBookings = danh sách các đơn đặt phòng (HotelBooking) đang có hiệu lực và trùng khoảng ngày với ngày khách chọn — tức là những đơn đang chiếm / có thể chiếm phòng.
+        // Phòng còn trống được tính sau đó: lấy toàn bộ phòng vật lý của khách sạn (hotel.rooms, status vacant…), rồi trừ đi những gì suy ra từ hotelBookings trong hàm getAvailableRoomsForType (trong helpers/hotel-availability.helper.js).
         hotelBookings = await HotelBooking.find({
           'hotel.hotelId': id,
           status: { $nin: ['cancelled', 'checked_out'] }, // Loại bỏ đã hủy và đã trả phòng

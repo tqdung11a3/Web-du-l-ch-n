@@ -543,7 +543,7 @@ module.exports.assign = async (req, res) => {
           hotelName: hb.hotelName,
           ageBands:  (hotelDoc?.ageBands || []).map((b) => ({
             bandName:         b.bandName        || "",
-            bandType:         b.bandType        || "other",
+            bandType:         b.bandType        || "adult",
             minAge:           b.minAge          ?? 0,
             maxAge:           b.maxAge          ?? null,
             countInOccupancy: b.countInOccupancy ?? true,

@@ -369,7 +369,6 @@ block main
                   name="earlyCheckinTime"
                   placeholder="VD: 10:00"
                   value=hotelDetail.earlyCheckinTime || ''
-                  style="width: 120px;"
                 )
               .hotel-rules-input-group
                 label(for="earlyCheckinFee" style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;") Phí phải trả thêm (VND)
@@ -380,20 +379,18 @@ block main
                   placeholder="VD: 200000"
                   min="0"
                   value=hotelDetail.earlyCheckinFee || 0
-                  style="width: 180px;"
                 )
           .hotel-rules-row
             label Trả phòng muộn
             .hotel-rules-early-late
               .hotel-rules-input-group
                 label(for="lateCheckoutTime" style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;") Giờ trả phòng muộn
-              input(
-                type="text"
+                input(
+                  type="text"
                   id="lateCheckoutTime"
                   name="lateCheckoutTime"
                   placeholder="VD: 14:00"
                   value=hotelDetail.lateCheckoutTime || ''
-                  style="width: 120px;"
                 )
               .hotel-rules-input-group
                 label(for="lateCheckoutFee" style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;") Phí phải trả thêm (VND)
@@ -404,7 +401,6 @@ block main
                   placeholder="VD: 200000"
                   min="0"
                   value=hotelDetail.lateCheckoutFee || 0
-                  style="width: 180px;"
                 )
 
       // ===== MỨC TUỔI (AGE BANDS) - PHIÊN BẢN MỚI =====
@@ -448,9 +444,11 @@ block main
                         select.age-band-type
                           option(value="infant" selected=(band.bandType === 'infant')) Infant (Trẻ sơ sinh)
                           option(value="child" selected=(band.bandType === 'child')) Child (Trẻ em)
-                          option(value="adult" selected=(band.bandType === 'adult')) Adult (Người lớn)
-                          option(value="other" selected=(band.bandType === 'other' || !band.bandType)) Khác
-                    button.age-band-remove-btn(type="button") Xóa mức tuổi
+                          option(value="adult" selected=(band.bandType === 'adult' || band.bandType === 'other' || !band.bandType)) Adult (Người lớn)
+                    .age-band-remove-column
+                      .age-band-remove-spacer(aria-hidden="true")
+                      .age-band-remove-input-row
+                        button.age-band-remove-btn(type="button") Xóa mức tuổi
                   
                   //- Cấu hình chi tiết theo từng mức tuổi
                   .age-band-config
@@ -538,9 +536,11 @@ block main
                       select.age-band-type
                         option(value="infant") Infant (Trẻ sơ sinh)
                         option(value="child") Child (Trẻ em)
-                        option(value="adult") Adult (Người lớn)
-                        option(value="other" selected) Khác
-                  button.age-band-remove-btn(type="button") Xóa mức tuổi
+                        option(value="adult" selected) Adult (Người lớn)
+                  .age-band-remove-column
+                    .age-band-remove-spacer(aria-hidden="true")
+                    .age-band-remove-input-row
+                      button.age-band-remove-btn(type="button") Xóa mức tuổi
                 
                 //- Cấu hình chi tiết theo từng mức tuổi
                 .age-band-config
@@ -1140,12 +1140,16 @@ block main
                 <select class="age-band-type">
                   <option value="infant">Infant (Trẻ sơ sinh)</option>
                   <option value="child">Child (Trẻ em)</option>
-                  <option value="adult">Adult (Người lớn)</option>
-                  <option value="other" selected>Khác</option>
+                  <option value="adult" selected>Adult (Người lớn)</option>
                 </select>
               </div>
             </div>
-            <button class="age-band-remove-btn" type="button">Xóa mức tuổi</button>
+            <div class="age-band-remove-column">
+              <div class="age-band-remove-spacer" aria-hidden="true"></div>
+              <div class="age-band-remove-input-row">
+                <button class="age-band-remove-btn" type="button">Xóa mức tuổi</button>
+              </div>
+            </div>
           </div>
           
           <div class="age-band-config">
@@ -1237,7 +1241,7 @@ block main
                   inp.value = inp.classList.contains('age-band-min') ? 0 : '';
                 } else if (inp.tagName === 'SELECT') {
                   if (inp.classList.contains('age-band-type')) {
-                    inp.value = 'other';
+                    inp.value = 'adult';
                   } else {
                     inp.selectedIndex = 0;
                   }

@@ -161,7 +161,7 @@ function parseAgeBands(body = {}) {
       bandName: name,
       minAge: minAge,
       maxAge: maxAge,
-      bandType: bandTypes[i] || "other",
+      bandType: bandTypes[i] || "adult",
       
       // C.1
       countInOccupancy: countInOccupancies[i] === "on" || countInOccupancies[i] === "true",
@@ -630,7 +630,7 @@ module.exports.list = async (req, res) => {
 // ============== CREATE GET ==============
 module.exports.create = async (req, res) => {
   try {
-    // Lấy danh sách tỉnh thành trong nước (Việt Nam) - giống tour
+    // Lấy danh sách tỉnh thành trong nước (Việt Nam)
     const cityList = await City.find({
       $or: [
         { countryId: null },

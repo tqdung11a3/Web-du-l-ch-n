@@ -291,6 +291,7 @@ if (boxTourInfo) {
 AOS.init();
 
 // ==================== UPDATE CART COUNT IN HEADER ====================
+/* Tạm tắt cùng mini-cart header — bỏ comment khối này khi hiện lại icon giỏ trên header
 async function updateCartCount() {
   try {
     const response = await fetch('/hotel-cart/count');
@@ -318,6 +319,10 @@ if (document.readyState === 'loading') {
 } else {
   updateCartCount();
 }
+*/
+
+// Stub khi mini-cart header đang ẩn (tránh lỗi nếu sau này có gọi từ code khác)
+async function updateCartCount() {}
 
 // ==================== HOTEL SEARCH - NO DEFAULT DATES ====================
 // Không set default dates - để người dùng tự chọn

@@ -3555,6 +3555,65 @@ body:has(.super-admin-sider) .main {
   margin-top: 10px;
 }
 
+/* Quy định chỗ nghỉ: nhận/trả phòng + nhận sớm / trả muộn */
+.section-8.hotel-section .hotel-rules {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-8.hotel-section .hotel-rules-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 20px;
+  width: 100%;
+}
+
+.section-8.hotel-section .hotel-rules-row > label:first-of-type {
+  flex: 0 0 160px;
+  max-width: 100%;
+  font-weight: 600;
+  font-size: 14px;
+  color: #606060;
+  padding-top: 14px;
+}
+
+.section-8.hotel-section .hotel-rules-row > input[type="text"],
+.section-8.hotel-section .hotel-rules-row > input[type="number"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-8.hotel-section .hotel-rules-early-late {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .section-8.hotel-section .hotel-rules-early-late {
+    grid-template-columns: 1fr;
+  }
+}
+
+.section-8.hotel-section .hotel-rules-input-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-8.hotel-section .hotel-rules-input-group input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 /* Checkbox "Khách sạn nổi bật" hiển thị đẹp, không cao 52px */
 .hotel-featured-inline {
   display: flex;
@@ -9235,6 +9294,30 @@ body:has(.hotel-selector-bar.hidden) .main {
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 16px;
+  /* Khớp .age-band-basic-info label: font 13px + margin-bottom 6px */
+  --age-band-label-stack: calc(13px * 1.45 + 6px);
+}
+
+/* Cột nút xóa: spacer = hàng label bên trái; hàng dưới = cao như input (52px section-8), nút căn giữa theo input */
+.age-band-remove-column {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: flex-end;
+}
+
+.age-band-remove-spacer {
+  flex-shrink: 0;
+  width: 100%;
+  height: var(--age-band-label-stack);
+  pointer-events: none;
+}
+
+.age-band-remove-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 52px;
 }
 
 .age-band-basic-info {
@@ -9492,10 +9575,24 @@ body:has(.hotel-selector-bar.hidden) .main {
 @media (max-width: 768px) {
   .age-band-header {
     flex-direction: column;
+    align-items: stretch;
   }
   
   .age-band-basic-info {
     grid-template-columns: 1fr;
+  }
+
+  .age-band-remove-column {
+    align-items: stretch;
+  }
+
+  .age-band-remove-spacer {
+    display: none;
+  }
+
+  .age-band-remove-input-row {
+    min-height: 0;
+    justify-content: stretch;
   }
   
   .age-band-remove-btn {

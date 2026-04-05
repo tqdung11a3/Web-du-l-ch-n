@@ -297,6 +297,7 @@
   }
   
   // ==================== FORM SUBMIT ====================
+  // kiểm tra nếu form có action thì thêm action vào form
   if (form) {
     form.addEventListener('submit', function(e) {
       e.preventDefault();
@@ -319,6 +320,11 @@
       params.set('adults', adultsInput.value || '1');
       params.set('children', childrenInput.value || '0');
       
+      // Lưu vị trí cuộn hiện tại để khôi phục sau khi reload
+      try {
+        sessionStorage.setItem('hotelDetailScrollY', String(window.scrollY || window.pageYOffset || 0));
+      } catch (e) { /* ignore */ }
+
       // Reload page with new params
       const currentUrl = window.location.pathname;
       const newUrl = currentUrl + (params.toString() ? '?' + params.toString() : '');
@@ -326,6 +332,29 @@
     });
   }
   
+  // Khôi phục vị trí cuộn sau khi reload (nếu có lưu)
+  (function restoreScrollPosition() {
+    try {
+      const savedY = sessionStorage.getItem('hotelDetailScrollY');
+      if (savedY === null) return;
+      sessionStorage.removeItem('hotelDetailScrollY');
+      const targetY = parseInt(savedY, 10);
+      if (!targetY) return;
+
+      // Chờ DOM và ảnh render xong rồi mới scroll
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          window.scrollTo({ top: targetY, behavior: 'instant' });
+        });
+      } else {
+        // requestAnimationFrame để scroll sau khi browser paint lần đầu
+        requestAnimationFrame(function() {
+          window.scrollTo({ top: targetY, behavior: 'instant' });
+        });
+      }
+    } catch (e) { /* ignore */ }
+  })();
+
   // Initialize on page load
   parseRoomsDataFromURL();
 })();

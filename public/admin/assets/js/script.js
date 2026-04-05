@@ -3385,7 +3385,10 @@ if (hotelCreateForm) {
       // --- avatar ---
       const avatar = filePond.avatar.getFile()?.file;
 
-      // --- room types (từ modal) ---
+      // --- Loại phòng (room types) ---
+      // Hiện tại /admin/hotel/create chỉ hiển thị thông báo; loại phòng quản lý qua /admin/hotel/room-types …
+      // Đoạn dưới đây từng đọc từ modal (#hotel-room-modal) hoặc .hotel-room-row — UI đã không còn trên form này.
+      // Giữ mảng rỗng: FormData không gửi roomType* → backend parseRoomTypes → [].
       const roomTypeNames = [];
       const roomTypeMaxGuests = [];
       const roomTypeBasePrices = [];
@@ -3396,8 +3399,7 @@ if (hotelCreateForm) {
       const roomTypeSmokingPolicies = [];
       const roomTypeBathroomAmenities = [];
       const roomTypeRoomAmenities = [];
-
-      // Sử dụng dữ liệu từ modal nếu có, nếu không thì lấy từ form cũ (backward compatibility)
+      /*
       if (window.roomTypesDataForSubmit && window.roomTypesDataForSubmit.length > 0) {
         window.roomTypesDataForSubmit.forEach((room) => {
           roomTypeNames.push(room.name);
@@ -3412,7 +3414,6 @@ if (hotelCreateForm) {
           room.roomAmenities.forEach(amenity => roomTypeRoomAmenities.push(amenity));
         });
       } else {
-        // Fallback: lấy từ form cũ nếu modal chưa được sử dụng
         hotelCreateForm.querySelectorAll(".hotel-room-row").forEach((row) => {
           const nameInput = row.querySelector('input[name="roomTypeNames"]');
           const guestInput = row.querySelector('input[name="roomTypeMaxGuests"]');
@@ -3431,6 +3432,7 @@ if (hotelCreateForm) {
           }
         });
       }
+      */
 
       // --- build FormData ---
       const formData = new FormData();
@@ -3544,7 +3546,7 @@ if (hotelCreateForm) {
           const name = item.querySelector('.age-band-name')?.value || '';
           const minAge = item.querySelector('.age-band-min')?.value || '0';
           const maxAge = item.querySelector('.age-band-max')?.value || '';
-          const bandType = item.querySelector('.age-band-type')?.value || 'other';
+          const bandType = item.querySelector('.age-band-type')?.value || 'adult';
           
           if (name.trim()) {
             formData.append('ageBandNames', name);
@@ -3651,7 +3653,7 @@ if (hotelCreateForm) {
       // avatar
       if (avatar) formData.append("avatar", avatar);
 
-      // room types
+      // room types — cùng logic mảng rỗng ở trên (không gửi khi không có UI trên form create)
       roomTypeNames.forEach((v) => formData.append("roomTypeNames", v));
       roomTypeMaxGuests.forEach((v) => formData.append("roomTypeMaxGuests", v));
       roomTypeBasePrices.forEach((v) => formData.append("roomTypeBasePrices", v));
@@ -3741,7 +3743,8 @@ if (hotelEditForm) {
 
       const avatar = filePond.avatar.getFile()?.file;
 
-      // --- room types (từ modal) ---
+      // --- Loại phòng (room types) ---
+      // Form /admin/hotel/edit hiện không có modal / .hotel-room-row; loại phòng sửa ở trang quản lý riêng.
       const roomTypeNames = [];
       const roomTypeMaxGuests = [];
       const roomTypeBasePrices = [];
@@ -3752,8 +3755,7 @@ if (hotelEditForm) {
       const roomTypeSmokingPolicies = [];
       const roomTypeBathroomAmenities = [];
       const roomTypeRoomAmenities = [];
-
-      // Sử dụng dữ liệu từ modal nếu có, nếu không thì lấy từ form cũ (backward compatibility)
+      /*
       if (window.roomTypesDataForSubmit && window.roomTypesDataForSubmit.length > 0) {
         window.roomTypesDataForSubmit.forEach((room) => {
           roomTypeNames.push(room.name);
@@ -3768,7 +3770,6 @@ if (hotelEditForm) {
           room.roomAmenities.forEach(amenity => roomTypeRoomAmenities.push(amenity));
         });
       } else {
-        // Fallback: lấy từ form cũ nếu modal chưa được sử dụng
         hotelEditForm.querySelectorAll(".hotel-room-row").forEach((row) => {
           const nameInput = row.querySelector('input[name="roomTypeNames"]');
           const guestInput = row.querySelector('input[name="roomTypeMaxGuests"]');
@@ -3787,6 +3788,7 @@ if (hotelEditForm) {
           }
         });
       }
+      */
 
       const formData = new FormData();
       formData.append("name", name);
@@ -3899,7 +3901,7 @@ if (hotelEditForm) {
           const name = item.querySelector('.age-band-name')?.value || '';
           const minAge = item.querySelector('.age-band-min')?.value || '0';
           const maxAge = item.querySelector('.age-band-max')?.value || '';
-          const bandType = item.querySelector('.age-band-type')?.value || 'other';
+          const bandType = item.querySelector('.age-band-type')?.value || 'adult';
           
           if (name.trim()) {
             formData.append('ageBandNames', name);
@@ -4004,8 +4006,7 @@ if (hotelEditForm) {
 
       if (avatar) formData.append("avatar", avatar);
 
-      // Chỉ gửi dữ liệu room types nếu có dữ liệu thực sự
-      // (Room types được quản lý ở trang riêng, nên form edit không cần gửi dữ liệu này)
+      // room types: mảng luôn rỗng (xem comment khối thu thập ở trên); không gửi → không ghi đè roomTypes khi PATCH
       if (roomTypeNames.length > 0) {
         roomTypeNames.forEach((v) => formData.append("roomTypeNames", v));
         roomTypeMaxGuests.forEach((v) => formData.append("roomTypeMaxGuests", v));
@@ -4043,16 +4044,21 @@ if (hotelEditForm) {
 }
 // ================== END HOTEL EDIT FORM ==================
 
-// Hotel Room Types Modal Management
+// Hotel Room Types Modal — code cũ cho UI đã xóa khỏi hotel-create / hotel-edit (không còn #manage-room-types-btn).
+// Bật lại khi thêm lại modal vào Pug; để false tránh console.warn mỗi lần load admin.
+const HOTEL_FORM_ROOM_TYPES_MODAL_ENABLED = false;
+
 document.addEventListener("DOMContentLoaded", () => {
+  if (!HOTEL_FORM_ROOM_TYPES_MODAL_ENABLED) return;
+
   const manageBtn = document.getElementById("manage-room-types-btn");
   const modal = document.getElementById("hotel-room-modal");
-  
+
   if (!manageBtn) {
     console.warn("Manage room types button not found");
     return;
   }
-  
+
   if (!modal) {
     console.error("Hotel room modal not found in DOM");
     return;

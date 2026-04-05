@@ -869,6 +869,7 @@ function showDateRequiredMessage() {
 })();
 
 // ==================== UPDATE CART COUNT IN HEADER ====================
+/* Tạm tắt cùng mini-cart header (trùng logic script.js) — bỏ comment khi hiện lại icon giỏ
 async function updateCartCount() {
   try {
     const response = await fetch('/hotel-cart/count');
@@ -896,6 +897,10 @@ if (document.readyState === 'loading') {
 } else {
   updateCartCount();
 }
+*/
+
+// Stub khi mini-cart header đang ẩn — các chỗ gọi updateCartCount() sau thêm phòng vẫn hợp lệ
+async function updateCartCount() {}
 
 // ==================== HANDLE "ĐẶT NGAY" BUTTON ====================
 (function() {

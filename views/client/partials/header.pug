@@ -34,10 +34,12 @@ header.header
             a(href="/company") Công Ty
       // Account & Cart
       .inner-user
-        // Cart Icon
-        a.cart-icon-wrapper(href="/cart" title="Giỏ hàng")
-          i.fa-solid.fa-cart-shopping.cart-icon
-          span.cart-badge(style="display: none") 0
+        //- Tạm ẩn mini-cart header — xóa `if false` để hiện lại icon + badge
+        if false
+          // Cart Icon
+          a.cart-icon-wrapper(href="/cart" title="Giỏ hàng")
+            i.fa-solid.fa-cart-shopping.cart-icon
+            span.cart-badge(style="display: none") 0
         
         if account
           .user-menu
