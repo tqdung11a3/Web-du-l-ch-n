@@ -29,6 +29,16 @@ block main
               .cccd-gallery-item
                 a(href=img target="_blank")
                   img(src=img alt="CCCD")
+      if orderDetail.transferProofImages && orderDetail.transferProofImages.length
+        .inner-group.inner-two-col
+          label(class="inner-label")
+            i.fa-solid.fa-money-bill-transfer
+            |  Ảnh chứng từ chuyển khoản
+          .cccd-gallery
+            each img in orderDetail.transferProofImages
+              .cccd-gallery-item
+                a(href=img target="_blank")
+                  img(src=img alt="Chứng từ chuyển khoản")
       .inner-group.inner-two-col
         label(for="note" class="inner-label") Ghi chú
         textarea(id="note" name="note") #{orderDetail.note}

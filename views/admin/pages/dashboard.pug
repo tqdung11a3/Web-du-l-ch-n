@@ -41,20 +41,20 @@ block main
       canvas(id="revenue-chart")
   //- End Section 2
 
-  //- Section 5: Recent Activities
-  if isScoped && recentActivities && recentActivities.length > 0
-    .section-5-recent-activities
-      .inner-head
-        h2.inner-title Hoạt động gần đây
-      .inner-activities-list
-        each activity in recentActivities
-          .activity-item
-            - const dotClass = `dot-${activity.color}`
-            .activity-dot(class=dotClass)
-            .activity-content
-              .activity-text= activity.activity
-              .activity-time= activity.timeAgo
-  //- End Section 5
+  //- Khối "Hoạt động gần đây" — tạm ẩn theo yêu cầu
+  //-
+    if isScoped && recentActivities && recentActivities.length > 0
+      .section-5-recent-activities
+        .inner-head
+          h2.inner-title Hoạt động gần đây
+        .inner-activities-list
+          each activity in recentActivities
+            .activity-item
+              - const dotClass = `dot-${activity.color}`
+              .activity-dot(class=dotClass)
+              .activity-content
+                .activity-text= activity.activity
+                .activity-time= activity.timeAgo
 
   //- Section 3
   //- .section-3

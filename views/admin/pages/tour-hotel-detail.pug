@@ -47,28 +47,25 @@ block main
         if existingSegment
           if existingSegment.status === 'confirmed'
             span.badge.badge--green Đã xác nhận
+          else if existingSegment.status === 'pending_approval'
+            span.badge.badge--orange Chờ duyệt KS khác
           else
             span.badge.badge--yellow Bản nháp
         else
           span.badge.badge--gray Chưa cấu hình
 
     //- ── Số người yêu cầu ────────────────────────────────────────────────
+    //- Luôn lấy từ seatsTotal của lịch khởi hành (hoặc tour), không dùng giá trị cũ trong segment
+    - const currentSeatsTotal = (selectedDeparture && selectedDeparture.seatsTotal != null ? selectedDeparture.seatsTotal : (tour.seatsTotal || ''))
     .th-pax-row
       label.th-label(for="pax-required")
         i.fa-solid.fa-users
         |  Số người cần bố trí phòng:
       input#pax-required.th-input-number(
         type="number" min="1"
-        value=(existingSegment ? existingSegment.paxRequired : (selectedDeparture && selectedDeparture.seatsTotal ? selectedDeparture.seatsTotal : (tour.seatsTotal || '')))
+        value=currentSeatsTotal
         placeholder="Nhập số người..."
       )
-      button#sync-pax-btn.btn-sync-pax(
-        type="button"
-        title="Cập nhật theo số ghế hiện tại của lịch khởi hành này"
-        data-seats=`${selectedDeparture && selectedDeparture.seatsTotal != null ? selectedDeparture.seatsTotal : ''}`
-      )
-        i.fa-solid.fa-rotate
-        |  Đồng bộ từ tour
 
     //- ── Khung thời gian ─────────────────────────────────────────────────
     h2.th-section-title Khung thời gian lưu trú
@@ -99,11 +96,11 @@ block main
         |  Lưu bản nháp
       button#confirm-btn.btn-confirm(type="button")
         i.fa-solid.fa-circle-check
-        if existingSegment && existingSegment.status === 'confirmed'
+        if existingSegment && (existingSegment.status === 'confirmed' || existingSegment.status === 'pending_approval')
           |  Xác nhận lại (Re-assign phòng)
         else
           |  Xác nhận & Giữ phòng
-      if existingSegment && existingSegment.status === 'confirmed'
+      if existingSegment && (existingSegment.status === 'confirmed' || existingSegment.status === 'pending_approval')
         button#cancel-btn.btn-cancel-segment(type="button")
           i.fa-solid.fa-ban
           |  Huỷ & Giải phóng phòng
@@ -113,6 +110,7 @@ block main
     script#hotels-data(type="application/json")!= JSON.stringify(hotels)
     script#departure-meta(type="application/json")!= JSON.stringify({ tourId: String(tour._id), departureDate: moment(selectedDeparture.departureDate).format('YYYY-MM-DD'), endDate: selectedDeparture.endDate ? moment(selectedDeparture.endDate).format('YYYY-MM-DD') : '' })
     script#path-admin(type="application/json")!= JSON.stringify(pathAdmin)
+    script#current-company-id(type="application/json")!= JSON.stringify(currentCompanyId || '')
 
     //- Template HTML cho 1 khung thời gian (dùng bởi JS)
     template#segment-template

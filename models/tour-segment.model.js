@@ -45,7 +45,7 @@ const segmentSchema = new Schema(
     totalCapacity: { type: Number, default: 0 }, // tổng sức chứa của tất cả hotels
     status: {
       type: String,
-      enum: ["draft", "confirmed"],
+      enum: ["draft", "confirmed", "pending_approval"],
       default: "draft",
     },
   },
@@ -86,12 +86,15 @@ const schema = new Schema(
 
     status: {
       type: String,
-      enum: ["draft", "confirmed", "cancelled"],
+      enum: ["draft", "confirmed", "pending_approval", "cancelled"],
       default: "draft",
     },
 
     // Lưu id của các HotelBooking đã tạo để giữ phòng (dùng khi huỷ)
     holdBookingIds: { type: [Types.ObjectId], default: [] },
+
+    // Lưu id các HotelLinkRequest (yêu cầu liên kết KS khác company)
+    linkRequestIds: { type: [Types.ObjectId], default: [] },
   },
   { timestamps: true, collection: "tour_segments" }
 );

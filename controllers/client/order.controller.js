@@ -402,6 +402,13 @@ module.exports.pending = async (req, res) => {
       return res.redirect("/");
     }
 
+    // Nếu đã thanh toán → chuyển thẳng sang trang thành công
+    if (orderDetail.paymentStatus === "paid") {
+      return res.redirect(
+        `/order/success?orderCode=${orderDetail.code}&phone=${phone}`
+      );
+    }
+
     // Nếu đơn tạm đã hết hạn mà chưa thanh toán → tự động hủy và restore ghế
     if (
       orderDetail.isTemporaryHold &&
@@ -439,6 +446,7 @@ module.exports.pending = async (req, res) => {
       pageTitle: "Đơn tour đang chờ xác nhận",
       orderDetail,
       phone,
+      transferProofImages: orderDetail.transferProofImages || [],
     });
   } catch (error) {
     console.error("order.pending error:", error);
@@ -730,6 +738,76 @@ module.exports.cancelHold = async (req, res) => {
     return res.json({ code: "success", message: "Đã hủy đơn và hoàn lại ghế" });
   } catch (err) {
     console.error("order.cancelHold error:", err);
+    return res.json({ code: "error", message: "Lỗi server" });
+  }
+};
+
+/**
+ * PATCH /order/transfer-proof
+ * Lưu ảnh chứng từ chuyển khoản do khách hàng gửi lên
+ * Body: { orderCode, phone, images: [url, ...] }
+ */
+module.exports.saveTransferProof = async (req, res) => {
+  try {
+    const { orderCode, phone, images } = req.body;
+
+    if (!orderCode || !phone || !Array.isArray(images) || images.length === 0) {
+      return res.json({ code: "error", message: "Dữ liệu không hợp lệ" });
+    }
+
+    const order = await Order.findOne({
+      code: orderCode,
+      phone: phone,
+      deleted: false,
+    });
+
+    if (!order) {
+      return res.json({ code: "error", message: "Không tìm thấy đơn hàng" });
+    }
+
+    if (order.paymentStatus === "paid") {
+      return res.json({ code: "error", message: "Đơn đã thanh toán" });
+    }
+
+    await Order.updateOne(
+      { _id: order._id },
+      { $push: { transferProofImages: { $each: images } } }
+    );
+
+    return res.json({ code: "ok", message: "Đã lưu ảnh chứng từ thành công" });
+  } catch (err) {
+    console.error("order.saveTransferProof error:", err);
+    return res.json({ code: "error", message: "Lỗi server" });
+  }
+};
+
+/**
+ * GET /order/check-payment-status?orderCode=...&phone=...
+ * Trả về trạng thái thanh toán của đơn hàng (dùng cho polling phía client)
+ */
+module.exports.checkPaymentStatus = async (req, res) => {
+  try {
+    const { orderCode, phone } = req.query;
+
+    if (!orderCode || !phone) {
+      return res.json({ code: "error", message: "Thiếu tham số" });
+    }
+
+    const order = await Order.findOne({
+      code: orderCode,
+      phone: phone,
+      deleted: false,
+    })
+      .select("paymentStatus")
+      .lean();
+
+    if (!order) {
+      return res.json({ code: "error", message: "Không tìm thấy đơn hàng" });
+    }
+
+    return res.json({ code: "ok", paymentStatus: order.paymentStatus });
+  } catch (err) {
+    console.error("order.checkPaymentStatus error:", err);
     return res.json({ code: "error", message: "Lỗi server" });
   }
 };

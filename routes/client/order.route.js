@@ -5,6 +5,10 @@ router.post("/create", orderController.createPost);
 
 router.get("/pending", orderController.pending);
 
+router.get("/check-payment-status", orderController.checkPaymentStatus);
+
+router.patch("/transfer-proof", orderController.saveTransferProof);
+
 router.get("/cancel-hold",  orderController.cancelHold);
 router.post("/cancel-hold", orderController.cancelHold); // sendBeacon dùng POST
 

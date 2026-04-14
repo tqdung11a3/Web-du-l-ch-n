@@ -20,7 +20,6 @@ block main
       button.filter-tab.active Tất cả
       button.filter-tab Trống
       button.filter-tab Đang sử dụng
-      button.filter-tab Đang dọn
       button.filter-tab Ngừng hoạt động
 
     //- Rooms Table
@@ -48,7 +47,12 @@ block main
                   .action-buttons
                     a.action-btn.edit-btn(href=`/${pathAdmin}/hotel/${hotelId}/rooms/${room._id}/edit`)
                       i.fa-solid.fa-pencil
-                    button.action-btn.delete-btn(data-room-id=room._id)
+                    button.action-btn.delete-btn(
+                      type="button"
+                      data-room-id=room._id
+                      title="Xóa phòng"
+                      aria-label="Xóa phòng"
+                    )
                       i.fa-solid.fa-trash
           else
             tr
@@ -110,6 +114,34 @@ block main
               row.style.display = 'none';
             }
           });
+        });
+      });
+
+      // Xóa phòng
+      const roomsListHotelId = !{JSON.stringify(String(hotelId || ''))};
+      document.querySelectorAll('.delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          const roomId = btn.getAttribute('data-room-id');
+          if (!roomId || !roomsListHotelId) return;
+          if (!confirm('Bạn có chắc muốn xóa phòng này? Thao tác không thể hoàn tác.')) return;
+          try {
+            const res = await fetch('/' + pathAdmin + '/hotel/' + roomsListHotelId + '/rooms/' + roomId, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            const result = await res.json();
+            if (result.code === 'success') {
+              if (typeof notify !== 'undefined' && notify.success) notify.success(result.message);
+              else alert(result.message);
+              window.location.reload();
+            } else {
+              if (typeof notify !== 'undefined' && notify.error) notify.error(result.message || 'Có lỗi xảy ra!');
+              else alert(result.message || 'Có lỗi xảy ra!');
+            }
+          } catch (e) {
+            if (typeof notify !== 'undefined' && notify.error) notify.error('Có lỗi kết nối khi xóa phòng!');
+            else alert('Có lỗi kết nối khi xóa phòng!');
+          }
         });
       });
     });

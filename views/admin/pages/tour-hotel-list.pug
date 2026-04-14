@@ -46,6 +46,10 @@ block main
                         span.badge.badge--green
                           i.fa-solid.fa-circle-check
                           |  Đã xác nhận
+                      else if isConfigured.status === 'pending_approval'
+                        span.badge.badge--orange
+                          i.fa-solid.fa-clock
+                          |  Chờ duyệt KS khác
                       else
                         span.badge.badge--yellow
                           i.fa-solid.fa-pencil
@@ -56,7 +60,7 @@ block main
                     a.btn-config(href=`/${pathAdmin}/tour-hotel/detail/${tour._id}?departure=${dep.departureDateStr}`)
                       i.fa-solid.fa-sliders
                       |  Cấu hình
-                    if isConfigured && isConfigured.status === 'confirmed'
+                    if isConfigured && (isConfigured.status === 'confirmed' || isConfigured.status === 'pending_approval')
                       a.btn-assign(href=`/${pathAdmin}/tour-hotel/assign/${isConfigured.segmentId}`)
                         i.fa-solid.fa-person-shelter
                         |  Phân công phòng

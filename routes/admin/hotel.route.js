@@ -15,6 +15,9 @@ router.use(hotelListMiddleware.getHotelList);
 // Dashboard khách sạn
 router.get("/dashboard", hotelController.dashboard);
 
+// API: doanh thu từng ngày trong tháng
+router.get("/dashboard/daily-revenue", hotelController.dailyRevenue);
+
 // ========== QUẢN LÝ ĐẶT PHÒNG ==========
 // Danh sách đặt phòng
 router.get("/booking/list", hotelController.bookingList);
@@ -33,6 +36,9 @@ router.post("/booking/unassign-room", hotelController.unassignRoom);
 
 // Cập nhật trạng thái booking
 router.post("/booking/update-status", hotelController.updateBookingStatus);
+
+// Cập nhật thông tin khách hàng của đơn đặt phòng
+router.patch("/booking/update-guest/:bookingCode", hotelController.updateGuestInfo);
 
 // Xóa đơn đặt phòng
 router.post("/booking/delete", hotelController.deleteBooking);
@@ -108,6 +114,7 @@ router.get("/:hotelId/rooms/list", hotelController.roomsListByHotel);
 // Chỉnh sửa phòng cụ thể
 router.get("/:hotelId/rooms/:roomId/edit", hotelController.roomEdit);
 router.patch("/:hotelId/rooms/:roomId/edit", hotelController.roomEditPatch);
+router.delete("/:hotelId/rooms/:roomId", hotelController.individualRoomDelete);
 
 // Tạo phòng mới
 router.get("/rooms/create", hotelController.roomCreate);

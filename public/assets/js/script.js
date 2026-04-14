@@ -883,8 +883,6 @@ if (boxTourDetail) {
       const badgeClass = isFull ? "seats-badge--full" : (isLow ? "seats-badge--low" : "seats-badge--ok");
       const badgeText  = isFull ? "Hết chỗ" : `${seatsRemaining} chỗ còn`;
       seatInfoEl.innerHTML =
-        `<i class="fa-solid fa-chair" style="opacity:.7;margin-right:5px"></i>` +
-        `<span>Số chỗ còn lại:</span> ` +
         `<span class="seats-badge ${badgeClass}">${badgeText}</span>` +
         (seatsTotal > 0 ? `<span class="seats-total-hint"> / ${seatsTotal} tổng</span>` : "");
       seatInfoEl.style.display = "flex";

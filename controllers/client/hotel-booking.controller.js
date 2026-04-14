@@ -7,6 +7,76 @@ const Notification = require("../../models/notification.model");
 const moment = require("moment");
 const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
 
+/**
+ * PATCH /hotel-booking/transfer-proof
+ * Lưu ảnh chứng từ chuyển khoản do khách hàng gửi lên
+ * Body: { bookingCode, phone, images: [url, ...] }
+ */
+module.exports.saveTransferProof = async (req, res) => {
+  try {
+    const { bookingCode, phone, images } = req.body;
+
+    if (!bookingCode || !phone || !Array.isArray(images) || images.length === 0) {
+      return res.json({ code: "error", message: "Dữ liệu không hợp lệ" });
+    }
+
+    const booking = await HotelBooking.findOne({
+      code: bookingCode,
+      "guest.phone": phone,
+    });
+
+    if (!booking) {
+      return res.json({ code: "error", message: "Không tìm thấy đơn đặt phòng" });
+    }
+
+    if (booking.paymentStatus === "paid") {
+      return res.json({ code: "error", message: "Đơn đã thanh toán" });
+    }
+
+    // Cập nhật tất cả booking trong cùng nhóm (cùng base code)
+    const baseCode = bookingCode.replace(/-\d+$/, "");
+    await HotelBooking.updateMany(
+      { code: { $regex: `^${baseCode}` }, "guest.phone": phone },
+      { $push: { transferProofImages: { $each: images } } }
+    );
+
+    return res.json({ code: "ok", message: "Đã lưu ảnh chứng từ thành công" });
+  } catch (err) {
+    console.error("hotel-booking.saveTransferProof error:", err);
+    return res.json({ code: "error", message: "Lỗi server" });
+  }
+};
+
+/**
+ * GET /hotel-booking/check-payment-status?bookingCode=...&phone=...
+ * Trả về trạng thái thanh toán của đơn đặt phòng (dùng cho polling phía client)
+ */
+module.exports.checkPaymentStatus = async (req, res) => {
+  try {
+    const { bookingCode, phone } = req.query;
+
+    if (!bookingCode || !phone) {
+      return res.json({ code: "error", message: "Thiếu tham số" });
+    }
+
+    const booking = await HotelBooking.findOne({
+      code: bookingCode,
+      "guest.phone": phone,
+    })
+      .select("paymentStatus")
+      .lean();
+
+    if (!booking) {
+      return res.json({ code: "error", message: "Không tìm thấy đơn đặt phòng" });
+    }
+
+    return res.json({ code: "ok", paymentStatus: booking.paymentStatus });
+  } catch (err) {
+    console.error("hotel-booking.checkPaymentStatus error:", err);
+    return res.json({ code: "error", message: "Lỗi server" });
+  }
+};
+
 // Helper function để sort object (dùng cho VNPay)
 function sortObject(obj) {
   if (typeof obj !== "object" || obj === null) {
@@ -756,8 +826,15 @@ module.exports.pending = async (req, res) => {
       return res.redirect("/");
     }
 
-    // Auto-cancel nếu đơn đã hết hạn giữ chỗ
+    // Nếu đã thanh toán → chuyển thẳng sang trang thành công
     const firstBooking = bookings[0];
+    if (firstBooking.paymentStatus === "paid") {
+      return res.redirect(
+        `/hotel-booking/success?bookingCode=${bookingCode}&phone=${phone}`
+      );
+    }
+
+    // Auto-cancel nếu đơn đã hết hạn giữ chỗ
     if (
       firstBooking.isTemporaryHold &&
       firstBooking.paymentStatus === "unpaid" &&
@@ -790,6 +867,7 @@ module.exports.pending = async (req, res) => {
       holdExpiresAt: bookings[0].holdExpiresAt,
       paymentStatus: bookings[0].paymentStatus,
       paymentMethod: bookings[0].paymentMethod,
+      transferProofImages: bookings[0].transferProofImages || [],
       phone: phone,
     };
 

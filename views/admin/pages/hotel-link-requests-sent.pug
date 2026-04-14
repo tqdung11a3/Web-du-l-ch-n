@@ -1,0 +1,150 @@
+extends ../layouts/default.pug
+
+block main
+  .link-requests-page
+    h1.box-title Yêu cầu liên kết đã gửi
+    p.lr-subtitle Các yêu cầu giữ phòng tại khách sạn thuộc công ty khác mà bạn đã gửi đi.
+
+    if sentRequests && sentRequests.length > 0
+      each req in sentRequests
+        .lr-card(class=`lr-card--${req.status}`)
+          .lr-card-header
+            .lr-card-info
+              h3.lr-card-title= req.tourName
+              .lr-card-meta
+                span.lr-meta-item
+                  i.fa-solid.fa-calendar-day
+                  |  #{req.departureDateDisplay} → #{req.endDateDisplay}
+                span.lr-meta-item
+                  i.fa-solid.fa-building
+                  |  Đến công ty: #{req.toCompanyName}
+                span.lr-meta-item
+                  i.fa-solid.fa-hotel
+                  |  Khách sạn: #{req.hotelName}
+                span.lr-meta-item
+                  i.fa-solid.fa-clock
+                  |  #{req.createdAtDisplay}
+            .lr-card-actions
+              if req.status === 'pending'
+                span.lr-badge.lr-badge--pending Chờ duyệt
+                button.lr-btn-cancel(type="button" onclick=`cancelRequest('${req._id}')` title="Thu hồi yêu cầu")
+                  i.fa-solid.fa-xmark
+                  |  Thu hồi
+              else if req.status === 'approved'
+                span.lr-badge.lr-badge--approved Đã duyệt
+              else if req.status === 'partially_approved'
+                span.lr-badge.lr-badge--partial Duyệt một phần
+              else if req.status === 'cancelled'
+                span.lr-badge.lr-badge--cancelled Đã thu hồi
+              else
+                span.lr-badge.lr-badge--rejected Từ chối
+
+          .lr-card-body
+            .lr-rooms-summary
+              span.lr-rooms-label Số phòng yêu cầu:
+              strong= ' ' + req.totalRequestedRooms + ' phòng'
+              if req.status !== 'pending' && req.totalApprovedRooms > 0
+                span.lr-rooms-approved
+                  i.fa-solid.fa-circle-check
+                  |  Đã duyệt: #{req.totalApprovedRooms} phòng
+            table.lr-table
+              thead
+                tr
+                  th Loại phòng
+                  th Số phòng yêu cầu
+                  th Sức chứa
+                  th Từ ngày
+                  th Đến ngày
+                  if req.status !== 'pending'
+                    th Đã duyệt
+              tbody
+                each rr in req.requestedRooms
+                  tr
+                    td= rr.roomTypeName
+                    td= rr.assignedRooms
+                    td= rr.baseOccupancy + ' người/phòng'
+                    td= rr.fromDateDisplay
+                    td= rr.toDateDisplay
+                    if req.status !== 'pending'
+                      - const approved = (req.approvedRooms || []).find(a => String(a.roomTypeId) === String(rr.roomTypeId))
+                      td= approved ? approved.approvedRooms : 0
+
+            if req.responseNote
+              .lr-note
+                i.fa-solid.fa-comment-dots
+                |  Phản hồi từ công ty khác: #{req.responseNote}
+    else
+      .lr-empty
+        i.fa-solid.fa-paper-plane
+        p Chưa gửi yêu cầu liên kết nào
+
+  style.
+    .link-requests-page { padding: 20px; max-width: 1100px; }
+    .lr-subtitle { color: #64748b; font-size: 14px; margin: -8px 0 20px; }
+    .lr-card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      margin-bottom: 16px; overflow: hidden; transition: box-shadow .2s;
+    }
+    .lr-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    .lr-card--pending          { border-left: 4px solid #f59e0b; }
+    .lr-card--approved         { border-left: 4px solid #22c55e; }
+    .lr-card--partially_approved { border-left: 4px solid #3b82f6; }
+    .lr-card--rejected         { border-left: 4px solid #ef4444; opacity: .7; }
+    .lr-card--cancelled        { border-left: 4px solid #94a3b8; opacity: .6; }
+    .lr-card-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 16px 20px; background: #f8fafc;
+    }
+    .lr-card-title { margin: 0 0 6px; font-size: 16px; color: #1e293b; font-weight: 600; }
+    .lr-card-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: #64748b; }
+    .lr-meta-item i { margin-right: 4px; color: #94a3b8; }
+    .lr-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .lr-badge--pending  { background: #fef3c7; color: #92400e; }
+    .lr-badge--approved { background: #dcfce7; color: #166534; }
+    .lr-badge--partial  { background: #dbeafe; color: #1e40af; }
+    .lr-badge--rejected  { background: #fee2e2; color: #991b1b; }
+    .lr-badge--cancelled { background: #f1f5f9; color: #64748b; }
+    .lr-card-actions {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    }
+    .lr-btn-cancel {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 14px; font-size: 12px; font-weight: 500;
+      color: #dc2626; background: #fff; border: 1px solid #fca5a5;
+      border-radius: 6px; cursor: pointer; transition: all .15s;
+    }
+    .lr-btn-cancel:hover { background: #fef2f2; border-color: #ef4444; }
+    .lr-card-body { padding: 16px 20px; }
+    .lr-rooms-summary {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; color: #475569; margin-bottom: 12px;
+    }
+    .lr-rooms-label { color: #64748b; }
+    .lr-rooms-approved { color: #16a34a; font-size: 13px; font-weight: 500; }
+    .lr-rooms-approved i { margin-right: 4px; }
+    .lr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .lr-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; font-weight: 600; color: #334155; border-bottom: 1px solid #e2e8f0; }
+    .lr-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+    .lr-note { margin-top: 10px; padding: 8px 12px; background: #fffbeb; border-radius: 6px; font-size: 13px; color: #78350f; border: 1px solid #fde68a; }
+    .lr-note i { margin-right: 6px; }
+    .lr-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+    .lr-empty i { font-size: 48px; margin-bottom: 12px; display: block; }
+    .lr-empty p { font-size: 15px; }
+
+  script.
+    async function cancelRequest(requestId) {
+      if (!confirm('Bạn có chắc chắn muốn thu hồi yêu cầu liên kết này? Công ty nhận sẽ được thông báo.')) return;
+      try {
+        const res = await fetch(`/${pathAdmin}/hotel/link-requests/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId }),
+        });
+        const data = await res.json();
+        if (data.success) { alert(data.message); location.reload(); }
+        else alert(data.message);
+      } catch { alert('Lỗi kết nối'); }
+    }

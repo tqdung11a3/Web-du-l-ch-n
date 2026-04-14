@@ -57,6 +57,30 @@ block main
                 i.fa-solid.fa-arrow-down
                 span= dashboardData.bookingsTrend + '%'
 
+    //- Biểu đồ doanh thu theo tháng
+    .revenue-chart-section
+      .section-header
+        h2.section-title Doanh thu theo tháng (đặt phòng khách sạn)
+        span.section-subtitle (12 tháng gần nhất, đơn vị: nghìn đồng)
+      .revenue-chart-wrapper
+        canvas#hotelRevenueChart
+
+    //- Biểu đồ doanh thu theo từng ngày trong tháng
+    .revenue-chart-section.daily-chart-section
+      .section-header
+        h2.section-title Doanh thu theo ngày
+        .daily-month-picker
+          label(for="dailyMonthInput") Chọn tháng:
+          input#dailyMonthInput(type="month")
+      .revenue-chart-wrapper
+        canvas#hotelDailyRevenueChart
+      .daily-chart-loading(style="display:none")
+        i.fa-solid.fa-spinner.fa-spin
+        |  Đang tải dữ liệu...
+      .daily-chart-empty(style="display:none")
+        i.fa-solid.fa-chart-bar
+        |  Không có doanh thu trong tháng này
+
     //- Hotel Performance Table
     if dashboardData && dashboardData.hotelPerformance && dashboardData.hotelPerformance.length > 0
       .performance-section
@@ -94,32 +118,234 @@ block main
                   td
                     a.btn-view-details(href=`/${pathAdmin}/hotel/edit/${hotel.hotelId}`) Xem chi tiết →
 
-    //- Bottom Sections: Top Booking Sources & Recent Activities
-    .dashboard-bottom
-      //- Top Booking Sources
-      .bottom-section.booking-sources-section
-        .section-header
-          h2.section-title Top nguồn đặt phòng
-        .booking-sources-list
-          if dashboardData && dashboardData.topBookingSources
-            each source in dashboardData.topBookingSources
-              .source-item
-                .source-name= source.source
-                .source-bar-wrapper
-                  .source-bar(style=`width: ${(source.count / dashboardData.topBookingSources[0].count * 100)}%`)
-                .source-count= source.count + ' đặt phòng'
+  script.
+    document.addEventListener('DOMContentLoaded', function () {
+      var labels  = !{JSON.stringify(dashboardData && dashboardData.monthlyLabels  ? dashboardData.monthlyLabels  : [])};
+      var revenues= !{JSON.stringify(dashboardData && dashboardData.monthlyRevenue ? dashboardData.monthlyRevenue : [])};
+      var ctx = document.getElementById('hotelRevenueChart');
+      if (!ctx) return;
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Doanh thu (nghìn đồng)',
+            data: revenues,
+            backgroundColor: 'rgba(99,102,241,0.18)',
+            borderColor: '#6366f1',
+            borderWidth: 2,
+            borderRadius: 6,
+            hoverBackgroundColor: 'rgba(99,102,241,0.32)',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ' ' + ctx.parsed.y.toLocaleString('vi-VN') + 'K';
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.05)' },
+              ticks: {
+                callback: function(val) {
+                  return val.toLocaleString('vi-VN') + 'K';
+                },
+                font: { size: 11 }
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 11 } }
+            }
+          }
+        }
+      });
 
-      //- Recent Activities
-      .bottom-section.recent-activities-section
-        .section-header
-          h2.section-title Hoạt động gần đây
-        .activities-list
-          if dashboardData && dashboardData.recentActivities
-            each activity in dashboardData.recentActivities
-              .activity-item
-                - const dotClass = `dot-${activity.color}`
-                .activity-dot(class=dotClass)
-                .activity-content
-                  .activity-text= activity.activity
-                  .activity-time= activity.timeAgo
+      // ── Biểu đồ doanh thu theo ngày ────────────────────────────────────────
+      var _hotelId    = '!{selectedHotelId}';
+      var _pathAdmin  = '!{pathAdmin}';
+      var _dailyChart = null;
+
+      function initDailyMonthPicker() {
+        var now   = new Date();
+        var yyyy  = now.getFullYear();
+        var mm    = String(now.getMonth() + 1).padStart(2, '0');
+        var input = document.getElementById('dailyMonthInput');
+        if (!input) return;
+        input.value = yyyy + '-' + mm;
+        loadDailyRevenue(input.value);
+        input.addEventListener('change', function() { loadDailyRevenue(this.value); });
+      }
+
+      function loadDailyRevenue(month) {
+        var canvas  = document.getElementById('hotelDailyRevenueChart');
+        var loading = document.querySelector('.daily-chart-loading');
+        var empty   = document.querySelector('.daily-chart-empty');
+        if (!canvas) return;
+        if (loading) loading.style.display = 'block';
+        canvas.style.display = 'none';
+        if (empty) empty.style.display = 'none';
+
+        fetch('/' + _pathAdmin + '/hotel/dashboard/daily-revenue?hotelId=' + _hotelId + '&month=' + month)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (loading) loading.style.display = 'none';
+            if (data.code !== 'success') { if (empty) empty.style.display = 'block'; return; }
+
+            var hasData = data.revenues.some(function(v) { return v > 0; });
+            if (!hasData) { if (empty) empty.style.display = 'block'; return; }
+
+            canvas.style.display = 'block';
+            if (_dailyChart) _dailyChart.destroy();
+            _dailyChart = new Chart(canvas, {
+              type: 'line',
+              data: {
+                labels: data.labels,
+                datasets: [{
+                  label: 'Doanh thu (nghìn đồng)',
+                  data: data.revenues,
+                  backgroundColor: 'rgba(16,185,129,0.12)',
+                  borderColor: '#10b981',
+                  borderWidth: 2.5,
+                  pointRadius: 3,
+                  pointBackgroundColor: '#10b981',
+                  fill: true,
+                  tension: 0.35,
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: function(ctx) {
+                        return ' ' + ctx.parsed.y.toLocaleString('vi-VN') + 'K';
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' },
+                    ticks: {
+                      callback: function(val) { return val.toLocaleString('vi-VN') + 'K'; },
+                      font: { size: 11 }
+                    }
+                  },
+                  x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 10 }, maxRotation: 45 }
+                  }
+                }
+              }
+            });
+          })
+          .catch(function() {
+            if (loading) loading.style.display = 'none';
+            if (empty) empty.style.display = 'block';
+          });
+      }
+
+      initDailyMonthPicker();
+    });
+
+  style.
+    .revenue-chart-section {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 24px 28px;
+      margin-bottom: 24px;
+    }
+    .revenue-chart-section .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .revenue-chart-section .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin: 0;
+    }
+    .revenue-chart-section .section-subtitle {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .revenue-chart-wrapper {
+      position: relative;
+      height: 280px;
+    }
+    .daily-chart-section .section-header {
+      align-items: center;
+    }
+    .daily-month-picker {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    .daily-month-picker label { font-weight: 600; white-space: nowrap; }
+    #dailyMonthInput {
+      border: 1px solid #d1d5db;
+      border-radius: 7px;
+      padding: 5px 10px;
+      font-size: 13px;
+      color: #374151;
+      cursor: pointer;
+    }
+    #dailyMonthInput:focus { border-color: #10b981; outline: none; box-shadow: 0 0 0 3px rgba(16,185,129,.12); }
+    .daily-chart-loading,
+    .daily-chart-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 200px;
+      color: #9ca3af;
+      font-size: 14px;
+    }
+
+  //- Khối "Top nguồn đặt phòng" và "Hoạt động gần đây" — tạm ẩn theo yêu cầu
+  //-
+    .dashboard-bottom
+        .bottom-section.booking-sources-section
+          .section-header
+            h2.section-title Top nguồn đặt phòng
+          .booking-sources-list
+            if dashboardData && dashboardData.topBookingSources
+              each source in dashboardData.topBookingSources
+                .source-item
+                  .source-name= source.source
+                  .source-bar-wrapper
+                    .source-bar(style=`width: ${(source.count / dashboardData.topBookingSources[0].count * 100)}%`)
+                  .source-count= source.count + ' đặt phòng'
+
+        .bottom-section.recent-activities-section
+          .section-header
+            h2.section-title Hoạt động gần đây
+          .activities-list
+            if dashboardData && dashboardData.recentActivities
+              each activity in dashboardData.recentActivities
+                .activity-item
+                  - const dotClass = `dot-${activity.color}`
+                  .activity-dot(class=dotClass)
+                  .activity-content
+                    .activity-text= activity.activity
+                    .activity-time= activity.timeAgo
 

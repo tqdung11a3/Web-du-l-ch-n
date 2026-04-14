@@ -17,6 +17,7 @@
   const hotelsData    = JSON.parse(document.getElementById("hotels-data")?.textContent   || "[]");
   const departureMeta = JSON.parse(document.getElementById("departure-meta")?.textContent|| "{}");
   const pathAdmin     = JSON.parse(document.getElementById("path-admin")?.textContent    || '""');
+  const currentCompanyId = JSON.parse(document.getElementById("current-company-id")?.textContent || '""');
 
   const segmentsWrapper   = document.getElementById("segments-wrapper");
   const addSegmentBtn     = document.getElementById("add-segment-btn");
@@ -29,6 +30,14 @@
   const cancelBtn         = document.getElementById("cancel-btn");
 
   if (!segmentsWrapper) return; // Trang list, không làm gì
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
   // ── Khởi tạo dữ liệu từ existing segment ───────────────────────────────────
   function init() {
@@ -64,12 +73,15 @@
     const clone = tmpl.content.cloneNode(true);
     const el    = clone.querySelector(".th-segment-item");
 
-    // Đổ danh sách hotel vào select
+    // Đổ danh sách hotel vào select (phân biệt cùng/khác company)
     const sel = el.querySelector(".seg-hotel-select");
     for (const h of hotelsData) {
       const opt = document.createElement("option");
-      opt.value       = h._id;
-      opt.textContent = h.name;
+      opt.value = h._id;
+      const isCross = currentCompanyId && String(h.companyId) !== currentCompanyId;
+      const ownerLabel = (h.companyName || "").trim() || "Công ty khác";
+      opt.textContent = isCross ? `${h.name} [${ownerLabel}]` : h.name;
+      if (isCross) opt.style.color = "#d97706";
       sel.appendChild(opt);
     }
 
@@ -182,10 +194,17 @@
     card.dataset.hotelId  = hotelId;
     card.dataset.isPrimary = isPrimary ? "1" : "0";
 
+    const hotelData = hotelsData.find((h) => h._id === hotelId);
+    const isCross = hotelData && currentCompanyId && String(hotelData.companyId) !== currentCompanyId;
+    const ownerLabel = (hotelData && (hotelData.companyName || "").trim()) || "Công ty khác";
+    const crossBadge = isCross
+      ? ` <span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px">${escapeHtml(ownerLabel)}</span>`
+      : "";
+
     card.innerHTML = `
       <div class="seg-hotel-card__header">
         <div class="seg-hotel-card__title">
-          <strong>${hotelName}</strong>
+          <strong>${escapeHtml(hotelName)}</strong>${crossBadge}
         </div>
         <button type="button" class="seg-hotel-remove-btn">
           <i class="fa-solid fa-xmark"></i> Xoá
@@ -503,6 +522,22 @@
       if (!confirm(`Một số khung chưa đủ chỗ: ${desc}. Vẫn tiếp tục?`)) return;
     }
 
+    // Kiểm tra xem có khách sạn khác company không
+    const hasCrossCompany = segments.some((seg) =>
+      (seg.hotels || []).some((h) => {
+        const hotelData = hotelsData.find((hd) => hd._id === h.hotelId);
+        return hotelData && currentCompanyId && String(hotelData.companyId) !== currentCompanyId;
+      })
+    );
+
+    if (hasCrossCompany) {
+      if (!confirm(
+        "Cấu hình có chứa khách sạn thuộc công ty khác. " +
+        "Hệ thống sẽ gửi yêu cầu duyệt tới công ty sở hữu khách sạn đó. " +
+        "Phòng tại khách sạn cùng công ty sẽ được giữ ngay. Tiếp tục?"
+      )) return;
+    }
+
     // Lưu draft ngầm (không hiển thị alert)
     try {
       await saveDraftInternal();
@@ -563,16 +598,7 @@
   confirmBtn?.addEventListener("click", confirmSegments);
   cancelBtn?.addEventListener("click", cancelSegments);
 
-  // Nút đồng bộ paxRequired từ seatsTotal của lịch khởi hành
-  const syncPaxBtn = document.getElementById("sync-pax-btn");
-  syncPaxBtn?.addEventListener("click", () => {
-    const seats = syncPaxBtn.dataset.seats;
-    if (!seats) { alert("Lịch khởi hành này chưa có thông tin tổng số ghế."); return; }
-    if (paxInput) {
-      paxInput.value = seats;
-      updatePaxDisplay();
-    }
-  });
+  // Nút đồng bộ paxRequired đã bị xóa — giá trị luôn được lấy trực tiếp từ seatsTotal của tour khi tải trang
 
   // ── Khởi chạy ───────────────────────────────────────────────────────────────
   init();

@@ -78,6 +78,8 @@ const schema = new Schema(
       default: {},
     },
     
+    transferProofImages: [String], // ảnh chứng từ chuyển khoản do khách gửi lên
+
     // ==== ĐƠN TẠM / GIỮ CHỖ ====
     isTemporaryHold: {
       type: Boolean,

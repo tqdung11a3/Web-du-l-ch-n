@@ -16,17 +16,20 @@ block main
           .section-header
             i.fa-solid.fa-user
             h3 Thông tin khách hàng
+            button#editGuestBtn.btn-edit-guest(type="button" onclick="openEditGuestModal()")
+              i.fa-solid.fa-pen-to-square
+              |  Chỉnh sửa
           .section-content
             .info-grid
               .info-item
                 .label Họ và tên:
-                .value= bookingDetail.guest.fullName || "—"
+                .value#guestDisplayName= bookingDetail.guest.fullName || "—"
               .info-item
                 .label Số điện thoại:
-                .value= bookingDetail.guest.phone || "—"
+                .value#guestDisplayPhone= bookingDetail.guest.phone || "—"
               .info-item
                 .label Email:
-                .value= bookingDetail.guest.email || "—"
+                .value#guestDisplayEmail= bookingDetail.guest.email || "—"
             if bookingDetail.guest.cccdImages && bookingDetail.guest.cccdImages.length
               .cccd-section
                 .label
@@ -36,6 +39,78 @@ block main
                   each img in bookingDetail.guest.cccdImages
                     a.cccd-gallery-item(href=img target="_blank" title="Xem ảnh gốc")
                       img(src=img alt="CCCD")
+
+        //- Modal chỉnh sửa thông tin khách hàng
+        #editGuestModal.edit-guest-modal(style="display:none")
+          .edit-guest-modal__overlay(onclick="closeEditGuestModal()")
+          .edit-guest-modal__box
+            .edit-guest-modal__header
+              h4
+                i.fa-solid.fa-user-pen
+                |  Chỉnh sửa thông tin khách hàng
+              button.edit-guest-modal__close(type="button" onclick="closeEditGuestModal()")
+                i.fa-solid.fa-xmark
+            .edit-guest-modal__body
+              .edit-guest-field
+                label(for="editGuestName") Họ và tên
+                input#editGuestName(type="text" placeholder="Nhập họ và tên..." value=bookingDetail.guest.fullName || "")
+              .edit-guest-field
+                label(for="editGuestPhone") Số điện thoại
+                input#editGuestPhone(type="text" placeholder="Nhập số điện thoại..." value=bookingDetail.guest.phone || "")
+              .edit-guest-field
+                label(for="editGuestEmail") Email
+                input#editGuestEmail(type="email" placeholder="Nhập email..." value=bookingDetail.guest.email || "")
+            .edit-guest-modal__footer
+              button.btn-cancel-guest(type="button" onclick="closeEditGuestModal()") Hủy
+              button#saveGuestBtn.btn-save-guest(type="button" onclick="saveGuestInfo()") 
+                i.fa-solid.fa-floppy-disk
+                |  Lưu thay đổi
+
+        script.
+          var _bookingCode = '!{bookingDetail.code}';
+          var _pathAdmin = '!{pathAdmin}';
+
+          function openEditGuestModal() {
+            document.getElementById('editGuestModal').style.display = 'flex';
+          }
+          function closeEditGuestModal() {
+            document.getElementById('editGuestModal').style.display = 'none';
+          }
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeEditGuestModal();
+          });
+          function saveGuestInfo() {
+            var fullName = document.getElementById('editGuestName').value.trim();
+            var phone    = document.getElementById('editGuestPhone').value.trim();
+            var email    = document.getElementById('editGuestEmail').value.trim();
+            if (!fullName) { alert('Vui lòng nhập họ và tên.'); return; }
+            var btn = document.getElementById('saveGuestBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+            fetch('/' + _pathAdmin + '/hotel/booking/update-guest/' + _bookingCode, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fullName: fullName, phone: phone, email: email }),
+            })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.code === 'success') {
+                  document.getElementById('guestDisplayName').textContent  = fullName || '—';
+                  document.getElementById('guestDisplayPhone').textContent = phone   || '—';
+                  document.getElementById('guestDisplayEmail').textContent = email   || '—';
+                  closeEditGuestModal();
+                } else {
+                  alert('Lỗi: ' + (data.message || 'Không thể cập nhật thông tin'));
+                  btn.disabled = false;
+                  btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi';
+                }
+              })
+              .catch(function() {
+                alert('Có lỗi kết nối, vui lòng thử lại.');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi';
+              });
+          }
 
         //- Thông tin khách sạn
         .booking-section
@@ -189,6 +264,18 @@ block main
                 .value
                   strong.total-amount #{bookingDetail.orderTotalFormat} #{bookingDetail.currency}
 
+        //- Ảnh chứng từ chuyển khoản
+        if bookingDetail.transferProofImages && bookingDetail.transferProofImages.length
+          .booking-section
+            .section-header
+              i.fa-solid.fa-money-bill-transfer
+              h3 Ảnh chứng từ chuyển khoản
+            .section-content
+              .cccd-gallery.cccd-gallery--detail
+                each img in bookingDetail.transferProofImages
+                  a.cccd-gallery-item(href=img target="_blank" title="Xem ảnh gốc")
+                    img(src=img alt="Chứng từ chuyển khoản")
+
         //- Ghi chú
         if bookingDetail.note
           .booking-section
@@ -288,4 +375,83 @@ block main
       font-weight: 600;
       color: #059669;
     }
+
+    /* Nút chỉnh sửa thông tin khách hàng */
+    .section-header { display: flex; align-items: center; gap: 10px; }
+    .btn-edit-guest {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid #6366f1;
+      border-radius: 6px;
+      background: #eef2ff;
+      color: #4338ca;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-edit-guest:hover { background: #e0e7ff; }
+
+    /* Modal chỉnh sửa */
+    .edit-guest-modal {
+      position: fixed; inset: 0; z-index: 10200;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .edit-guest-modal__overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,.45);
+    }
+    .edit-guest-modal__box {
+      position: relative; z-index: 1;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+      width: 100%; max-width: 460px;
+      padding: 0;
+      overflow: hidden;
+    }
+    .edit-guest-modal__header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 18px 22px;
+      background: #f5f7ff;
+      border-bottom: 1px solid #e0e6ff;
+    }
+    .edit-guest-modal__header h4 {
+      margin: 0; font-size: 15px; font-weight: 700; color: #1a2a6c;
+      flex: 1; display: flex; align-items: center; gap: 8px;
+    }
+    .edit-guest-modal__close {
+      background: none; border: none; cursor: pointer;
+      color: #888; font-size: 16px; padding: 2px 6px; border-radius: 4px;
+    }
+    .edit-guest-modal__close:hover { background: #f0f0f0; color: #333; }
+    .edit-guest-modal__body { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+    .edit-guest-field { display: flex; flex-direction: column; gap: 6px; }
+    .edit-guest-field label { font-size: 13px; font-weight: 600; color: #374151; }
+    .edit-guest-field input {
+      border: 1px solid #d1d5db; border-radius: 7px;
+      padding: 9px 12px; font-size: 14px; color: #111;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .edit-guest-field input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); outline: none; }
+    .edit-guest-modal__footer {
+      display: flex; justify-content: flex-end; gap: 10px;
+      padding: 14px 22px;
+      border-top: 1px solid #f0f0f0;
+    }
+    .btn-cancel-guest {
+      padding: 8px 18px; border-radius: 7px; border: 1px solid #d1d5db;
+      background: #fff; color: #555; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-cancel-guest:hover { background: #f3f4f6; }
+    .btn-save-guest {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 20px; border-radius: 7px; border: none;
+      background: #4f46e5; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-save-guest:hover { background: #4338ca; }
+    .btn-save-guest:disabled { opacity: .65; cursor: not-allowed; }
 

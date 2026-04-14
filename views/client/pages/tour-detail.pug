@@ -39,6 +39,8 @@ block main
               button.tour-tab-btn(data-tab="schedule") Lịch trình
               button.tour-tab-btn(data-tab="includes") Bao gồm
               button.tour-tab-btn(data-tab="reviews") Đánh giá
+              if tourHotels && tourHotels.length > 0
+                button.tour-tab-btn(data-tab="hotels") Khách sạn
 
             .tour-tabs-body
               // Tab: Tổng quan
@@ -182,6 +184,34 @@ block main
                     span.page-info 1/1
                     button.btn-next(disabled) Sau
 
+              // Tab: Khách sạn
+              if tourHotels && tourHotels.length > 0
+                .tour-tab-panel(data-tab="hotels")
+                  .inner-title-main Khách sạn trong chuyến đi
+                  .tour-hotels-grid
+                    each h in tourHotels
+                      a.tour-hotel-card(href=`/hotel/detail/${h._id}` target="_blank")
+                        .tour-hotel-card__image
+                          if h.avatar
+                            img(src=h.avatar alt=h.name)
+                          else
+                            .tour-hotel-card__no-image
+                        .tour-hotel-card__body
+                          h4.tour-hotel-card__name= h.name
+                          if h.starRating > 0
+                            p.tour-hotel-card__rating-text #{h.starRating}/5 sao
+                          if h.address
+                            p.tour-hotel-card__address= h.address
+                          if h.note
+                            .tour-hotel-card__note= h.note
+                          .tour-hotel-card__footer
+                            if h.basePrice > 0
+                              .tour-hotel-card__price
+                                span.tour-hotel-card__price-from Từ 
+                                span.tour-hotel-card__price-value= h.basePrice.toLocaleString('vi-VN')
+                                span.tour-hotel-card__price-unit  #{h.currency || 'VND'}/đêm
+                            span.tour-hotel-card__cta Xem chi tiết
+
         .inner-right
           // Truyền thêm dữ liệu cho JS
           - const babyMode      = tourDetail.babyPricingMode || 'fixed';
@@ -240,9 +270,12 @@ block main
                         value=d
                         selected=(departureDatesList.length === 1 && idx === 0)
                       )= d
-                  #departureSeatInfo.departure-seat-info(style="display:none")
                 else
                   span.inner-hl Chưa thiết lập ngày khởi hành
+              .inner-item.inner-item--departure-seats
+                i.fa-solid.fa-bed
+                span Số chỗ còn lại:
+                #departureSeatInfo.departure-seat-info(style="display:none")
 
             // Khởi hành tại: 1 điểm duy nhất
             .inner-group.departure

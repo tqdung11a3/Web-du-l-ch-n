@@ -56,6 +56,8 @@ const schema = new mongoose.Schema(
     deletedBy: String,
     deletedAt: Date,
 
+    transferProofImages: [String], // ảnh chứng từ chuyển khoản do khách gửi lên
+
     // ==== ĐƠN TẠM / GIỮ CHỖ TOUR ====
     isTemporaryHold: { type: Boolean, default: false },
     holdExpiresAt:   { type: Date,    default: null  },

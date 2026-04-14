@@ -12,6 +12,10 @@ router.post("/cancel-hold", hotelBookingController.cancelHold); // sendBeacon d√
 
 router.get("/pending", hotelBookingController.pending);
 
+router.get("/check-payment-status", hotelBookingController.checkPaymentStatus);
+
+router.patch("/transfer-proof", hotelBookingController.saveTransferProof);
+
 router.get("/success", hotelBookingController.success);
 
 module.exports = router;

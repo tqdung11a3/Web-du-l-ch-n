@@ -384,10 +384,7 @@
       
       if (selectedRoomIds.length === 0) {
         if (typeof Notyf !== 'undefined') {
-          const notyf = new Notyf({
-            duration: 3000,
-            position: { x: 'right', y: 'top' }
-          });
+          const notyf = new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } });
           notyf.error('Vui lòng chọn phòng!');
         } else {
           alert('Vui lòng chọn phòng!');
@@ -395,13 +392,9 @@
         return;
       }
       
-      // Kiểm tra số lượng phòng được chọn
       if (selectedRoomIds.length !== requiredCount) {
         if (typeof Notyf !== 'undefined') {
-          const notyf = new Notyf({
-            duration: 3000,
-            position: { x: 'right', y: 'top' }
-          });
+          const notyf = new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } });
           notyf.error(`Vui lòng chọn đúng ${requiredCount} phòng!`);
         } else {
           alert(`Vui lòng chọn đúng ${requiredCount} phòng!`);
@@ -409,39 +402,71 @@
         return;
       }
       
-      // Disable button và hiển thị loading
       confirmBtn.disabled = true;
       confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
       
       try {
         const response = await fetch('/admin/hotel/booking/assign-room', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            bookingId,
-            roomIds: selectedRoomIds,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, roomIds: selectedRoomIds }),
         });
         
         const data = await response.json();
         
         if (data.code === 'success') {
-          if (typeof Notyf !== 'undefined') {
-            const notyf = new Notyf({
-              duration: 3000,
-              position: { x: 'right', y: 'top' }
-            });
-            notyf.success(data.message || 'Xếp phòng thành công!');
-          } else {
-            alert(data.message || 'Xếp phòng thành công!');
+          // Đóng modal chọn phòng
+          modal.remove();
+
+          // Đánh dấu card này đã xếp xong
+          const assignedCard = document.querySelector(
+            `.pending-booking-card[data-booking-id="${bookingId}"]`
+          );
+          if (assignedCard) {
+            const assignBtn = assignedCard.querySelector('.btn-assign-room');
+            if (assignBtn) {
+              assignBtn.disabled = true;
+              assignBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Đã xếp';
+              assignBtn.style.cssText = 'background:#16a34a;cursor:not-allowed;opacity:.85;';
+            }
+            assignedCard.style.opacity = '0.55';
           }
-          
-          // Reload trang sau 1 giây
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+
+          // Tìm nhóm đang mở trong modal
+          const currentContent = Array.from(
+            document.querySelectorAll('.pending-detail-content')
+          ).find(el => el.style.display !== 'none' && el.style.display !== '');
+
+          const allCards = currentContent
+            ? Array.from(currentContent.querySelectorAll('.pending-booking-card'))
+            : [];
+
+          const remainingCards = allCards.filter(card => {
+            const btn = card.querySelector('.btn-assign-room');
+            return btn && !btn.disabled;
+          });
+
+          if (allCards.length > 0 && remainingCards.length === 0) {
+            // Tất cả phòng đã được xếp → thông báo thành công + reload
+            if (typeof Notyf !== 'undefined') {
+              const notyf = new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } });
+              notyf.success('Đã xếp phòng thành công cho tất cả phòng trong đơn!');
+            } else {
+              alert('Đã xếp phòng thành công!');
+            }
+            setTimeout(() => { window.location.reload(); }, 1200);
+          } else {
+            // Vẫn còn phòng chưa xếp → thông báo nhỏ, không reload
+            const remaining = remainingCards.length;
+            if (typeof Notyf !== 'undefined') {
+              const notyf = new Notyf({ duration: 2500, position: { x: 'right', y: 'top' } });
+              notyf.success(
+                remaining === 1
+                  ? 'Đã xếp phòng! Còn 1 phòng cần xếp.'
+                  : `Đã xếp phòng! Còn ${remaining} phòng cần xếp.`
+              );
+            }
+          }
         } else {
           throw new Error(data.message || 'Có lỗi xảy ra');
         }
@@ -449,16 +474,12 @@
         console.error('Error assigning room:', error);
         
         if (typeof Notyf !== 'undefined') {
-          const notyf = new Notyf({
-            duration: 3000,
-            position: { x: 'right', y: 'top' }
-          });
+          const notyf = new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } });
           notyf.error(error.message || 'Không thể xếp phòng!');
         } else {
           alert(error.message || 'Không thể xếp phòng!');
         }
         
-        // Re-enable button
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = 'Xác nhận';
       }

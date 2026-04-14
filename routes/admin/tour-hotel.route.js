@@ -1,9 +1,13 @@
 const express    = require("express");
 const router     = express.Router();
 const controller = require("../../controllers/admin/tour-hotel.controller");
+const linkRequestController = require("../../controllers/admin/hotel-link-request.controller");
 
 // Trang danh sách tour để chọn
 router.get("/list", controller.list);
+
+// Yêu cầu liên kết đã gửi
+router.get("/link-requests", linkRequestController.listSent);
 
 // Trang cấu hình segment: ?departure=YYYY-MM-DD
 router.get("/detail/:tourId", controller.detail);

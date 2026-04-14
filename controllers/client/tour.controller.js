@@ -309,6 +309,70 @@ module.exports.detail = async (req, res) => {
   tourDetail.locations = normalizedLocations;
   tourDetail.cityList = cityList;
 
+  // ⬇️ PHẦN: Lấy khách sạn liên kết tour từ TourSegment (đã xác nhận)
+  let tourHotels = [];
+  try {
+    const TourSegment = require("../../models/tour-segment.model");
+    const Hotel = require("../../models/hotel.model");
+
+    const tourSegs = await TourSegment.find({
+      tourId: tourDetail._id,
+      status: { $in: ["confirmed", "pending_approval"] },
+    }).lean();
+
+    if (tourSegs.length > 0) {
+      const hotelIdSet = new Set();
+      tourSegs.forEach((ts) => {
+        (ts.segments || []).forEach((seg) => {
+          (seg.hotels || []).forEach((h) => {
+            if (h.hotelId) hotelIdSet.add(String(h.hotelId));
+          });
+        });
+      });
+
+      const hotelIds = Array.from(hotelIdSet);
+      if (hotelIds.length > 0) {
+        const hotelDocs = await Hotel.find({ _id: { $in: hotelIds }, deleted: false })
+          .select("_id name avatar images address starRating basePrice ratingOverall currency")
+          .lean();
+        const hotelsMap = {};
+        hotelDocs.forEach((h) => { hotelsMap[String(h._id)] = h; });
+
+        const seen = new Set();
+        tourSegs.forEach((ts) => {
+          (ts.segments || []).forEach((seg) => {
+            (seg.hotels || []).forEach((h) => {
+              const hid = String(h.hotelId);
+              const hotel = hotelsMap[hid];
+              if (!hotel) return;
+              const key = hid + "|" + (seg.fromDate ? seg.fromDate.toISOString() : "") + "|" + (seg.toDate ? seg.toDate.toISOString() : "");
+              if (seen.has(key)) return;
+              seen.add(key);
+
+              const fromStr = seg.fromDate ? moment(seg.fromDate).format("DD/MM/YYYY") : "";
+              const toStr = seg.toDate ? moment(seg.toDate).format("DD/MM/YYYY") : "";
+              const note = fromStr && toStr ? fromStr + " → " + toStr : "";
+
+              tourHotels.push({
+                _id: hotel._id,
+                name: hotel.name,
+                avatar: hotel.avatar || (hotel.images && hotel.images[0]) || "",
+                address: hotel.address || "",
+                starRating: hotel.starRating || 0,
+                basePrice: hotel.basePrice || 0,
+                ratingOverall: hotel.ratingOverall || 0,
+                currency: hotel.currency || "VND",
+                note: note,
+              });
+            });
+          });
+        });
+      }
+    }
+  } catch (e) {
+    console.error("tour.detail fetch tourHotels error:", e);
+  }
+
   // ⬇️ PHẦN: Lấy hoạt động gợi ý từ DB đã sync Amadeus
   let activities = [];
 
@@ -328,6 +392,7 @@ module.exports.detail = async (req, res) => {
     breadcrumb: breadcrumb,
     tourDetail: tourDetail,
     activities: activities,
+    tourHotels: tourHotels,
   });
 };
 

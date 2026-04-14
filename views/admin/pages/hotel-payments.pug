@@ -2,6 +2,8 @@
 extends ../layouts/default.pug
 
 block main
+  - const activeTab = paymentsData.paymentTab || 'hotel'
+
   .payments-page
     //- Hotel Selector
     include ../partials/hotel-selector.pug
@@ -12,56 +14,144 @@ block main
         h1.page-title Thanh toán
         p.page-subtitle Quản lý hóa đơn và thanh toán
 
-    //- Invoices Table
-    .invoices-table-wrapper
-      table.invoices-table
-        thead
-          tr
-            th Booking
-            th Khách
-            th Số phòng
-            th Ngày phát hành
-            th Hạn thanh toán
-            th Tổng tiền
-            th Đã thanh toán
-            th Trạng thái
-            th Hành động
-        tbody
-          if paymentsData.invoices && paymentsData.invoices.length > 0
-            each invoice in paymentsData.invoices
-              tr
-                td= invoice.bookingCode
-                td= invoice.customerName
-                td= invoice.roomCount + ' phòng'
-                td= invoice.issueDate
-                td= invoice.dueDate
-                td
-                  .amount= invoice.totalAmount + 'K'
-                td
-                  .paid-amount= invoice.paidAmount + 'K'
-                td
-                  - const statusBadgeClass = `badge-${invoice.statusColor}`
-                  .status-badge(class=statusBadgeClass)= invoice.statusText
-                td
-                  .action-buttons
-                    button.action-btn.view-btn
-                      i.fa-solid.fa-eye
-                    button.action-btn.download-btn
-                      i.fa-solid.fa-download
-          else
+    //- Tab navigation
+    .payments-tab-nav
+      button.payments-tab-btn(type="button" data-tab="hotel" class=(activeTab === 'hotel' ? 'active' : ''))
+        i.fa-solid.fa-hotel
+        |  Đặt phòng khách sạn
+        span.payments-tab-count  (#{paymentsData.hotelInvoices ? paymentsData.hotelInvoices.length : 0})
+      button.payments-tab-btn(type="button" data-tab="tour" class=(activeTab === 'tour' ? 'active' : ''))
+        i.fa-solid.fa-map-location-dot
+        |  Đặt tour liên kết
+        span.payments-tab-count  (#{paymentsData.tourInvoices ? paymentsData.tourInvoices.length : 0})
+
+    //- ── Tab: Đặt phòng khách sạn ──
+    .payments-tab-panel(data-panel="hotel" style=(activeTab === 'hotel' ? '' : 'display:none'))
+      //- Summary Cards
+      .summary-cards
+        .summary-card
+          .card-label Tổng doanh thu đã thu
+          .card-value= paymentsData.hotelSummary ? paymentsData.hotelSummary.totalRevenue.toLocaleString('vi-VN') + 'K' : '0K'
+        .summary-card.orange
+          .card-label Chờ thanh toán
+          .card-value.orange-value= paymentsData.hotelSummary ? paymentsData.hotelSummary.pendingPayments.toLocaleString('vi-VN') + 'K' : '0K'
+        .summary-card.red
+          .card-label Hóa đơn chưa thanh toán
+          .card-value.red-value= paymentsData.hotelSummary ? paymentsData.hotelSummary.unpaidInvoices : 0
+
+      .invoices-table-wrapper
+        table.invoices-table
+          thead
             tr
-              td(colspan="9" style="text-align: center; padding: 40px;")
-                .empty-message Không có hóa đơn nào
+              th Booking
+              th Khách
+              th Số phòng
+              th Ngày phát hành
+              th Hạn thanh toán
+              th Tổng tiền
+              th Đã thanh toán
+              th Trạng thái
+          tbody
+            if paymentsData.hotelInvoices && paymentsData.hotelInvoices.length > 0
+              each invoice in paymentsData.hotelInvoices
+                tr
+                  td= invoice.bookingCode
+                  td= invoice.customerName
+                  td= invoice.roomCount + ' phòng'
+                  td= invoice.issueDate
+                  td= invoice.dueDate
+                  td
+                    .amount= invoice.totalAmount + 'K'
+                  td
+                    .paid-amount= invoice.paidAmount + 'K'
+                  td
+                    - const hBadge = 'badge-' + invoice.statusColor
+                    .status-badge(class=hBadge)= invoice.statusText
+            else
+              tr
+                td(colspan="8" style="text-align:center;padding:40px;")
+                  .empty-message Không có hóa đơn nào
 
-    //- Summary Cards
-    .summary-cards
-      .summary-card
-        .card-label Tổng doanh thu (Tháng này)
-        .card-value= paymentsData.summary ? paymentsData.summary.totalRevenue.toLocaleString('vi-VN') + 'K' : '0K'
-      .summary-card.orange
-        .card-label Thanh toán chờ xử lý
-        .card-value.orange-value= paymentsData.summary ? paymentsData.summary.pendingPayments.toLocaleString('vi-VN') + 'K' : '0K'
-      .summary-card.red
-        .card-label Hóa đơn chưa thanh toán
-        .card-value.red-value= paymentsData.summary ? paymentsData.summary.unpaidInvoices : 0
+    //- ── Tab: Đặt tour liên kết ──
+    .payments-tab-panel(data-panel="tour" style=(activeTab === 'tour' ? '' : 'display:none'))
+      //- Summary Cards
+      .summary-cards
+        .summary-card
+          .card-label Tổng doanh thu đã thu
+          .card-value= paymentsData.tourSummary ? paymentsData.tourSummary.totalRevenue.toLocaleString('vi-VN') + 'K' : '0K'
+        .summary-card.orange
+          .card-label Chờ thanh toán
+          .card-value.orange-value= paymentsData.tourSummary ? paymentsData.tourSummary.pendingPayments.toLocaleString('vi-VN') + 'K' : '0K'
+        .summary-card.red
+          .card-label Hóa đơn chưa thanh toán
+          .card-value.red-value= paymentsData.tourSummary ? paymentsData.tourSummary.unpaidInvoices : 0
 
+      .invoices-table-wrapper
+        table.invoices-table
+          thead
+            tr
+              th Booking
+              th Khách
+              th Tour
+              th Khởi hành
+              th Số phòng
+              th Ngày phát hành
+              th Tổng tiền
+              th Đã thanh toán
+              th Trạng thái
+          tbody
+            if paymentsData.tourInvoices && paymentsData.tourInvoices.length > 0
+              each invoice in paymentsData.tourInvoices
+                tr
+                  td= invoice.bookingCode
+                  td= invoice.customerName
+                  td= invoice.tourName || '—'
+                  td= invoice.tourDeparture || '—'
+                  td= invoice.roomCount + ' phòng'
+                  td= invoice.issueDate
+                  td
+                    .amount= invoice.totalAmount + 'K'
+                  td
+                    .paid-amount= invoice.paidAmount + 'K'
+                  td
+                    - const tBadge = 'badge-' + invoice.statusColor
+                    .status-badge(class=tBadge)= invoice.statusText
+            else
+              tr
+                td(colspan="9" style="text-align:center;padding:40px;")
+                  .empty-message Không có hóa đơn nào
+
+  script.
+    document.querySelectorAll('.payments-tab-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var tab = btn.dataset.tab;
+        document.querySelectorAll('.payments-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        document.querySelectorAll('.payments-tab-panel').forEach(function(p) {
+          p.style.display = p.dataset.panel === tab ? '' : 'none';
+        });
+      });
+    });
+
+  style.
+    .payments-tab-nav {
+      display: flex; gap: 4px;
+      padding: 0 0 0;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    .payments-tab-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 18px; border: none; background: none; cursor: pointer;
+      font-size: 13px; font-weight: 600; color: #6b7280;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      border-radius: 6px 6px 0 0; transition: color .15s, border-color .15s;
+    }
+    .payments-tab-btn:hover { color: #374151; background: #f9fafb; }
+    .payments-tab-btn.active { color: #4f46e5; border-bottom-color: #4f46e5; background: #f5f3ff; }
+    .payments-tab-count {
+      font-size: 11px; background: #e5e7eb; color: #6b7280;
+      border-radius: 10px; padding: 1px 7px; font-weight: 700;
+    }
+    .payments-tab-btn.active .payments-tab-count { background: #ede9fe; color: #6d28d9; }
+    .payments-tab-panel .summary-cards { margin-bottom: 20px; }

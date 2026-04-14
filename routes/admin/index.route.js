@@ -14,9 +14,11 @@ const hotelRoutes = require("./hotel.route");
 const tourHotelRoutes = require("./tour-hotel.route");
 const superAdminRoutes = require("./super-admin.route");
 const notificationRoutes = require("./notification.route");
+const hotelLinkRequestRoutes = require("./hotel-link-request.route");
 
 const authMiddleware = require("../../middlewares/admin/auth.middleware");
 const notificationMiddleware = require("../../middlewares/admin/notification.middleware");
+const hotelListMiddleware = require("../../middlewares/admin/hotel-list.middleware");
 
 router.use("/account", accountRoutes);
 
@@ -34,6 +36,7 @@ router.use("/setting", authMiddleware.verifyToken, notificationMiddleware.getUnr
 router.use("/profile", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, profileRoutes);
 router.use("/upload", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, uploadRoutes);
 router.use("/company", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, companyRoutes);
+router.use("/hotel/link-requests", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, hotelListMiddleware.getHotelList, hotelLinkRequestRoutes);
 router.use("/hotel", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, hotelRoutes);
 router.use("/tour-hotel", authMiddleware.verifyToken, notificationMiddleware.getUnreadCount, tourHotelRoutes);
 router.use("/notifications", authMiddleware.verifyToken, notificationRoutes);

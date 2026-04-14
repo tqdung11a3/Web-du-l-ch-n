@@ -123,7 +123,39 @@ block main
                 p
                   i.fa-solid.fa-building-columns
                   strong  Chuyển khoản ngân hàng
-                p Vui lòng chuyển khoản theo thông tin bên dưới và gửi ảnh chứng từ cho chúng tôi qua hotline/email. Đơn hàng sẽ được xác nhận sau khi nhận được thanh toán.
+                .bank-details
+                  .bank-details-row
+                    span.bank-label Ngân hàng:
+                    span.bank-value Vietcombank
+                  .bank-details-row
+                    span.bank-label Tên tài khoản:
+                    span.bank-value Le Van A
+                  .bank-details-row
+                    span.bank-label Số tài khoản:
+                    span.bank-value 0123456789
+                p.bank-note Sau khi chuyển khoản, vui lòng gửi ảnh chứng từ bên dưới để chúng tôi xác nhận nhanh hơn.
+              .transfer-proof-section
+                h4.proof-title
+                  i.fa-solid.fa-image
+                  |  Ảnh chứng từ chuyển khoản
+                if transferProofImages && transferProofImages.length
+                  .proof-gallery
+                    each img in transferProofImages
+                      a.proof-gallery-item(href=img target="_blank" title="Xem ảnh gốc")
+                        img(src=img alt="Chứng từ")
+                  p.proof-sent ✅ Đã gửi #{transferProofImages.length} ảnh chứng từ. Bạn có thể gửi thêm nếu cần.
+                else
+                  p.proof-empty Chưa có ảnh chứng từ nào.
+                .upload-area
+                  input#transferProofInput(type="file" accept="image/*" multiple style="display:none")
+                  label.btn-upload-label(for="transferProofInput")
+                    i.fa-solid.fa-upload
+                    |  Chọn ảnh
+                  .upload-preview#uploadPreview
+                  p#uploadStatus.upload-status
+                  button#btnSubmitProof.btn-submit-proof(type="button" disabled)
+                    i.fa-solid.fa-paper-plane
+                    |  Gửi ảnh chứng từ
 
             else
               .payment-info
@@ -199,6 +231,38 @@ block main
         });
       })();
 
+  //- Polling: kiểm tra trạng thái thanh toán mỗi 5 giây
+  //- Khi admin đổi paymentStatus → "paid", tự động chuyển sang trang thành công
+  if orderDetail && orderDetail.paymentStatus === 'unpaid'
+    script.
+      (function () {
+        var orderCode = "!{orderDetail.code}";
+        var phone     = "!{phone}";
+        var INTERVAL  = 5000;
+        var timer     = setInterval(function () {
+          fetch(
+            '/order/check-payment-status' +
+            '?orderCode=' + encodeURIComponent(orderCode) +
+            '&phone='     + encodeURIComponent(phone)
+          )
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.code === 'ok' && data.paymentStatus === 'paid') {
+                clearInterval(timer);
+                window.location.href =
+                  '/order/success' +
+                  '?orderCode=' + encodeURIComponent(orderCode) +
+                  '&phone='     + encodeURIComponent(phone);
+              }
+            })
+            .catch(function () {});
+        }, INTERVAL);
+
+        window.addEventListener('beforeunload', function () {
+          clearInterval(timer);
+        });
+      })();
+
   //- JavaScript countdown timer
   if orderDetail && orderDetail.isTemporaryHold && orderDetail.paymentStatus === 'unpaid' && orderDetail.holdExpiresAt
     script.
@@ -246,3 +310,99 @@ block main
           clearInterval(interval);
         });
       })();
+
+  //- Upload ảnh chứng từ chuyển khoản
+  if orderDetail && orderDetail.paymentMethod === 'bank' && orderDetail.paymentStatus === 'unpaid'
+    script.
+      (function () {
+        var orderCode  = "!{orderDetail.code}";
+        var phone      = "!{phone}";
+        var inputEl    = document.getElementById('transferProofInput');
+        var previewEl  = document.getElementById('uploadPreview');
+        var submitBtn  = document.getElementById('btnSubmitProof');
+        var statusEl   = document.getElementById('uploadStatus');
+        if (!inputEl) return;
+
+        var selectedFiles = [];
+
+        inputEl.addEventListener('change', function () {
+          selectedFiles = Array.from(this.files);
+          previewEl.innerHTML = '';
+          selectedFiles.forEach(function (file) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+              var img = document.createElement('img');
+              img.src = e.target.result;
+              img.className = 'upload-preview-img';
+              previewEl.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+          });
+          submitBtn.disabled = selectedFiles.length === 0;
+          statusEl.textContent = '';
+        });
+
+        submitBtn.addEventListener('click', function () {
+          if (selectedFiles.length === 0) return;
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gửi...';
+          statusEl.textContent = '';
+
+          var formData = new FormData();
+          selectedFiles.forEach(function (file) {
+            formData.append('files', file);
+          });
+
+          fetch('/upload/images', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (!data.success || !data.urls || data.urls.length === 0) {
+                throw new Error('Upload ảnh thất bại');
+              }
+              return fetch('/order/transfer-proof', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderCode: orderCode, phone: phone, images: data.urls }),
+              });
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.code === 'ok') {
+                statusEl.textContent = '✅ Gửi ảnh thành công!';
+                statusEl.style.color = '#16a34a';
+                setTimeout(function () { window.location.reload(); }, 1200);
+              } else {
+                throw new Error(data.message || 'Lỗi không xác định');
+              }
+            })
+            .catch(function (err) {
+              statusEl.textContent = '❌ ' + err.message;
+              statusEl.style.color = '#dc2626';
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Gửi ảnh chứng từ';
+            });
+        });
+      })();
+
+  style.
+    .bank-details { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 14px 18px; margin: 12px 0; }
+    .bank-details-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 14px; }
+    .bank-details-row:last-child { margin-bottom: 0; }
+    .bank-label { font-weight: 600; color: #0369a1; min-width: 130px; }
+    .bank-value { color: #1e3a5f; font-weight: 500; }
+    .bank-note { font-size: 13px; color: #64748b; margin-top: 10px; }
+    .transfer-proof-section { margin-top: 18px; padding: 16px; background: #fafafa; border: 1px dashed #d1d5db; border-radius: 10px; }
+    .proof-title { font-size: 15px; font-weight: 600; color: #374151; margin: 0 0 12px; display: flex; align-items: center; gap: 6px; }
+    .proof-gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+    .proof-gallery-item img { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; }
+    .proof-sent { font-size: 13px; color: #16a34a; margin-bottom: 10px; }
+    .proof-empty { font-size: 13px; color: #9ca3af; margin-bottom: 10px; }
+    .upload-area { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .btn-upload-label { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: #e0f2fe; color: #0369a1; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; border: 1px solid #bae6fd; transition: background .15s; }
+    .btn-upload-label:hover { background: #bae6fd; }
+    .upload-preview { display: flex; flex-wrap: wrap; gap: 8px; }
+    .upload-preview-img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .upload-status { font-size: 13px; font-weight: 600; margin: 0; width: 100%; }
+    .btn-submit-proof { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .btn-submit-proof:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-submit-proof:disabled { background: #93c5fd; cursor: not-allowed; }

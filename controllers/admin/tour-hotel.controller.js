@@ -4,6 +4,7 @@
 // khung thời gian và phân bổ phòng khách sạn cho từng khung.
 
 const Tour        = require("../../models/tour.model");
+const Company     = require("../../models/company.model");
 const Hotel       = require("../../models/hotel.model");
 const HotelBooking= require("../../models/hotel-booking.model");
 const TourSegment = require("../../models/tour-segment.model");
@@ -73,9 +74,19 @@ module.exports.detail = async (req, res) => {
     const tour = await Tour.findOne({ _id: tourId, companyId, deleted: false }).lean();
     if (!tour) return res.redirect(`/${pathAdmin}/tour-hotel/list`);
 
-    const hotels = await Hotel.find({ companyId, deleted: false, status: "active" })
-      .select("name address")
+    const hotels = await Hotel.find({ deleted: false, status: "active" })
+      .select("name address companyId")
       .lean();
+
+    const hotelCompanyIds = [...new Set(hotels.map((h) => String(h.companyId)).filter(Boolean))];
+    const hotelCompanies = await Company.find({ _id: { $in: hotelCompanyIds } })
+      .select("name")
+      .lean();
+    const companyNameById = {};
+    for (const c of hotelCompanies) companyNameById[String(c._id)] = c.name || "";
+    for (const h of hotels) {
+      h.companyName = companyNameById[String(h.companyId)] || "";
+    }
 
     let selectedDeparture = null;
     let existingSegment   = null;
@@ -109,6 +120,7 @@ module.exports.detail = async (req, res) => {
       departureDateParam,
       pathAdmin,
       moment,
+      currentCompanyId: String(companyId),
     });
   } catch (err) {
     console.error("[tour-hotel.detail]", err);
@@ -133,8 +145,8 @@ module.exports.hotelAvailability = async (req, res) => {
       return res.json({ success: false, message: "Khoảng ngày không hợp lệ" });
     }
 
-    const hotel = await Hotel.findOne({ _id: hotelId, companyId, deleted: false })
-      .select("name address roomTypes rooms")
+    const hotel = await Hotel.findOne({ _id: hotelId, deleted: false })
+      .select("name address roomTypes rooms companyId")
       .lean();
 
     if (!hotel) {
@@ -214,8 +226,8 @@ module.exports.suggestAllocation = async (req, res) => {
     for (const h of sorted) {
       if (remaining <= 0) break;
 
-      const hotel = await Hotel.findOne({ _id: h.hotelId, companyId, deleted: false })
-        .select("name roomTypes rooms")
+      const hotel = await Hotel.findOne({ _id: h.hotelId, deleted: false })
+        .select("name roomTypes rooms companyId")
         .lean();
       if (!hotel) continue;
 
@@ -329,11 +341,17 @@ module.exports.confirmSegments = async (req, res) => {
       return res.json({ success: false, message: "Không tìm thấy cấu hình" });
     }
 
-    const Tour = require("../../models/tour.model");
-    const tourDoc = await Tour.findById(tourId).select("name").lean();
+    const TourModel = require("../../models/tour.model");
+    const HotelLinkRequest = require("../../models/hotel-link-request.model");
+    const Notification = require("../../models/notification.model");
+
+    const tourDoc = await TourModel.findById(tourId).select("name").lean();
     const tourName = tourDoc ? tourDoc.name : "Tour";
     const depDateFmt = moment(tourSeg.departureDate).format("DD/MM/YYYY");
     const endDateFmt = moment(tourSeg.endDate).format("DD/MM/YYYY");
+
+    const fromCompany = await Company.findById(companyId).select("name").lean();
+    const fromCompanyName = fromCompany ? fromCompany.name : "";
 
     // Huỷ TẤT CẢ booking hold cũ của segment này
     await HotelBooking.updateMany(
@@ -341,9 +359,20 @@ module.exports.confirmSegments = async (req, res) => {
       { status: "cancelled" }
     );
 
+    // Huỷ các link request cũ đang pending
+    await HotelLinkRequest.updateMany(
+      { tourSegmentId: tourSeg._id, status: "pending" },
+      { status: "rejected", responseNote: "Đã huỷ do xác nhận lại segment" }
+    );
+
     const newHoldIds = [];
+    const newLinkRequestIds = [];
     let totalRoomsBlocked = 0;
     const warnings = [];
+    let hasCrossCompanyHotel = false;
+
+    // Collect cross-company requests grouped by hotel
+    const crossCompanyRequests = {};
 
     for (const seg of tourSeg.segments) {
       const checkIn  = new Date(seg.fromDate);
@@ -351,87 +380,165 @@ module.exports.confirmSegments = async (req, res) => {
 
       for (const hotelEntry of seg.hotels) {
         const hotelDoc = await Hotel.findById(hotelEntry.hotelId)
-          .select("name rooms roomTypes")
+          .select("name rooms roomTypes companyId")
           .lean();
         if (!hotelDoc) continue;
 
-        const existingBookings = await HotelBooking.find({
-          "hotel.hotelId": hotelEntry.hotelId,
-          status: { $nin: ["cancelled", "checked_out"] },
-          checkIn:  { $lt: checkOut },
-          checkOut: { $gt: checkIn },
-        })
-          .select("roomTypeId roomId rooms status checkIn checkOut tourSegmentId")
-          .lean();
+        const isSameCompany = String(hotelDoc.companyId) === String(companyId);
 
-        for (const ra of hotelEntry.roomAllocations) {
-          if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
+        if (isSameCompany) {
+          // ── Hotel cùng company: tạo booking giữ phòng ngay ──
+          const existingBookings = await HotelBooking.find({
+            "hotel.hotelId": hotelEntry.hotelId,
+            status: { $nin: ["cancelled", "checked_out"] },
+            checkIn:  { $lt: checkOut },
+            checkOut: { $gt: checkIn },
+          })
+            .select("roomTypeId roomId rooms status checkIn checkOut tourSegmentId")
+            .lean();
 
-          const availableRoomIds = getAvailableRoomsForType(
-            hotelDoc.rooms || [],
-            ra.roomTypeId,
-            existingBookings,
-            checkIn,
-            checkOut
-          );
+          for (const ra of hotelEntry.roomAllocations) {
+            if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
 
-          const roomsToBook = Math.min(ra.assignedRooms, availableRoomIds.length);
-
-          if (roomsToBook < ra.assignedRooms) {
-            warnings.push(
-              `${hotelDoc.name} / ${ra.roomTypeName}: chỉ còn ${availableRoomIds.length} phòng thực trống (cần ${ra.assignedRooms})`
+            const availableRoomIds = getAvailableRoomsForType(
+              hotelDoc.rooms || [],
+              ra.roomTypeId,
+              existingBookings,
+              checkIn,
+              checkOut
             );
+
+            const roomsToBook = Math.min(ra.assignedRooms, availableRoomIds.length);
+
+            if (roomsToBook < ra.assignedRooms) {
+              warnings.push(
+                `${hotelDoc.name} / ${ra.roomTypeName}: chỉ còn ${availableRoomIds.length} phòng thực trống (cần ${ra.assignedRooms})`
+              );
+            }
+
+            if (roomsToBook === 0) continue;
+
+            const selectedRoomIds = availableRoomIds.slice(0, roomsToBook);
+            for (const roomId of selectedRoomIds) {
+              const holdCode = "TH" + generateRandomNumber(10);
+              const booking = await HotelBooking.create({
+                code:       holdCode,
+                checkIn,
+                checkOut,
+                rooms:      1,
+                adults:     ra.baseOccupancy || 2,
+                roomId,
+                roomTypeId: ra.roomTypeId,
+                hotel: {
+                  hotelId: hotelEntry.hotelId,
+                  name:    hotelEntry.hotelName,
+                },
+                status:          "confirmed",
+                isTemporaryHold: false,
+                tourSegmentId:   tourSeg._id,
+                note: `[Tour Hold] ${tourName} | ${depDateFmt} – ${endDateFmt} | ${ra.roomTypeName}`,
+                guest: { fullName: "[Tour Hold]", phone: "", email: "" },
+              });
+              newHoldIds.push(booking._id);
+              totalRoomsBlocked++;
+
+              existingBookings.push({
+                roomTypeId: ra.roomTypeId,
+                roomId,
+                rooms: 1,
+                status: "confirmed",
+                checkIn,
+                checkOut,
+              });
+            }
           }
-
-          if (roomsToBook === 0) continue;
-
-          const selectedRoomIds = availableRoomIds.slice(0, roomsToBook);
-          for (const roomId of selectedRoomIds) {
-            const holdCode = "TH" + generateRandomNumber(10);
-            const booking = await HotelBooking.create({
-              code:       holdCode,
-              checkIn,
-              checkOut,
-              rooms:      1,
-              adults:     ra.baseOccupancy || 2,
-              roomId,
+        } else {
+          // ── Hotel khác company: thu thập để tạo HotelLinkRequest ──
+          hasCrossCompanyHotel = true;
+          const hotelKey = String(hotelDoc._id);
+          if (!crossCompanyRequests[hotelKey]) {
+            crossCompanyRequests[hotelKey] = {
+              hotelDoc,
+              requestedRooms: [],
+            };
+          }
+          for (const ra of hotelEntry.roomAllocations) {
+            if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
+            crossCompanyRequests[hotelKey].requestedRooms.push({
               roomTypeId: ra.roomTypeId,
-              hotel: {
-                hotelId: hotelEntry.hotelId,
-                name:    hotelEntry.hotelName,
-              },
-              status:          "confirmed",
-              isTemporaryHold: false,
-              tourSegmentId:   tourSeg._id,
-              note: `[Tour Hold] ${tourName} | ${depDateFmt} – ${endDateFmt} | ${ra.roomTypeName}`,
-              guest: { fullName: "[Tour Hold]", phone: "", email: "" },
-            });
-            newHoldIds.push(booking._id);
-            totalRoomsBlocked++;
-
-            existingBookings.push({
-              roomTypeId: ra.roomTypeId,
-              roomId,
-              rooms: 1,
-              status: "confirmed",
-              checkIn,
-              checkOut,
+              roomTypeName: ra.roomTypeName || "",
+              baseOccupancy: ra.baseOccupancy || 2,
+              assignedRooms: ra.assignedRooms,
+              fromDate: checkIn,
+              toDate: checkOut,
             });
           }
         }
       }
     }
 
-    tourSeg.status         = "confirmed";
+    // Tạo HotelLinkRequest cho mỗi hotel khác company
+    for (const hotelKey of Object.keys(crossCompanyRequests)) {
+      const { hotelDoc, requestedRooms } = crossCompanyRequests[hotelKey];
+      if (requestedRooms.length === 0) continue;
+
+      const toCompany = await Company.findById(hotelDoc.companyId).select("name").lean();
+      const toCompanyName = toCompany ? toCompany.name : "";
+
+      const linkRequest = await HotelLinkRequest.create({
+        fromCompanyId: companyId,
+        fromCompanyName,
+        toCompanyId: hotelDoc.companyId,
+        toCompanyName,
+        tourSegmentId: tourSeg._id,
+        tourId,
+        tourName,
+        departureDate: tourSeg.departureDate,
+        endDate: tourSeg.endDate,
+        hotelId: hotelDoc._id,
+        hotelName: hotelDoc.name,
+        requestedRooms,
+        status: "pending",
+      });
+
+      newLinkRequestIds.push(linkRequest._id);
+
+      // Gửi notification cho company sở hữu khách sạn
+      await Notification.create({
+        companyId: hotelDoc.companyId,
+        type: "other",
+        title: "Yêu cầu liên kết khách sạn mới",
+        content: `${fromCompanyName} yêu cầu giữ phòng tại ${hotelDoc.name} cho tour "${tourName}" (${depDateFmt} – ${endDateFmt})`,
+        link: `/admin/hotel/link-requests`,
+      });
+    }
+
+    // Xác định status của tourSegment
+    if (hasCrossCompanyHotel) {
+      tourSeg.status = "pending_approval";
+    } else {
+      tourSeg.status = "confirmed";
+    }
+
     tourSeg.holdBookingIds = newHoldIds;
+    tourSeg.linkRequestIds = newLinkRequestIds;
     await tourSeg.save();
 
-    let message = `Đã giữ thành công ${totalRoomsBlocked} phòng vật lý cho tour.`;
+    let message = "";
+    if (totalRoomsBlocked > 0) {
+      message += `Đã giữ thành công ${totalRoomsBlocked} phòng cho khách sạn cùng công ty.`;
+    }
+    if (newLinkRequestIds.length > 0) {
+      message += ` Đã gửi ${newLinkRequestIds.length} yêu cầu duyệt tới công ty sở hữu khách sạn khác. Vui lòng chờ phê duyệt.`;
+    }
     if (warnings.length > 0) {
       message += ` Cảnh báo: ${warnings.join("; ")}`;
     }
+    if (!message) {
+      message = "Không có phòng nào được giữ.";
+    }
 
-    return res.json({ success: true, message });
+    return res.json({ success: true, message, hasPendingApproval: hasCrossCompanyHotel });
   } catch (err) {
     console.error("[tour-hotel.confirmSegments]", err);
     return res.json({ success: false, message: "Lỗi server" });
@@ -443,6 +550,7 @@ module.exports.cancelSegments = async (req, res) => {
   try {
     const companyId = req.account.companyId;
     const { tourId, departureDate } = req.body;
+    const HotelLinkRequest = require("../../models/hotel-link-request.model");
 
     const depDate = new Date(departureDate);
     const tourSeg = await TourSegment.findOne({ tourId, departureDate: depDate, companyId });
@@ -455,8 +563,15 @@ module.exports.cancelSegments = async (req, res) => {
       { status: "cancelled" }
     );
 
+    // Huỷ các link request đang pending
+    await HotelLinkRequest.updateMany(
+      { tourSegmentId: tourSeg._id, status: "pending" },
+      { status: "rejected", responseNote: "Đã huỷ do company admin huỷ cấu hình" }
+    );
+
     tourSeg.status         = "cancelled";
     tourSeg.holdBookingIds = [];
+    tourSeg.linkRequestIds = [];
     await tourSeg.save();
 
     return res.json({ success: true, message: "Đã huỷ và giải phóng phòng" });
@@ -475,7 +590,7 @@ module.exports.assign = async (req, res) => {
     const tourSeg = await TourSegment.findOne({ _id: segmentId, companyId }).lean();
     if (!tourSeg) return res.redirect(`/${pathAdmin}/tour-hotel/list`);
 
-    if (tourSeg.status !== "confirmed") {
+    if (tourSeg.status !== "confirmed" && tourSeg.status !== "pending_approval") {
       return res.redirect(
         `/${pathAdmin}/tour-hotel/detail/${tourSeg.tourId}?departure=${moment(tourSeg.departureDate).format("YYYY-MM-DD")}`
       );
