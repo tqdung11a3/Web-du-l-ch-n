@@ -83,15 +83,39 @@ block main
                           |  #{item.quantityAdult} người lớn
                           |  × #{Number(item.priceNewAdult).toLocaleString('vi-VN')}đ
                       if item.quantityChildren
-                        span
-                          i.fa-solid.fa-child
-                          |  #{item.quantityChildren} trẻ em
-                          |  × #{Number(item.priceNewChildren).toLocaleString('vi-VN')}đ
+                        .pending-tour-passenger-block
+                          span
+                            i.fa-solid.fa-child
+                            |  #{item.quantityChildren} trẻ em
+                            |  × #{Number(item.priceNewChildren).toLocaleString('vi-VN')}đ
+                          if item.childrenAges && item.childrenAges.length
+                            .pending-tour-ages
+                              each age, idx in item.childrenAges
+                                span.pending-tour-age-tag Trẻ em #{idx + 1}: #{age} tuổi
                       if item.quantityBaby
-                        span
-                          i.fa-solid.fa-baby
-                          |  #{item.quantityBaby} em bé
-                          |  × #{Number(item.priceNewBaby).toLocaleString('vi-VN')}đ
+                        .pending-tour-passenger-block
+                          span
+                            i.fa-solid.fa-baby
+                            |  #{item.quantityBaby} em bé
+                            |  × #{Number(item.priceNewBaby).toLocaleString('vi-VN')}đ
+                          if item.babyAges && item.babyAges.length
+                            .pending-tour-ages
+                              each age, idx in item.babyAges
+                                span.pending-tour-age-tag Em bé #{idx + 1}: #{age} tuổi
+                    if item.roomSelections && item.roomSelections.length > 0
+                      .pending-tour-rooms
+                        .pending-tour-rooms__title
+                          i.fa-solid.fa-bed(style="margin-right:4px")
+                          | Phòng khách sạn đã chọn:
+                        each rs in item.roomSelections
+                          .pending-tour-rooms__item
+                            span.pending-tour-rooms__hotel= rs.hotelName
+                            span.pending-tour-rooms__type= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
+                            span.pending-tour-rooms__date= rs.fromDate + ' → ' + rs.toDate
+                    if item.extraRoomCost && item.extraRoomCost > 0
+                      .pending-tour-extra-cost
+                        i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
+                        | Chi phí phòng dư: #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
 
             //- ── Tổng tiền ──
             .info-card.info-card--total

@@ -311,9 +311,11 @@ module.exports.detail = async (req, res) => {
 
   // ⬇️ PHẦN: Lấy khách sạn liên kết tour từ TourSegment (đã xác nhận)
   let tourHotels = [];
+  let tourRoomOptions = [];
   try {
     const TourSegment = require("../../models/tour-segment.model");
     const Hotel = require("../../models/hotel.model");
+    const HotelBooking = require("../../models/hotel-booking.model");
 
     const tourSegs = await TourSegment.find({
       tourId: tourDetail._id,
@@ -333,10 +335,39 @@ module.exports.detail = async (req, res) => {
       const hotelIds = Array.from(hotelIdSet);
       if (hotelIds.length > 0) {
         const hotelDocs = await Hotel.find({ _id: { $in: hotelIds }, deleted: false })
-          .select("_id name avatar images address starRating basePrice ratingOverall currency")
+          .select("_id name avatar images address starRating basePrice ratingOverall currency rooms roomTypes ageBands companyId")
           .lean();
         const hotelsMap = {};
         hotelDocs.forEach((h) => { hotelsMap[String(h._id)] = h; });
+
+        // ── Chặn khách sạn thuộc công ty khác nhưng chưa được duyệt ──
+        // (Tour chỉ được phép show KS cross-company khi HotelLinkRequest đã "approved" / "partially_approved")
+        const HotelLinkRequest = require("../../models/hotel-link-request.model");
+        const tourSegIds = tourSegs.map((ts) => ts._id);
+        const linkReqs = tourSegIds.length
+          ? await HotelLinkRequest.find({ tourSegmentId: { $in: tourSegIds } })
+              .select("tourSegmentId hotelId status")
+              .lean()
+          : [];
+        // Key: tourSegmentId|hotelId → status tốt nhất (approved > partially_approved > rejected/...)
+        const linkStatusMap = {};
+        const rank = { approved: 3, partially_approved: 2, pending: 1 };
+        for (const r of linkReqs) {
+          const k = String(r.tourSegmentId) + "|" + String(r.hotelId);
+          const cur = linkStatusMap[k];
+          if (!cur || (rank[r.status] || 0) > (rank[cur] || 0)) {
+            linkStatusMap[k] = r.status;
+          }
+        }
+        const isHotelApprovedForSeg = (tsId, hotel) => {
+          // Cùng công ty với tour → luôn hiển thị
+          if (hotel.companyId && String(hotel.companyId) === String(tourDetail.companyId)) {
+            return true;
+          }
+          const k = String(tsId) + "|" + String(hotel._id);
+          const st = linkStatusMap[k];
+          return st === "approved" || st === "partially_approved";
+        };
 
         const seen = new Set();
         tourSegs.forEach((ts) => {
@@ -345,6 +376,7 @@ module.exports.detail = async (req, res) => {
               const hid = String(h.hotelId);
               const hotel = hotelsMap[hid];
               if (!hotel) return;
+              if (!isHotelApprovedForSeg(ts._id, hotel)) return;
               const key = hid + "|" + (seg.fromDate ? seg.fromDate.toISOString() : "") + "|" + (seg.toDate ? seg.toDate.toISOString() : "");
               if (seen.has(key)) return;
               seen.add(key);
@@ -367,11 +399,109 @@ module.exports.detail = async (req, res) => {
             });
           });
         });
+
+        // Tính room options cho từng segment/hotel/roomAllocation
+        for (const ts of tourSegs) {
+          for (const seg of (ts.segments || [])) {
+            const checkIn = new Date(seg.fromDate);
+            const checkOut = new Date(seg.toDate);
+            const fromStr = seg.fromDate ? moment(seg.fromDate).format("DD/MM/YYYY") : "";
+            const toStr = seg.toDate ? moment(seg.toDate).format("DD/MM/YYYY") : "";
+
+            for (const hotelEntry of (seg.hotels || [])) {
+              const hotel = hotelsMap[String(hotelEntry.hotelId)];
+              if (!hotel) continue;
+              if (!isHotelApprovedForSeg(ts._id, hotel)) continue;
+              if (!hotelEntry.roomAllocations || hotelEntry.roomAllocations.length === 0) continue;
+
+              const clientTourBookings = await HotelBooking.find({
+                tourSegmentId: ts._id,
+                "hotel.hotelId": hotelEntry.hotelId,
+                status: { $nin: ["cancelled", "checked_out"] },
+                checkIn: { $lt: checkOut },
+                checkOut: { $gt: checkIn },
+                note: /\[Tour Booking\]/,
+              })
+                .select("roomTypeId rooms")
+                .lean();
+
+              const roomTypes = [];
+              for (const ra of hotelEntry.roomAllocations) {
+                if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
+
+                const clientBookedCount = clientTourBookings
+                  .filter((b) => String(b.roomTypeId) === String(ra.roomTypeId))
+                  .reduce((s, b) => s + (b.rooms || 1), 0);
+
+                const availableForClient = Math.max(0, ra.assignedRooms - clientBookedCount);
+
+                if (availableForClient > 0) {
+                  const matchedRoomType = (hotel.roomTypes || []).find(
+                    (rt) => String(rt._id) === String(ra.roomTypeId)
+                  );
+                  const pricePerNight = matchedRoomType ? (matchedRoomType.basePrice || 0) : 0;
+
+                  roomTypes.push({
+                    roomTypeId: String(ra.roomTypeId),
+                    roomTypeName: ra.roomTypeName || "",
+                    baseOccupancy: ra.baseOccupancy || 2,
+                    availableRooms: availableForClient,
+                    maxCapacity: availableForClient * (ra.baseOccupancy || 2),
+                    pricePerNight,
+                  });
+                }
+              }
+
+              if (roomTypes.length > 0) {
+                const hotelAgeBands = (hotel.ageBands || []).map((ab) => ({
+                  bandName: ab.bandName || "",
+                  minAge: typeof ab.minAge === "number" ? ab.minAge : 0,
+                  maxAge: ab.maxAge === null || ab.maxAge === undefined ? null : ab.maxAge,
+                  countInOccupancy: !!ab.countInOccupancy,
+                  occupancyWeight: ab.countInOccupancy ? (ab.occupancyWeight ?? 1) : 0,
+                }));
+
+                tourRoomOptions.push({
+                  segmentLabel: fromStr && toStr ? fromStr + " → " + toStr : "",
+                  hotelId: String(hotel._id),
+                  hotelName: hotel.name || "",
+                  fromDate: seg.fromDate ? moment(seg.fromDate).format("YYYY-MM-DD") : "",
+                  toDate: seg.toDate ? moment(seg.toDate).format("YYYY-MM-DD") : "",
+                  tourSegmentId: String(ts._id),
+                  roomTypes: roomTypes,
+                  ageBands: hotelAgeBands,
+                });
+              }
+            }
+          }
+        }
       }
     }
   } catch (e) {
     console.error("tour.detail fetch tourHotels error:", e);
   }
+
+  // Nhóm tourRoomOptions theo khung thời gian lưu trú
+  const _segMap = {};
+  for (const opt of tourRoomOptions) {
+    const key = opt.fromDate + "|" + opt.toDate;
+    if (!_segMap[key]) {
+      _segMap[key] = {
+        segmentLabel: opt.segmentLabel,
+        fromDate: opt.fromDate,
+        toDate: opt.toDate,
+        hotels: [],
+      };
+    }
+    _segMap[key].hotels.push({
+      hotelId: opt.hotelId,
+      hotelName: opt.hotelName,
+      tourSegmentId: opt.tourSegmentId,
+      ageBands: opt.ageBands,
+      roomTypes: opt.roomTypes,
+    });
+  }
+  const tourRoomSegments = Object.values(_segMap);
 
   // ⬇️ PHẦN: Lấy hoạt động gợi ý từ DB đã sync Amadeus
   let activities = [];
@@ -393,6 +523,8 @@ module.exports.detail = async (req, res) => {
     tourDetail: tourDetail,
     activities: activities,
     tourHotels: tourHotels,
+    tourRoomOptions: tourRoomOptions,
+    tourRoomSegments: tourRoomSegments,
   });
 };
 

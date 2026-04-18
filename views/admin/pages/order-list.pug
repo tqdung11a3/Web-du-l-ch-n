@@ -1,8 +1,19 @@
 extends ../layouts/default.pug
 
 block main
-  
-  h1.box-title Quản lý đơn hàng
+  - var _saOrdersCtx = typeof companyContext !== 'undefined' && companyContext && companyContext._id
+
+  if _saOrdersCtx
+    .box-head
+      a.button.button-outline(
+        href=`/${pathAdmin}/super-admin/orders/company/${companyContext._id}`
+        style="margin-bottom:12px;display:inline-flex;align-items:center;gap:8px;"
+      )
+        i.fa-solid.fa-arrow-left
+        |  Chọn loại đơn
+      h1.box-title(style="margin-top:0")= pageTitle || ('Đơn tour — ' + companyContext.name)
+  else
+    h1.box-title Quản lý đơn hàng
 
   //- Section 4
   .section-4
@@ -37,7 +48,7 @@ block main
   //- Section 5
   .section-5
     .inner-wrap
-      form.inner-search.order-search-form(method="GET" action=`/${pathAdmin}/order/list`)
+      form.inner-search.order-search-form(method="GET" action=_saOrdersCtx ? `/${pathAdmin}/super-admin/orders/company/${companyContext._id}/tours` : `/${pathAdmin}/order/list`)
         .order-search-fields
           .order-search-field
             i.fa-solid.fa-hashtag
@@ -80,7 +91,7 @@ block main
             |  Tìm kiếm
           - const hasSearch = keyword || searchName || searchPhone || searchTour
           if hasSearch
-            a.order-search-clear(href=`/${pathAdmin}/order/list` title="Xoá tìm kiếm")
+            a.order-search-clear(href=_saOrdersCtx ? `/${pathAdmin}/super-admin/orders/company/${companyContext._id}/tours` : `/${pathAdmin}/order/list` title="Xoá tìm kiếm")
               i.fa-solid.fa-xmark
               |  Xoá
   //- End Section 5
@@ -140,25 +151,32 @@ block main
                 div #{orderDetail.createdAtDate}
               td
                 .inner-buttons
-                  a(href=`/${pathAdmin}/order/edit/${orderDetail._id}` class="inner-edit")
-                    <i class="fa-regular fa-pen-to-square"></i>
-                  button(class="inner-delete" data-order-id=orderDetail._id type="button")
-                    <i class="fa-regular fa-trash-can"></i>
+                  if _saOrdersCtx
+                    a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/orders/company/${companyContext._id}/tour/${orderDetail._id}` title="Xem chi tiết")
+                      i.fa-solid.fa-eye
+                  else
+                    a(href=`/${pathAdmin}/order/edit/${orderDetail._id}` class="inner-edit")
+                      i.fa-regular.fa-pen-to-square
+                    button(class="inner-delete" data-order-id=orderDetail._id type="button")
+                      i.fa-regular.fa-trash-can
   //- End Section 6
 
   //- Section 7
-  .section-7
-    span.inner-label Hiển thị 1 - 9 của 78
-    select(class="inner-pagination")
-      option(value="") Trang 1
-      option(value="") Trang 2
-      option(value="") Trang 3
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label
+        | Hiển thị #{pagination.skip + 1}
+        | - #{pagination.skip + orderList.length}
+        | của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}
   //- End Section 7
 
   script.
     // Xử lý xóa đơn hàng
     document.addEventListener('DOMContentLoaded', function() {
-      const deleteButtons = document.querySelectorAll('.inner-delete');
+      const deleteButtons = document.querySelectorAll('.inner-delete:not([disabled])');
       
       deleteButtons.forEach(button => {
         button.addEventListener('click', function() {

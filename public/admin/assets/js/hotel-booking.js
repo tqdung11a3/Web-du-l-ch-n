@@ -30,6 +30,13 @@
   }
   
   function showBookingsDetailModal(roomNumber, bookings) {
+    function escHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
     const modalHtml = `
       <div class="bookings-detail-modal active" id="bookingsDetailModal">
         <div class="modal-content">
@@ -114,6 +121,12 @@
                           <div class="detail-row" style="margin-top:4px">
                             <i class="fa-solid fa-route" style="color:#7c3aed"></i>
                             <span><strong>Tour:</strong> ${booking.tourName}</span>
+                          </div>
+                        ` : ''}
+                        ${isTourHold && booking.tourCompanyDisplay ? `
+                          <div class="detail-row" style="margin-top:2px">
+                            <i class="fa-solid fa-building" style="color:#7c3aed"></i>
+                            <span><strong>Công ty tổ chức tour:</strong> ${escHtml(booking.tourCompanyDisplay)}</span>
                           </div>
                         ` : ''}
                         ${isTourHold && booking.tourDeparture ? `

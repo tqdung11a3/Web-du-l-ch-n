@@ -57,20 +57,43 @@ router.get("/news/detail/:id", newsController.detail);
 router.patch("/news/change-status", newsController.changeStatus);
 router.delete("/news/:id", newsController.deleteItem);
 
-// Xem tất cả tours
-router.get("/tours", tourController.list);
+// Tours: danh sách công ty → tour theo công ty → chi tiết tour (thứ tự route quan trọng)
+router.get("/tours/company/:companyId", tourController.listByCompany);
+router.get("/tours", tourController.companyList);
 router.get("/tours/:id", tourController.detail);
 
-// Xem tất cả hotels
+// Hotels: danh sách công ty → khách sạn theo công ty → chi tiết (giống tour; PATCH breadcrumb đặt trước :id)
 const hotelController = require("../../controllers/admin/super-admin/hotel.controller");
-router.get("/hotels", hotelController.list);
+router.patch(
+  "/hotels/breadcrumb-image",
+  upload.single("breadcrumbImage"),
+  hotelController.updateHotelSearchBreadcrumb
+);
+router.get("/hotels/company/:companyId", hotelController.listByCompany);
+router.get("/hotels", hotelController.companyList);
 router.get("/hotels/:id", hotelController.detail);
-router.patch("/hotels/breadcrumb-image", upload.single("breadcrumbImage"), hotelController.updateHotelSearchBreadcrumb);
 
 // Xem tất cả đơn hàng
+// Đơn hàng: công ty → hub (tour / đặt phòng) → danh sách → chi tiết (giống company admin)
 const orderController = require("../../controllers/admin/super-admin/order.controller");
-router.get("/orders", orderController.list);
-router.get("/orders/:id", orderController.detail);
+router.get(
+  "/orders/company/:companyId/tour/:orderId",
+  orderController.tourOrderDetail
+);
+router.get(
+  "/orders/company/:companyId/hotel-booking/:bookingId",
+  orderController.hotelBookingDetail
+);
+router.get(
+  "/orders/company/:companyId/tours",
+  orderController.tourOrdersList
+);
+router.get(
+  "/orders/company/:companyId/hotel-bookings",
+  orderController.hotelBookingsList
+);
+router.get("/orders/company/:companyId", orderController.companyHub);
+router.get("/orders", orderController.companyList);
 
 // Quản lý khách hàng
 router.get("/customers", customerController.list);

@@ -1326,6 +1326,242 @@ button {
   white-space: nowrap;
 }
 
+/* ── Room selection in tour detail ────────────────────── */
+.inner-room-selection {
+  margin-bottom: 16px;
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fff8f8;
+}
+
+.inner-room-selection__header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.inner-room-selection__header .inner-label {
+  margin-bottom: 0;
+}
+
+.inner-room-selection__optional {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.room-selection-required-warning {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ── Time segment group ──────────────────────────────── */
+.room-time-segment {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.room-time-segment:last-child {
+  margin-bottom: 0;
+}
+
+.room-time-segment__header {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.room-time-segment__label {
+  color: #4f46e5;
+}
+
+.room-time-segment__occupancy-live {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #14532d;
+  line-height: 1.45;
+}
+
+.room-time-segment__occupancy-live-label {
+  display: inline;
+  margin-right: 4px;
+}
+
+.room-time-segment__occupancy-live-value {
+  font-size: 14px;
+  color: #047857;
+}
+
+.room-time-segment__occupancy-live-detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.room-segment-extra-warning {
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.room-segment-extra-warning strong { color: #b45309; }
+
+.room-segment-capacity-warning {
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ── Hotel block inside segment ──────────────────────── */
+.room-hotel-block {
+  margin-bottom: 10px;
+}
+
+.room-hotel-block:last-child { margin-bottom: 0; }
+
+.room-hotel-block__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.room-hotel-block__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.room-hotel-block__agebands {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.room-hotel-block__agebands-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.room-hotel-block__agebands-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.room-hotel-block__agebands-item { margin-bottom: 2px; }
+.room-hotel-block__agebands-name { color: #64748b; }
+.room-hotel-block__agebands-weight { font-weight: 600; color: #0f766e; }
+
+.room-type-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.room-type-row__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.room-type-row__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.room-type-row__meta {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.room-type-row__input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.room-type-row__input input[type="number"] {
+  width: 62px;
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  background: white;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.room-type-row__input input[type="number"]::-webkit-inner-spin-button,
+.room-type-row__input input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+}
+
+.room-type-row__input-unit {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.room-selection-global-extra-warning {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.room-selection-global-extra-warning strong {
+  color: #b45309;
+}
+
 .box-tour-detail .inner-actions {
   margin-top: 16px;
   display: flex;
@@ -3323,6 +3559,97 @@ button {
 }
 /* ── End khối nhập tuổi ── */
 
+/* ── Phòng khách sạn trong giỏ hàng ── */
+.inner-room-selections {
+  border-top: 1px solid #e8ecf0;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.inner-room-selections > .inner-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inner-room-selections > .inner-label::before {
+  content: "🏨";
+  font-size: 14px;
+}
+
+.inner-room-seg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inner-room-seg {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.inner-room-seg__header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6366f1;
+  margin-bottom: 6px;
+}
+
+.inner-room-hotel {
+  margin-top: 4px;
+}
+
+.inner-room-hotel__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 3px;
+}
+
+.inner-room-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12.5px;
+  color: #374151;
+  padding-left: 10px;
+}
+
+.inner-room-row__type {
+  flex: 1;
+  font-weight: 500;
+}
+
+.inner-room-row__qty {
+  font-weight: 600;
+  color: #0d6efd;
+  white-space: nowrap;
+}
+
+.inner-room-row__occ {
+  color: #6b7280;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.inner-room-extra-cost {
+  margin-top: 6px;
+  padding: 5px 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: #92400e;
+}
+/* ── End phòng khách sạn trong giỏ hàng ── */
+
 .box-tour-detail .inner-total {
   margin-bottom: 18px;
   display: flex;
@@ -3938,13 +4265,90 @@ button {
   margin-bottom: 15px;
   display: grid;
   grid-template-columns: 21fr 511fr 309fr;
-  gap: 10px;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 14px;
 }
 
+/* Hàng 1: actions + tour + số lượng; hàng 2: phòng KS trải cả 2 cột tour + giá */
 .section-11 .inner-tour-item .inner-actions {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 43px;
+}
+
+.section-11 .inner-tour-item .inner-product {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.section-11 .inner-tour-item .inner-quantity {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.section-11 .inner-tour-item .inner-room-selections {
+  grid-column: 2 / span 2;
+  grid-row: 2;
+  margin-top: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+/* Trang order-success: không có cột actions + khối phòng nằm dưới cả tour + hành khách */
+.section-11 .inner-tour-item.inner-tour-item--readonly {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr);
+}
+
+.section-11 .inner-tour-item.inner-tour-item--readonly .inner-product {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.section-11 .inner-tour-item.inner-tour-item--readonly .inner-quantity {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.section-11 .inner-tour-item.inner-tour-item--readonly .inner-quantity .inner-list {
+  gap: 12px;
+}
+
+.section-11 .inner-tour-item.inner-tour-item--readonly .inner-success-booking-extra {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-11 .inner-tour-item.inner-tour-item--readonly .inner-room-selections {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.section-11 .inner-tour-item .inner-quantity .inner-item.inner-item--with-ages {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 6px;
+}
+
+.section-11 .inner-tour-item .inner-quantity .inner-item .inner-ages-info--inline {
+  flex-basis: 100%;
+  width: 100%;
+  margin-top: 2px;
+  padding-left: 116px;
+}
+
+@media (max-width: 575.98px) {
+  .section-11 .inner-tour-item .inner-quantity .inner-item .inner-ages-info--inline {
+    padding-left: 0;
+  }
 }
 
 .section-11 .inner-tour-item .inner-actions .inner-delete {
@@ -4158,8 +4562,22 @@ button {
   }
 
   .section-11 .inner-tour-item .inner-actions {
+    grid-column: 1;
+    grid-row: auto;
     flex-direction: row-reverse;
     justify-content: space-between;
+  }
+
+  .section-11 .inner-tour-item .inner-product,
+  .section-11 .inner-tour-item .inner-quantity,
+  .section-11 .inner-tour-item .inner-room-selections {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .section-11 .inner-tour-item.inner-tour-item--readonly .inner-success-booking-extra {
+    grid-column: 1;
+    grid-row: auto;
   }
 }
 
@@ -6112,6 +6530,74 @@ button {
   margin-right: 4px;
   color: #999;
 }
+/* ── Phòng KS trong trip-card (profile) ── */
+.trip-rooms {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.trip-rooms__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.trip-rooms__seg {
+  margin-bottom: 6px;
+}
+
+.trip-rooms__seg:last-child {
+  margin-bottom: 0;
+}
+
+.trip-rooms__seg-date {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6366f1;
+  margin-bottom: 3px;
+}
+
+.trip-rooms__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 8px;
+  padding-bottom: 2px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.trip-rooms__hotel {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.trip-rooms__hotel::after {
+  content: " — ";
+  font-weight: 400;
+  color: #9ca3af;
+}
+
+.trip-rooms__info {
+  color: #4b5563;
+}
+
+.trip-extra-cost {
+  margin-top: 6px;
+  padding: 5px 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #92400e;
+}
+/* ── End phòng KS trong trip-card ── */
+
 .empty-box {
   padding: 14px;
   border: 1px dashed #ddd;
@@ -12463,12 +12949,95 @@ body {
 
 .pending-tour-qty {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
   font-size: 12px;
   color: #475569;
 }
+.pending-tour-qty > span,
+.pending-tour-qty > .pending-tour-passenger-block {
+  width: 100%;
+}
 .pending-tour-qty i { color: #6366f1; margin-right: 3px; }
+
+.pending-tour-passenger-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.pending-tour-ages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding-left: 2px;
+}
+.pending-tour-age-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.pending-tour-rooms,
+.inner-room-selections {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.pending-tour-rooms__title,
+.inner-room-selections__title {
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.pending-tour-rooms__item,
+.inner-room-selections__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.pending-tour-rooms__item:last-child,
+.inner-room-selections__item:last-child {
+  border-bottom: none;
+}
+
+.pending-tour-rooms__hotel,
+.inner-room-selections__hotel {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.pending-tour-rooms__type,
+.inner-room-selections__type {
+  color: #6366f1;
+}
+
+.pending-tour-rooms__date,
+.inner-room-selections__date {
+  color: #94a3b8;
+}
+
+.pending-tour-extra-cost,
+.inner-room-selections__extra {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #92400e;
+  font-weight: 600;
+}
 
 /* Info card tổng tiền */
 .info-card--total {

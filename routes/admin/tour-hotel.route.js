@@ -13,8 +13,8 @@ router.get("/link-requests", linkRequestController.listSent);
 router.get("/detail/:tourId", controller.detail);
 
 // Trang phân công phòng cho khách hàng (chỉ hiển thị khi status = confirmed)
+// Chế độ read-only: hotel-admin là người ghi tại /admin/hotel/tour-assignments/:segmentId/save.
 router.get ("/assign/:segmentId",       controller.assign);
-router.post("/assign/:segmentId/save",  controller.saveAssignments);
 
 // API endpoints (AJAX)
 router.get ("/api/hotel-availability",  controller.hotelAvailability);

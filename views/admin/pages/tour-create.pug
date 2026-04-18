@@ -44,8 +44,11 @@ block main
       .inner-group
         label(for="status" class="inner-label") Trạng thái
         select(id="status" name="status")
+          option(value="inactive" selected) Tạm dừng
           option(value="active") Hoạt động
-          option(value="inactive") Tạm dừng
+        p#status-create-warn.tour-status-create-warn(style="display:none")
+          i.fa-solid.fa-triangle-exclamation
+          |  Tour mới chưa được liên kết khách sạn nên chưa thể chọn "Hoạt động". Sau khi tạo tour, hãy vào trang Liên kết Tour – Khách sạn để cấu hình, rồi quay lại đây bật hiển thị.
 
       .inner-group.inner-two-col
         label(for="avatar" class="inner-label") Ảnh đại diện
@@ -263,7 +266,9 @@ block main
               .departure-pair-field
                 label Ghế còn lại
                 input(type="number" class="seats-remaining-input" min="0" placeholder="VD: 40")
-            button(type="button" class="departure-pair-remove-btn") Xóa
+            .departure-pair-field.departure-pair-field--remove
+              label(aria-hidden="true") &nbsp;
+              button(type="button" class="departure-pair-remove-btn") Xóa
         .departures-actions
           button(type="button" id="departure-pair-add-btn") + Thêm lịch khởi hành
         //- Input ẩn: JS sẽ ghi JSON mảng [{departureDate, endDate, seatsTotal, seatsRemaining}]
@@ -328,6 +333,22 @@ block main
   //- End Section 8
 
   script.
+    // ── Cảnh báo khi chọn "Hoạt động" trên trang Tạo tour ──────────────────
+    (function () {
+      var sel = document.getElementById('status');
+      var warn = document.getElementById('status-create-warn');
+      if (!sel || !warn) return;
+      sel.addEventListener('change', function () {
+        if (sel.value === 'active') {
+          warn.style.display = '';
+          // Trả về giá trị mặc định; server cũng sẽ ép inactive
+          sel.value = 'inactive';
+        } else {
+          warn.style.display = 'none';
+        }
+      });
+    })();
+
     window.europeanCountries = !{JSON.stringify(europeanCountries || [])};
     window.europeanCities = !{JSON.stringify(europeanCities || [])};
     window.vietnamCities = !{JSON.stringify(cityList || [])};

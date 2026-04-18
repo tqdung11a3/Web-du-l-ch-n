@@ -1012,6 +1012,7 @@ module.exports.edit = async (req, res) => {
       pageTitle: "Chỉnh sửa khách sạn",
       hotelDetail,
       cityList,
+      readOnly: false,
     });
   } catch (error) {
     console.log("admin hotel edit error:", error);
@@ -2063,8 +2064,10 @@ module.exports.bookingList = async (req, res) => {
 module.exports.bookingDetail = async (req, res) => {
   try {
     const bookingId = req.params.bookingId;
-    const companyId = req.account?.companyId || null;
-    
+    const ctx = req.bookingDetailContext || {};
+    const companyId =
+      ctx.enforceCompanyId || req.account?.companyId || null;
+
     if (!companyId) {
       return res.status(403).render("admin/pages/error", {
         pageTitle: "Lỗi",
@@ -2101,7 +2104,11 @@ module.exports.bookingDetail = async (req, res) => {
     const hotelId = bookings[0].hotel?.hotelId;
     let hotel = null;
     if (hotelId) {
-      hotel = await Hotel.findOne({ _id: hotelId, companyId, deleted: false }).lean();
+      hotel = await Hotel.findOne({
+        _id: hotelId,
+        companyId,
+        deleted: false,
+      }).lean();
       if (!hotel) {
         return res.status(403).render("admin/pages/error", {
           pageTitle: "Lỗi",
@@ -2478,6 +2485,9 @@ module.exports.bookingDetail = async (req, res) => {
       pageTitle: `Chi tiết đơn đặt phòng ${baseCode}`,
       bookingDetail,
       pathAdmin,
+      bookingDetailReadOnly: !!ctx.bookingDetailReadOnly,
+      bookingListBackUrl:
+        ctx.bookingListBackUrl || `/${pathAdmin}/hotel/booking/list`,
     });
   } catch (error) {
     console.error("hotel booking detail error:", error);
@@ -2570,10 +2580,11 @@ module.exports.tourHolds = async (req, res) => {
 
     // Lấy tên công ty sở hữu tour (cho phân biệt cùng/khác company)
     const Company = require("../../models/company.model");
-    const tourCompanyIds = [...new Set(segments.map((s) => String(s.companyId)).filter(Boolean))];
-    const tourCompanies = await Company.find({ _id: { $in: tourCompanyIds } }).select("name").lean();
+    const allCompanyIds = [...new Set([String(companyId), ...segments.map((s) => String(s.companyId)).filter(Boolean)])];
+    const tourCompanies = await Company.find({ _id: { $in: allCompanyIds } }).select("name").lean();
     const companyNameMap = {};
     for (const c of tourCompanies) companyNameMap[String(c._id)] = c.name || "";
+    const ownCompanyName = companyNameMap[String(companyId)] || "";
 
     // Nhóm booking theo tourSegmentId
     const groupMap = {};
@@ -2697,6 +2708,7 @@ module.exports.tourHolds = async (req, res) => {
         hotels,
       },
       selectedHotelId: hotelId,
+      ownCompanyName,
       pathAdmin,
       isBookingManagement: true,
     });
@@ -2709,6 +2721,161 @@ module.exports.tourHolds = async (req, res) => {
       pathAdmin,
       isBookingManagement: true,
     });
+  }
+};
+
+// ── Chi tiết giữ phòng Tour của 1 tour segment ─────────────────────────────
+module.exports.tourHoldDetail = async (req, res) => {
+  try {
+    const companyId = req.account?.companyId || null;
+    const TourSegment = require("../../models/tour-segment.model");
+    const Tour = require("../../models/tour.model");
+    const Company = require("../../models/company.model");
+
+    const { segmentId } = req.params;
+    const hotelId = req.query.hotelId || null;
+
+    if (!companyId || !hotelId) {
+      return res.redirect(`/${pathAdmin}/hotel/booking/tour-holds`);
+    }
+
+    const hotels = await Hotel.find({ companyId, deleted: false })
+      .select("_id name address rooms roomTypes")
+      .lean();
+    const selectedHotel = hotels.find((h) => String(h._id) === hotelId);
+    if (!selectedHotel) {
+      return res.redirect(`/${pathAdmin}/hotel/booking/tour-holds`);
+    }
+
+    const segment = await TourSegment.findById(segmentId).lean();
+    if (!segment) {
+      return res.redirect(`/${pathAdmin}/hotel/booking/tour-holds?hotelId=${hotelId}`);
+    }
+
+    const holdBookings = await HotelBooking.find({
+      "hotel.hotelId": selectedHotel._id,
+      tourSegmentId: segment._id,
+      status: { $ne: "cancelled" },
+      code: { $ne: null },
+    })
+      .sort({ checkIn: 1 })
+      .lean();
+
+    const tour = await Tour.findById(segment.tourId).select("name companyId").lean();
+    const tourCompanyId = String(segment.companyId || "");
+    let tourCompanyName = "";
+    if (tourCompanyId) {
+      const c = await Company.findById(tourCompanyId).select("name").lean();
+      tourCompanyName = c?.name || "";
+    }
+    const ownCompanyNameDoc = await Company.findById(companyId).select("name").lean();
+    const ownCompanyName = ownCompanyNameDoc?.name || "";
+
+    const tourIdStr = String(segment.tourId || "");
+    const group = {
+      segmentId:    String(segment._id),
+      tourId:       tourIdStr,
+      tourShortId:  tourIdStr ? tourIdStr.slice(-6) : "—",
+      tourName:     tour?.name || "—",
+      departureDate: segment.departureDate ? moment(segment.departureDate).format("DD/MM/YYYY") : "—",
+      endDate:       segment.endDate ? moment(segment.endDate).format("DD/MM/YYYY") : "—",
+      paxRequired:   segment.paxRequired || 0,
+      segmentStatus: segment.status || "draft",
+      tourCompanyId,
+      tourCompanyName,
+      isOwnCompany: tourCompanyId === String(companyId),
+      bookings:      [],
+      timeFrameMap:  {},
+      totalRooms:    0,
+      totalPeople:   0,
+    };
+
+    for (const booking of holdBookings) {
+      const rt = (selectedHotel.roomTypes || []).find(
+        (r) => String(r._id) === String(booking.roomTypeId)
+      );
+      const roomDoc = booking.roomId
+        ? (selectedHotel.rooms || []).find((r) => String(r._id) === String(booking.roomId))
+        : null;
+      const guestName = booking.guest?.fullName || "";
+      const isAssigned = guestName !== "" && guestName !== "[Tour Hold]";
+      const checkInStr  = booking.checkIn  ? moment(booking.checkIn).format("DD/MM/YYYY")  : "—";
+      const checkOutStr = booking.checkOut ? moment(booking.checkOut).format("DD/MM/YYYY") : "—";
+      const tfKey = `${checkInStr}_${checkOutStr}`;
+
+      group.bookings.push({
+        id:           String(booking._id),
+        code:         booking.code,
+        roomTypeName: rt ? rt.name : "—",
+        roomNumber:   roomDoc ? roomDoc.roomNumber || roomDoc.name || "—" : "—",
+        rooms:        booking.rooms || 1,
+        adults:       booking.adults || 0,
+        checkIn:      checkInStr,
+        checkOut:     checkOutStr,
+        tfKey,
+        status:       booking.status,
+        guestName:    isAssigned ? guestName : "",
+        guestPhone:   isAssigned ? (booking.guest?.phone || "") : "",
+        isAssigned,
+      });
+
+      if (!group.timeFrameMap[tfKey]) {
+        group.timeFrameMap[tfKey] = {
+          checkIn:     checkInStr,
+          checkOut:    checkOutStr,
+          totalRooms:  0,
+          totalPeople: 0,
+        };
+      }
+      group.timeFrameMap[tfKey].totalRooms  += booking.rooms || 1;
+      group.timeFrameMap[tfKey].totalPeople += booking.adults || 0;
+
+      group.totalRooms  += booking.rooms || 1;
+      group.totalPeople += booking.adults || 0;
+    }
+
+    const toMs = (str) => {
+      if (!str || str === "—") return 0;
+      const [d, m, y] = str.split("/");
+      return new Date(`${y}-${m}-${d}`).getTime();
+    };
+
+    group.timeFrames = Object.values(group.timeFrameMap).sort(
+      (a, b) => toMs(a.checkIn) - toMs(b.checkIn)
+    );
+
+    const subSegs = ((segment.segments || []).slice()).sort(
+      (a, b) => new Date(a.fromDate) - new Date(b.fromDate)
+    );
+    group.timeFrames = group.timeFrames.map((tf) => {
+      const tfMs = toMs(tf.checkIn);
+      const idx = subSegs.findIndex((ss) => {
+        const ssFromMs = ss.fromDate ? new Date(ss.fromDate).getTime() : null;
+        return ssFromMs !== null && Math.abs(tfMs - ssFromMs) < 2 * 86400 * 1000;
+      });
+      return {
+        ...tf,
+        segmentIndex: idx >= 0 ? idx : null,
+        segmentLabel: idx >= 0 ? `Khung ${idx + 1}` : null,
+      };
+    });
+    delete group.timeFrameMap;
+
+    return res.render("admin/pages/hotel-booking", {
+      pageTitle: `Giữ phòng Tour – ${group.tourName}`,
+      bookingsData: {
+        activeTab:    "tour-holds-detail",
+        detailGroup:  group,
+        hotels,
+      },
+      selectedHotelId: hotelId,
+      ownCompanyName,
+      pathAdmin,
+      isBookingManagement: true,
+    });
+  } catch (err) {
+    console.error("[tourHoldDetail]", err);
+    return res.redirect(`/${pathAdmin}/hotel/booking/tour-holds`);
   }
 };
 
@@ -2957,10 +3124,10 @@ module.exports.roomManagement = async (req, res) => {
     const tourHoldBookings = allBookings.filter(b => b.tourSegmentId);
     const uniqueSegIds = [...new Set(tourHoldBookings.map(b => String(b.tourSegmentId)))];
 
-    const segmentInfoMap = {}; // segmentId -> { tourName, departureDate, endDate }
+    const segmentInfoMap = {}; // segmentId -> { tourName, departureDate, endDate, tourCompanyDisplay }
     if (uniqueSegIds.length > 0) {
       const segments = await TourSegment.find({ _id: { $in: uniqueSegIds } })
-        .select("tourId departureDate endDate")
+        .select("tourId departureDate endDate companyId")
         .lean();
 
       const uniqueTourIds = [...new Set(segments.map(s => String(s.tourId)).filter(Boolean))];
@@ -2972,11 +3139,27 @@ module.exports.roomManagement = async (req, res) => {
         tourNameMap = Object.fromEntries(tours.map(t => [String(t._id), t.name]));
       }
 
+      const Company = require("../../models/company.model");
+      const segCompanyIds = [...new Set(segments.map((s) => String(s.companyId)).filter(Boolean))];
+      const allCoIds = [...new Set([...segCompanyIds, String(companyId)])];
+      const tourCompanies = await Company.find({ _id: { $in: allCoIds } }).select("name").lean();
+      const companyNameMap = {};
+      for (const c of tourCompanies) companyNameMap[String(c._id)] = c.name || "";
+      const ownCompanyName = companyNameMap[String(companyId)] || "";
+
       for (const seg of segments) {
+        const tourCoId = seg.companyId ? String(seg.companyId) : "";
+        const tourCoName = tourCoId ? (companyNameMap[tourCoId] || "") : "";
+        const isOwnTour = tourCoId && tourCoId === String(companyId);
+        const tourCompanyDisplay = isOwnTour
+          ? (ownCompanyName ? `${ownCompanyName} (Công ty mình)` : "Công ty mình")
+          : (tourCoName || "—");
+
         segmentInfoMap[String(seg._id)] = {
           tourName:      tourNameMap[String(seg.tourId)] || "Tour",
           departureDate: seg.departureDate ? moment(seg.departureDate).format("DD/MM/YYYY") : "",
           endDate:       seg.endDate       ? moment(seg.endDate).format("DD/MM/YYYY")       : "",
+          tourCompanyDisplay,
         };
       }
     }
@@ -3056,6 +3239,7 @@ module.exports.roomManagement = async (req, res) => {
           tourName:      segInfo ? segInfo.tourName      : "",
           tourDeparture: segInfo ? segInfo.departureDate : "",
           tourEndDate:   segInfo ? segInfo.endDate       : "",
+          tourCompanyDisplay: segInfo ? segInfo.tourCompanyDisplay : "",
           note:          b.note || "",
         });
       }
@@ -3747,12 +3931,13 @@ module.exports.bookingCalendar = async (req, res) => {
 
     // Lấy tên công ty sở hữu tour (cho phân biệt cùng/khác company)
     const Company = require("../../models/company.model");
-    const tourSegCompanyIds = [...new Set(tourSegDocs.map(s => String(s.companyId)).filter(Boolean))];
-    const tourSegCompanies = tourSegCompanyIds.length
-      ? await Company.find({ _id: { $in: tourSegCompanyIds } }).select("name").lean()
+    const allCalCompanyIds = [...new Set([String(companyId), ...tourSegDocs.map(s => String(s.companyId)).filter(Boolean)])];
+    const tourSegCompanies = allCalCompanyIds.length
+      ? await Company.find({ _id: { $in: allCalCompanyIds } }).select("name").lean()
       : [];
     const tourSegCompanyNameMap = {};
     tourSegCompanies.forEach(c => { tourSegCompanyNameMap[String(c._id)] = c.name || ""; });
+    const ownCompanyName = tourSegCompanyNameMap[String(companyId)] || "";
 
     // Xây dựng tourSegmentInfoMap: segId → { tourName, shortCode, timeSegments[], isOwnCompany, companyName }
     const tourSegmentInfoMap = {};
@@ -3838,10 +4023,11 @@ module.exports.bookingCalendar = async (req, res) => {
     return res.render("admin/pages/hotel-booking", {
       pageTitle: "Lịch phòng",
       bookingsData: calendarData,
-      selectedHotelId: hotelId, // Hotel đang được chọn - ở root level để hotel-selector có thể access
+      selectedHotelId: hotelId,
+      ownCompanyName,
       pathAdmin,
-      moment, // Pass moment để dùng trong template
-      isBookingManagement: true, // Flag để ẩn "Tất cả khách sạn" trong selector
+      moment,
+      isBookingManagement: true,
     });
   } catch (error) {
     console.error("hotel booking calendar error:", error);
@@ -3879,6 +4065,7 @@ module.exports.guestList = async (req, res) => {
         pageTitle: "Danh sách khách hàng",
         bookingsData: emptyGuestData,
         selectedHotelId: null,
+        ownCompanyName: "",
         pathAdmin,
         isBookingManagement: true,
       });
@@ -3905,6 +4092,7 @@ module.exports.guestList = async (req, res) => {
           bookingsData: emptyGuestData,
           hotelList: [],
           selectedHotelId: null,
+          ownCompanyName: "",
           pathAdmin,
           isBookingManagement: true,
         });
@@ -4028,16 +4216,23 @@ module.exports.guestList = async (req, res) => {
       ...bookingFilter,
       tourSegmentId: { $ne: null, $exists: true },
     };
-    const tourBookings = await HotelBooking.find(tourBookingFilter)
+    const tourBookingsRaw = await HotelBooking.find(tourBookingFilter)
       .select("code guest checkIn checkOut adults children childrenDetails roomId roomTypeId status roomsData tourSegmentId")
       .sort({ checkIn: -1 })
       .lean();
+    // Chỉ hiện khi đã gán khách thật — ẩn slot giữ chỗ tour ([Tour Hold])
+    const tourBookings = tourBookingsRaw.filter((b) => {
+      const name = (b.guest?.fullName || "").trim();
+      return name && name !== "[Tour Hold]";
+    });
 
     // Lấy tên tour từ TourSegment → Tour
     const TourSegment = require("../../models/tour-segment.model");
     const Tour        = require("../../models/tour.model");
     const uniqueSegIds = [...new Set(tourBookings.map(b => String(b.tourSegmentId)).filter(Boolean))];
     let segmentNameMap = {}; // segmentId → { tourName, departureDate, tourCompanyName, isOwnCompanyTour }
+    let ownCompanyName = "";
+    const Company = require("../../models/company.model");
     if (uniqueSegIds.length > 0) {
       const segments = await TourSegment.find({ _id: { $in: uniqueSegIds } })
         .select("tourId departureDate companyId")
@@ -4048,12 +4243,12 @@ module.exports.guestList = async (req, res) => {
         : [];
       const tourNameMap = Object.fromEntries(tours.map(t => [String(t._id), t.name]));
 
-      const Company = require("../../models/company.model");
-      const segCompanyIds = [...new Set(segments.map(s => String(s.companyId)).filter(Boolean))];
-      const companies = segCompanyIds.length
-        ? await Company.find({ _id: { $in: segCompanyIds } }).select("name").lean()
+      const allGuestCompanyIds = [...new Set([String(companyId), ...segments.map(s => String(s.companyId)).filter(Boolean)])];
+      const companies = allGuestCompanyIds.length
+        ? await Company.find({ _id: { $in: allGuestCompanyIds } }).select("name").lean()
         : [];
       const companyNameMap = Object.fromEntries(companies.map(c => [String(c._id), c.name || ""]));
+      ownCompanyName = companyNameMap[String(companyId)] || "";
 
       segments.forEach(seg => {
         const segCompanyId = String(seg.companyId || "");
@@ -4064,6 +4259,10 @@ module.exports.guestList = async (req, res) => {
           isOwnCompanyTour: segCompanyId === String(companyId),
         };
       });
+    }
+    if (!ownCompanyName) {
+      const co = await Company.findById(companyId).select("name").lean();
+      ownCompanyName = co?.name || "";
     }
 
     const tourGuests = tourBookings.map(b => {
@@ -4090,6 +4289,7 @@ module.exports.guestList = async (req, res) => {
       pageTitle: "Danh sách khách hàng",
       bookingsData: guestListData,
       selectedHotelId: hotelId,
+      ownCompanyName,
       pathAdmin,
       isBookingManagement: true,
     });
@@ -4105,6 +4305,7 @@ module.exports.guestList = async (req, res) => {
       },
       hotelList: [],
       selectedHotelId: null,
+      ownCompanyName: "",
       pathAdmin,
       isBookingManagement: true,
     });
@@ -4476,12 +4677,16 @@ module.exports.customersList = async (req, res) => {
 
     const hotelCustomers = buildCustomerMap(groupByBaseCode(directBookings));
 
-    // ── 2. Khách đặt qua tour ───────────────────────────────────────────────
-    const tourBookings = await HotelBooking.find({
+    // ── 2. Khách đặt qua tour (bỏ qua giữ chỗ chưa gán khách: [Tour Hold]) ──
+    const tourBookingsRaw = await HotelBooking.find({
       "hotel.hotelId": selectedHotelId,
       status: { $ne: "cancelled" },
       tourSegmentId: { $ne: null, $exists: true },
     }).sort({ createdAt: -1 }).lean();
+    const tourBookings = tourBookingsRaw.filter((b) => {
+      const name = (b.guest?.fullName || "").trim();
+      return name && name !== "[Tour Hold]";
+    });
 
     // Enrich: lấy tên tour và ngày khởi hành
     const segIds  = [...new Set(tourBookings.map(b => String(b.tourSegmentId)).filter(Boolean))];

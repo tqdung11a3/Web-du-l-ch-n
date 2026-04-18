@@ -223,7 +223,8 @@ module.exports.profile = async (req, res) => {
           pc,
           pb
         );
-        const lineTotal = moneyAdult + moneyChild + moneyBaby;
+        const extraRoomCost = Number(it.extraRoomCost || 0);
+        const lineTotal = moneyAdult + moneyChild + moneyBaby + extraRoomCost;
 
         flat.push({
           orderCode: o.code,
@@ -245,6 +246,8 @@ module.exports.profile = async (req, res) => {
           qtyC: it.quantityChildren || 0,
           qtyB: it.quantityBaby || 0,
           total: lineTotal,
+          extraRoomCost,
+          roomSelections: Array.isArray(it.roomSelections) ? it.roomSelections : [],
           createdAt: o.createdAt,
         });
       }

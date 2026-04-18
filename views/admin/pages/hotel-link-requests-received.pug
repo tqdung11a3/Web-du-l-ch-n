@@ -44,6 +44,9 @@ block main
                   th Sức chứa
                   th Từ ngày
                   th Đến ngày
+                  th(
+                    title="Số phòng trống ước tính trong khoảng ngày yêu cầu (theo đặt phòng hiện tại và phòng trạng thái trống)"
+                  ) Trống (khoảng yêu cầu)
                   if req.status !== 'pending'
                     th Đã duyệt
               tbody
@@ -54,6 +57,7 @@ block main
                     td= rr.baseOccupancy + ' người/phòng'
                     td= rr.fromDateDisplay
                     td= rr.toDateDisplay
+                    td= rr.availableFreeRooms != null ? rr.availableFreeRooms : '—'
                     if req.status !== 'pending'
                       - const approved = (req.approvedRooms || []).find(a => String(a.roomTypeId) === String(rr.roomTypeId))
                       td= approved ? approved.approvedRooms : 0
@@ -64,9 +68,24 @@ block main
                 |  #{req.note}
 
             if req.responseNote
-              .lr-note
-                strong Phản hồi của bạn:
-                |  #{req.responseNote}
+              - var _autoTagR = hotelLinkAutoBySenderTag || ''
+              - var _isAutoSenderNote = _autoTagR && req.responseNote.indexOf(_autoTagR) === 0
+              - var _legacyGeneric = !_isAutoSenderNote && /Đã huỷ do (company admin huỷ cấu hình|xác nhận lại segment)/.test(req.responseNote)
+              - var _noteBodyR = _isAutoSenderNote ? req.responseNote.slice(_autoTagR.length) : req.responseNote
+              .lr-note.lr-note--response
+                if _isAutoSenderNote
+                  .lr-note-head
+                    strong Đóng tự động — phía công ty gửi yêu cầu «#{req.fromCompanyName}»
+                    span.lr-note-hint  (không phải do bạn từ chối trên trang này)
+                  p.lr-note-body= _noteBodyR
+                else if _legacyGeneric
+                  .lr-note-head
+                    strong Yêu cầu đã đóng từ phía công ty «#{req.fromCompanyName}»
+                  p.lr-note-body= req.responseNote
+                else
+                  .lr-note-head
+                    strong Phản hồi của bạn (công ty chủ khách sạn)
+                  p.lr-note-body= req.responseNote
 
           if req.status === 'pending'
             .lr-card-actions
@@ -104,6 +123,19 @@ block main
           button.lr-btn.lr-btn--cancel(onclick="closeRejectModal()") Huỷ
           button.lr-btn.lr-btn--reject(onclick="submitRejection()") Xác nhận từ chối
 
+    //- Xác nhận (thay window.confirm)
+    #th-app-dialog.th-app-dialog(aria-hidden="true")
+      .th-app-dialog__backdrop
+      .th-app-dialog__panel(role="dialog" aria-modal="true" aria-labelledby="th-app-dialog-title")
+        .th-app-dialog__header
+          h3#th-app-dialog-title.th-app-dialog__title Xác nhận
+          button#th-app-dialog-close.th-app-dialog__close(type="button" aria-label="Đóng")
+            i.fa-solid.fa-xmark
+        #th-app-dialog-body.th-app-dialog__body
+        .th-app-dialog__footer
+          button#th-app-dialog-cancel.th-app-dialog__btn.th-app-dialog__btn--secondary(type="button") Huỷ
+          button#th-app-dialog-ok.th-app-dialog__btn.th-app-dialog__btn--primary(type="button") Tiếp tục
+
   style.
     .link-requests-page { padding: 20px; max-width: 1100px; }
     .lr-subtitle { color: #64748b; font-size: 14px; margin: -8px 0 20px; }
@@ -137,6 +169,10 @@ block main
     .lr-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; font-weight: 600; color: #334155; border-bottom: 1px solid #e2e8f0; }
     .lr-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
     .lr-note { margin-top: 10px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; font-size: 13px; color: #64748b; }
+    .lr-note--response { background: #fffbeb; border: 1px solid #fde68a; color: #78350f; }
+    .lr-note-head { margin: 0 0 6px 0; font-size: 13px; line-height: 1.45; }
+    .lr-note-hint { display: block; font-weight: 400; font-size: 12px; color: #92400e; margin-top: 4px; opacity: .95; }
+    .lr-note-body { margin: 0; font-size: 13px; line-height: 1.55; color: #92400e; }
     .lr-card-actions {
       display: flex; gap: 8px; padding: 12px 20px; background: #f8fafc;
       border-top: 1px solid #e5e7eb;
@@ -182,8 +218,75 @@ block main
   script.
     let rejectRequestId = null;
 
+    function lrToastSuccess(msg) {
+      if (typeof notify !== 'undefined' && notify && typeof notify.success === 'function') notify.success(msg);
+    }
+    function lrToastError(msg) {
+      if (typeof notify !== 'undefined' && notify && typeof notify.error === 'function') notify.error(msg);
+    }
+
+    function showLrConfirm(opts) {
+      const message = opts.message || '';
+      const title = opts.title || 'Xác nhận';
+      const confirmText = opts.confirmText || 'Tiếp tục';
+      const cancelText = opts.cancelText || 'Huỷ';
+      const wrap = document.getElementById('th-app-dialog');
+      if (!wrap) return Promise.resolve(window.confirm(message));
+
+      return new Promise(function (resolve) {
+        const titleEl = document.getElementById('th-app-dialog-title');
+        const bodyEl = document.getElementById('th-app-dialog-body');
+        const okBtn = document.getElementById('th-app-dialog-ok');
+        const cancelBtn = document.getElementById('th-app-dialog-cancel');
+        const closeBtn = document.getElementById('th-app-dialog-close');
+        const backdrop = wrap.querySelector('.th-app-dialog__backdrop');
+        if (!titleEl || !bodyEl || !okBtn || !cancelBtn || !closeBtn || !backdrop) {
+          resolve(window.confirm(message));
+          return;
+        }
+
+        titleEl.textContent = title;
+        bodyEl.textContent = message;
+        okBtn.textContent = confirmText;
+        cancelBtn.textContent = cancelText;
+
+        var settled = false;
+        function finish(val) {
+          if (settled) return;
+          settled = true;
+          wrap.classList.remove('is-open');
+          wrap.setAttribute('aria-hidden', 'true');
+          document.removeEventListener('keydown', onKey);
+          okBtn.removeEventListener('click', onOk);
+          cancelBtn.removeEventListener('click', onCancel);
+          closeBtn.removeEventListener('click', onCancel);
+          backdrop.removeEventListener('click', onCancel);
+          resolve(val);
+        }
+        function onOk() { finish(true); }
+        function onCancel() { finish(false); }
+        function onKey(ev) { if (ev.key === 'Escape') onCancel(); }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        closeBtn.addEventListener('click', onCancel);
+        backdrop.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey);
+
+        wrap.classList.add('is-open');
+        wrap.setAttribute('aria-hidden', 'false');
+        okBtn.focus();
+      });
+    }
+
     async function approveRequest(requestId) {
-      if (!confirm('Duyệt toàn bộ phòng trong yêu cầu này và giữ chỗ ngay?')) return;
+      var ok = await showLrConfirm({
+        title: 'Duyệt yêu cầu',
+        message: 'Duyệt toàn bộ phòng trong yêu cầu này và giữ chỗ ngay?',
+        confirmText: 'Duyệt & giữ chỗ',
+        cancelText: 'Huỷ',
+      });
+      if (!ok) return;
       try {
         const res = await fetch(`/${pathAdmin}/hotel/link-requests/approve`, {
           method: 'POST',
@@ -191,9 +294,9 @@ block main
           body: JSON.stringify({ requestId }),
         });
         const data = await res.json();
-        if (data.success) { alert(data.message); location.reload(); }
-        else alert(data.message);
-      } catch { alert('Lỗi kết nối'); }
+        if (data.success) { lrToastSuccess(data.message); location.reload(); }
+        else lrToastError(data.message);
+      } catch (e) { lrToastError('Lỗi kết nối'); }
     }
 
     function openRejectModal(requestId) {
@@ -209,15 +312,25 @@ block main
 
     async function submitRejection() {
       if (!rejectRequestId) return;
-      const responseNote = document.getElementById('reject-response-note').value.trim();
+      var responseNote = document.getElementById('reject-response-note').value.trim();
+      var confirmReject = await showLrConfirm({
+        title: 'Từ chối yêu cầu',
+        message: 'Gửi từ chối cho yêu cầu này? Công ty gửi yêu cầu sẽ nhận được phản hồi của bạn.',
+        confirmText: 'Gửi từ chối',
+        cancelText: 'Quay lại',
+      });
+      if (!confirmReject) return;
       try {
         const res = await fetch(`/${pathAdmin}/hotel/link-requests/reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId: rejectRequestId, responseNote }),
+          body: JSON.stringify({ requestId: rejectRequestId, responseNote: responseNote }),
         });
         const data = await res.json();
-        if (data.success) { alert(data.message); location.reload(); }
-        else alert(data.message);
-      } catch { alert('Lỗi kết nối'); }
+        if (data.success) {
+          closeRejectModal();
+          lrToastSuccess(data.message);
+          location.reload();
+        } else lrToastError(data.message);
+      } catch (e) { lrToastError('Lỗi kết nối'); }
     }

@@ -23,9 +23,7 @@ block main
         .inner-tour-list
           each item in orderDetail.items
             - const tourDetailUrl = item.companySlug ? `/company/${item.companySlug}/tour/detail/${item.slug}` : `/tour/detail/${item.slug}`
-            // Tour Item
-            .inner-tour-item
-              .inner-actions
+            .inner-tour-item.inner-tour-item--readonly
               .inner-product
                 .inner-image
                   a(href=tourDetailUrl)
@@ -48,31 +46,52 @@ block main
                 .inner-list
                   .inner-item
                     .inner-item-label Người lớn:
+                    .inner-item-input
+                      span.cart-qty-fixed #{item.quantityAdult}
                     .inner-item-price
                       span #{item.quantityAdult}
                       span x
                       span.inner-hl #{item.priceNewAdult.toLocaleString("vi-VN")}
-                  .inner-item
+                  .inner-item.inner-item--with-ages
                     .inner-item-label Trẻ em:
+                    .inner-item-input
+                      span.cart-qty-fixed #{item.quantityChildren}
                     .inner-item-price
                       span #{item.quantityChildren}
                       span x
                       span.inner-hl #{item.priceNewChildren.toLocaleString("vi-VN")}
-                  if item.childrenAges && item.childrenAges.length
-                    .inner-ages-info
-                      each age, idx in item.childrenAges
-                        span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
-                  .inner-item
+                    if item.childrenAges && item.childrenAges.length
+                      .inner-ages-info.inner-ages-info--inline
+                        each age, idx in item.childrenAges
+                          span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
+                  .inner-item.inner-item--with-ages
                     .inner-item-label Em bé:
+                    .inner-item-input
+                      span.cart-qty-fixed #{item.quantityBaby}
                     .inner-item-price
                       span #{item.quantityBaby}
                       span x
                       span.inner-hl #{item.priceNewBaby.toLocaleString("vi-VN")}
-                  if item.babyAges && item.babyAges.length
-                    .inner-ages-info
-                      each age, idx in item.babyAges
-                        span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
-            // End Tour Item
+                    if item.babyAges && item.babyAges.length
+                      .inner-ages-info.inner-ages-info--inline
+                        each age, idx in item.babyAges
+                          span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
+              if (item.roomSelections && item.roomSelections.length > 0) || (item.extraRoomCost && item.extraRoomCost > 0)
+                .inner-success-booking-extra
+                  if item.roomSelections && item.roomSelections.length > 0
+                    .inner-room-selections
+                      .inner-room-selections__title
+                        i.fa-solid.fa-bed(style="margin-right:4px")
+                        | Phòng khách sạn đã chọn:
+                      each rs in item.roomSelections
+                        .inner-room-selections__item
+                          span.inner-room-selections__hotel= rs.hotelName
+                          span.inner-room-selections__type= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
+                          span.inner-room-selections__date= rs.fromDate + ' → ' + rs.toDate
+                  if item.extraRoomCost && item.extraRoomCost > 0
+                    .inner-room-selections__extra
+                      i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
+                      | Chi phí phòng dư: #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
         .inner-list-price
           .inner-item
             .inner-label Tạm tính:

@@ -6,12 +6,16 @@ const {
   paymentMethodList,
   paymentStatusList,
   statusList,
+  pathAdmin,
 } = require("../../config/variable.config");
 const moment = require("moment");
 const {
   allocateHotelsForGroup,
   estimateCheckOut,
 } = require("../../helpers/hotel-allocation.helper");
+const HotelBooking = require("../../models/hotel-booking.model");
+const Notification = require("../../models/notification.model");
+const TourSegment = require("../../models/tour-segment.model");
 
 // === Helpers: tính giá em bé theo bậc (theo vị trí bé #1, #2, ...) ===
 function babyUnitAt(idx, mode, rules, priceAdult, priceChild, priceBabyFixed) {
@@ -155,7 +159,8 @@ module.exports.createPost = async (req, res) => {
         priceChild,
         priceBabyFix
       );
-      const lineSubTotal = moneyAdult + moneyChild + moneyBaby;
+      const extraRoomCost = Number(raw.extraRoomCost || 0);
+      const lineSubTotal = moneyAdult + moneyChild + moneyBaby + extraRoomCost;
 
       // ==== TÍNH GHẾ & CẬP NHẬT ATOMIC ====
       // seatsUsed = số ghế thực sự chiếm trên xe / máy bay
@@ -307,6 +312,12 @@ module.exports.createPost = async (req, res) => {
 
         // Kết quả phân bổ Greedy: ai ở khách sạn nào
         hotelAllocation,
+
+        // Phòng khách sạn khách chọn từ tour-hotel liên kết
+        roomSelections: Array.isArray(raw.roomSelections) ? raw.roomSelections : [],
+
+        // Chi phí phòng dư (nếu khách chọn nhiều hơn nhu cầu)
+        extraRoomCost: extraRoomCost || 0,
       });
 
       groups[companyId].subTotal += lineSubTotal;
@@ -320,10 +331,68 @@ module.exports.createPost = async (req, res) => {
       });
     }
 
+    // ── Kiểm tra phòng khách sạn trước khi tạo đơn (race condition check) ──
+    const allRoomSelections = [];
+    for (const cid of companyIds) {
+      for (const item of groups[cid].items) {
+        if (!Array.isArray(item.roomSelections) || item.roomSelections.length === 0) continue;
+        for (const sel of item.roomSelections) {
+          allRoomSelections.push(sel);
+        }
+      }
+    }
+
+    if (allRoomSelections.length > 0) {
+      for (const sel of allRoomSelections) {
+        const checkIn = new Date(sel.fromDate);
+        const checkOut = new Date(sel.toDate);
+
+        const ts = await TourSegment.findById(sel.tourSegmentId).lean();
+        if (!ts || (ts.status !== "confirmed" && ts.status !== "pending_approval")) {
+          return res.json({
+            code: "room_unavailable",
+            message: `Tour segment không còn khả dụng. Vui lòng tải lại trang và chọn lại.`,
+          });
+        }
+
+        let assignedRooms = 0;
+        for (const seg of (ts.segments || [])) {
+          for (const h of (seg.hotels || [])) {
+            if (String(h.hotelId) !== String(sel.hotelId)) continue;
+            for (const ra of (h.roomAllocations || [])) {
+              if (String(ra.roomTypeId) === String(sel.roomTypeId)) {
+                assignedRooms += ra.assignedRooms || 0;
+              }
+            }
+          }
+        }
+
+        const clientBookedForTour = await HotelBooking.countDocuments({
+          tourSegmentId: ts._id,
+          "hotel.hotelId": sel.hotelId,
+          roomTypeId: sel.roomTypeId,
+          status: { $nin: ["cancelled", "checked_out"] },
+          checkIn: { $lt: checkOut },
+          checkOut: { $gt: checkIn },
+          note: /\[Tour Booking\]/,
+        });
+
+        const availableForClient = Math.max(0, assignedRooms - clientBookedForTour);
+        if (sel.selectedRooms > availableForClient) {
+          return res.json({
+            code: "room_unavailable",
+            message: `Loại phòng "${sel.roomTypeName}" tại ${sel.hotelName} chỉ còn ${availableForClient} phòng. Vui lòng chọn lại.`,
+          });
+        }
+      }
+    }
+
     // Lấy user đang đăng nhập (nếu có) từ middleware attachUser
     const currentUser = req.account || null;
     const userId = currentUser?._id || null;
     const userName = currentUser?.fullName || currentUser?.email || "";
+
+    const holdExpiresAt = moment().add(15, "minutes").toDate();
 
     // Tạo đơn cho từng công ty
     const createdOrders = [];
@@ -345,20 +414,53 @@ module.exports.createPost = async (req, res) => {
         subTotal,
         discount,
         total,
-        paymentMethod: body.paymentMethod, // money | bank | vnpay | ...
+        paymentMethod: body.paymentMethod,
         paymentStatus: "unpaid",
         status: "initial",
 
-        // Gắn user
         ...(userId ? { userId } : {}),
         ...(userName ? { userName } : {}),
 
-        // ==== ĐƠN TẠM / GIỮ CHỖ (hết hạn sau 15 phút nếu chưa thanh toán) ====
         isTemporaryHold: true,
-        holdExpiresAt:   moment().add(15, "minutes").toDate(),
+        holdExpiresAt,
       });
 
       await newRecord.save();
+
+      // ── Tạo HotelBooking hold cho roomSelections ──
+      for (const item of items) {
+        if (!Array.isArray(item.roomSelections) || item.roomSelections.length === 0) continue;
+        for (const sel of item.roomSelections) {
+          for (let i = 0; i < sel.selectedRooms; i++) {
+            await new HotelBooking({
+              code: "HB" + generateRandomNumber(10),
+              guest: {
+                fullName: (body.fullName || "").trim(),
+                phone: (body.phone || "").trim(),
+                email: (body.email || "").trim(),
+              },
+              checkIn: new Date(sel.fromDate),
+              checkOut: new Date(sel.toDate),
+              adults: sel.baseOccupancy || 2,
+              children: 0,
+              rooms: 1,
+              roomTypeId: sel.roomTypeId,
+              hotel: {
+                hotelId: sel.hotelId,
+                name: sel.hotelName,
+              },
+              status: "pending",
+              paymentStatus: "unpaid",
+              paymentMethod: body.paymentMethod || "money",
+              note: `[Tour Booking] Đặt phòng qua tour - Đơn ${code}`,
+              tourSegmentId: sel.tourSegmentId,
+              isTemporaryHold: true,
+              holdExpiresAt,
+              ...(userId ? { userId } : {}),
+            }).save();
+          }
+        }
+      }
 
       createdOrders.push({
         orderCode: code,
@@ -366,6 +468,31 @@ module.exports.createPost = async (req, res) => {
         phone: body.phone,
         total,
       });
+
+      // ── Gửi thông báo cho company admin ──
+      if (cid && body.paymentMethod !== "vnpay") {
+        try {
+          const pmName =
+            body.paymentMethod === "bank" ? "Chuyển khoản ngân hàng" : "Tiền mặt";
+          const tourNames = items.map((i) => i.name).filter(Boolean).join(", ");
+          const fullName = (body.fullName || "").trim();
+          await Notification.create({
+            companyId: cid,
+            type: "order",
+            title: "Đơn tour mới",
+            content: `${fullName} đã đặt tour: ${tourNames} (${pmName})`,
+            link: `/${pathAdmin}/order/edit/${newRecord._id}`,
+            metadata: {
+              bookingCode: code,
+              customerName: fullName,
+              paymentMethod: pmName,
+              amount: total,
+            },
+          });
+        } catch (notifErr) {
+          console.error("Error creating order notification:", notifErr);
+        }
+      }
     }
 
     return res.json({

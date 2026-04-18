@@ -51,6 +51,7 @@ router.get("/booking/guest-list", hotelController.guestList);
 
 // Phòng đang giữ cho tour
 router.get("/booking/tour-holds", hotelController.tourHolds);
+router.get("/booking/tour-holds/detail/:segmentId", hotelController.tourHoldDetail);
 
 // Giải phóng phòng giữ chỗ tour chưa gán khách
 router.post("/booking/release-holds", hotelController.releaseHolds);

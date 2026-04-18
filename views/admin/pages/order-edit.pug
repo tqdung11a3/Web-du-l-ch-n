@@ -1,12 +1,12 @@
 extends ../layouts/default.pug
 
 block main
-  
-  h1.box-title Đơn hàng: #{orderDetail.code}
+  - var _orderReadOnly = readOnly === true
+  h1.box-title= _orderReadOnly ? ('Chi tiết đơn: ' + orderDetail.code) : ('Đơn hàng: ' + orderDetail.code)
 
   //- Section 8
-  .section-8
-    form(id="order-edit-form")
+  .section-8(class=_orderReadOnly ? 'order-section--readonly' : '')
+    form#order-edit-form(data-read-only=(_orderReadOnly ? '1' : '0'))
       .inner-group(style="display: none;")
         label(for="id" class="inner-label") Id
         input(type="text" id="id" name="id" value=orderDetail._id)
@@ -69,39 +69,102 @@ block main
               value=item.value
               selected=(item.value == orderDetail.status)
               ) #{item.label}
-      .inner-group
+      .inner-group.inner-two-col
         label(class="inner-label") Danh sách tour
         .inner-order-list
           each item in orderDetail.items
-            .inner-order-item
-              .inner-order-image
-                img(src=item.avatar)
-              .inner-order-content
-                .inner-order-name #{item.name}
-                .inner-order-text
-                  div Người lớn: #{item.quantityAdult} x #{item.priceNewAdult.toLocaleString("vi-VN")}đ
-                  div
-                    | Trẻ em: #{item.quantityChildren} x #{item.priceNewChildren.toLocaleString("vi-VN")}đ
-                    if item.childrenAges && item.childrenAges.length
-                      .inner-ages-info
-                        each age, idx in item.childrenAges
-                          span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
-                  div
-                    | Em bé: #{item.quantityBaby} x #{item.babyUnitForUi.toLocaleString("vi-VN")}đ
-                    if item.babyAges && item.babyAges.length
-                      .inner-ages-info
-                        each age, idx in item.babyAges
-                          span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
-                  div Ngày khởi hành: #{item.departureDateFormat}
-                  div Khởi hành tại: #{item.cityName}
+            .inner-order-line
+              .inner-order-block.inner-order-block--tour
+                .inner-order-item
+                  .inner-order-image
+                    img(src=item.avatar)
+                  .inner-order-content
+                    .inner-order-name #{item.name}
+                    .inner-order-text
+                      div Người lớn: #{item.quantityAdult} x #{item.priceNewAdult.toLocaleString("vi-VN")}đ
+                      div
+                        | Trẻ em: #{item.quantityChildren} x #{item.priceNewChildren.toLocaleString("vi-VN")}đ
+                        if item.childrenAges && item.childrenAges.length
+                          .inner-ages-info
+                            each age, idx in item.childrenAges
+                              span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
+                      div
+                        | Em bé: #{item.quantityBaby} x #{item.babyUnitForUi.toLocaleString("vi-VN")}đ
+                        if item.babyAges && item.babyAges.length
+                          .inner-ages-info
+                            each age, idx in item.babyAges
+                              span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
+                      div Ngày khởi hành: #{item.departureDateFormat}
+                      div Khởi hành tại: #{item.cityName}
+              if item.roomSelections && item.roomSelections.length
+                .inner-order-block.inner-order-block--hotels
+                  .inner-order-rooms__title
+                    i.fa-solid.fa-bed(style="margin-right:6px;color:#606060")
+                    | Phòng khách sạn đã chọn
+                  - var segMap = {}
+                  each rs in item.roomSelections
+                    - var segKey = (rs.fromDate || '') + '__' + (rs.toDate || '')
+                    - if (!segMap[segKey]) { segMap[segKey] = { fromDate: rs.fromDate, toDate: rs.toDate, items: [] } }
+                    - segMap[segKey].items.push(rs)
+                  each seg in Object.values(segMap)
+                    .inner-order-rooms__seg
+                      .inner-order-rooms__seg-header #{seg.fromDate} → #{seg.toDate}
+                      - var hotelMap = {}
+                      each rs in seg.items
+                        - if (!hotelMap[rs.hotelName]) { hotelMap[rs.hotelName] = [] }
+                        - hotelMap[rs.hotelName].push(rs)
+                      each rows, hotelName in hotelMap
+                        .inner-order-rooms__hotel
+                          .inner-order-rooms__hotel-name #{hotelName}
+                          each rs in rows
+                            .inner-order-rooms__row
+                              span.inner-order-rooms__type #{rs.roomTypeName}
+                              span.inner-order-rooms__qty #{rs.selectedRooms} phòng
+                              span.inner-order-rooms__occ (#{rs.baseOccupancy} người/phòng)
+                  if item.extraRoomCost && item.extraRoomCost > 0
+                    .inner-order-extra-cost
+                      i.fa-solid.fa-circle-exclamation(style="margin-right:4px;color:#b45309")
+                      | Chi phí phòng dư: 
+                      strong #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
+              else if item.extraRoomCost && item.extraRoomCost > 0
+                .inner-order-block.inner-order-block--hotels
+                  .inner-order-extra-cost
+                    i.fa-solid.fa-circle-exclamation(style="margin-right:4px;color:#b45309")
+                    | Chi phí phòng dư: 
+                    strong #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
       .inner-group
         label(class="inner-label") Thanh toán
         .inner-order-total
           div Tạm tính: #{orderDetail.subTotalView.toLocaleString("vi-VN")}đ
           div Giảm: #{orderDetail.discountView.toLocaleString("vi-VN")}đ
           div Thanh toán: <span class="inner-hl">#{orderDetail.totalView.toLocaleString("vi-VN")}đ</span>
-      .inner-button.inner-two-col
-        button Cập nhật
+      if !_orderReadOnly
+        .inner-button.inner-two-col
+          button(type="submit") Cập nhật
     .inner-back
-      a(href=`/${pathAdmin}/order/list`) Quay lại danh sách
+      if _orderReadOnly
+        a(href=orderListBackUrl || `/${pathAdmin}/super-admin/orders`) Quay lại danh sách
+      else
+        a(href=`/${pathAdmin}/order/list`) Quay lại danh sách
   //- End Section 8
+
+  if _orderReadOnly
+    style.
+      .order-section--readonly input:not([type="hidden"]),
+      .order-section--readonly select,
+      .order-section--readonly textarea {
+        background: #f8fafc !important;
+        color: #1e293b !important;
+        cursor: default;
+        opacity: 1;
+      }
+    script.
+      document.addEventListener('DOMContentLoaded', function () {
+        var f = document.getElementById('order-edit-form');
+        if (!f || f.getAttribute('data-read-only') !== '1') return;
+        f.addEventListener('submit', function (e) { e.preventDefault(); });
+        f.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (el) {
+          el.readOnly = true;
+          el.disabled = true;
+        });
+      });

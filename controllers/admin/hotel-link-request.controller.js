@@ -7,6 +7,9 @@ const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.h
 const { generateRandomNumber } = require("../../helpers/generate.helper");
 const { pathAdmin } = require("../../config/variable.config");
 const moment = require("moment");
+const {
+  HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
+} = require("../../helpers/hotel-link-request-note.helper");
 
 // ── Helper: enrich request list ─────────────────────────────────────────────
 function enrichRequests(list) {
@@ -19,6 +22,61 @@ function enrichRequests(list) {
     for (const rr of r.requestedRooms) {
       rr.fromDateDisplay = moment(rr.fromDate).format("DD/MM/YYYY");
       rr.toDateDisplay = moment(rr.toDate).format("DD/MM/YYYY");
+    }
+  }
+}
+
+/** Số phòng trống theo từng dòng requestedRooms (cùng logic với duyệt yêu cầu). */
+async function enrichReceivedRequestsWithAvailability(list) {
+  if (!list || list.length === 0) return;
+
+  const hotelIds = [...new Set(list.map((r) => String(r.hotelId)).filter(Boolean))];
+  const hotels = await Hotel.find({ _id: { $in: hotelIds } })
+    .select("rooms")
+    .lean();
+  const hotelById = new Map(hotels.map((h) => [String(h._id), h]));
+
+  const bookingsCache = new Map();
+
+  async function bookingsOverlapping(hotelId, checkIn, checkOut) {
+    const key = `${String(hotelId)}|${checkIn.getTime()}|${checkOut.getTime()}`;
+    if (bookingsCache.has(key)) return bookingsCache.get(key);
+    const rows = await HotelBooking.find({
+      "hotel.hotelId": hotelId,
+      status: { $nin: ["cancelled", "checked_out"] },
+      checkIn: { $lt: checkOut },
+      checkOut: { $gt: checkIn },
+    })
+      .select("roomTypeId roomId rooms status checkIn checkOut")
+      .lean();
+    bookingsCache.set(key, rows);
+    return rows;
+  }
+
+  for (const r of list) {
+    const hotel = hotelById.get(String(r.hotelId));
+    if (!hotel || !Array.isArray(r.requestedRooms)) continue;
+
+    for (const rr of r.requestedRooms) {
+      const checkIn = new Date(rr.fromDate);
+      const checkOut = new Date(rr.toDate);
+      if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime())) {
+        rr.availableFreeRooms = null;
+        continue;
+      }
+      try {
+        const bookings = await bookingsOverlapping(r.hotelId, checkIn, checkOut);
+        const availableIds = getAvailableRoomsForType(
+          hotel.rooms || [],
+          rr.roomTypeId,
+          bookings,
+          checkIn,
+          checkOut
+        );
+        rr.availableFreeRooms = availableIds.length;
+      } catch {
+        rr.availableFreeRooms = null;
+      }
     }
   }
 }
@@ -36,11 +94,13 @@ module.exports.listReceived = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
     enrichRequests(receivedRequests);
+    await enrichReceivedRequestsWithAvailability(receivedRequests);
     res.render("admin/pages/hotel-link-requests-received", {
       pageTitle: "Yêu cầu liên kết khách sạn",
       receivedRequests,
       selectedHotelId: hotelId || "",
       pathAdmin,
+      hotelLinkAutoBySenderTag: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
     });
   } catch (err) {
     console.error("[hotel-link-request.listReceived]", err);
@@ -60,6 +120,7 @@ module.exports.listSent = async (req, res) => {
       pageTitle: "Yêu cầu liên kết đã gửi",
       sentRequests,
       pathAdmin,
+      hotelLinkAutoBySenderTag: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
     });
   } catch (err) {
     console.error("[hotel-link-request.listSent]", err);

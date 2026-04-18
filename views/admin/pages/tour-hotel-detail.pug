@@ -105,6 +105,19 @@ block main
           i.fa-solid.fa-ban
           |  Huỷ & Giải phóng phòng
 
+    //- Modal xác nhận (thay cho hộp thoại confirm của trình duyệt)
+    #th-app-dialog.th-app-dialog(aria-hidden="true")
+      .th-app-dialog__backdrop
+      .th-app-dialog__panel(role="dialog" aria-modal="true" aria-labelledby="th-app-dialog-title")
+        .th-app-dialog__header
+          h3#th-app-dialog-title.th-app-dialog__title Xác nhận
+          button#th-app-dialog-close.th-app-dialog__close(type="button" aria-label="Đóng")
+            i.fa-solid.fa-xmark
+        #th-app-dialog-body.th-app-dialog__body
+        .th-app-dialog__footer
+          button#th-app-dialog-cancel.th-app-dialog__btn.th-app-dialog__btn--secondary(type="button") Huỷ
+          button#th-app-dialog-ok.th-app-dialog__btn.th-app-dialog__btn--primary(type="button") Tiếp tục
+
     //- ── Hidden data cho JS ───────────────────────────────────────────────
     script#existing-data(type="application/json")!= JSON.stringify(existingSegment)
     script#hotels-data(type="application/json")!= JSON.stringify(hotels)

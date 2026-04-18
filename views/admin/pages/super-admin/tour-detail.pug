@@ -1,161 +1,383 @@
 extends ../../layouts/default.pug
+include ../../mixins/options.pug
 
 block main
   .box-head
-    h1.box-title Chi tiết Tour
+    h1.box-title
+      | Chi tiết tour
+      if tourDetail.companyId
+        span(style="font-size:14px;font-weight:400;color:#64748b;margin-left:12px;")
+          | — #{tourDetail.companyId.name}
     .inner-buttons
-      a.button.button-outline(href=`/${pathAdmin}/super-admin/tours`)
-        <i class="fa-solid fa-arrow-left"></i> Quay lại
+      a.button.button-outline(href=toursListBackUrl || `/${pathAdmin}/super-admin/tours`)
+        i.fa-solid.fa-arrow-left
+        |  Quay lại
 
-  .section-6(style="margin-top: 20px;")
-    .box-detail
-      .detail-row
-        .detail-label Ảnh đại diện:
-        .detail-value
-          if tour.avatar
-            img(src=tour.avatar, alt=tour.name, style="width: 300px; height: 300px; object-fit: cover; border-radius: 8px;")
+  //- Section 8 — giữ đúng cấu trúc CSS giống /admin/tour/edit
+  .section-8
+    form(id="tour-edit-form" onsubmit="return false;")
+      .inner-group(style="display:none;")
+        label(for="tourId" class="inner-label") Id
+        input(type="hidden" id="tourId" name="id" value=tourDetail.id)
+
+      .inner-group
+        label(for="name" class="inner-label") Tên tour
+        input(type="text" id="name" name="name" value=tourDetail.name disabled)
+
+      .inner-group
+        label(for="category" class="inner-label") Danh mục
+        select(id="category" name="category" disabled)
+          option(value="") -- Chọn danh mục --
+          +options(categoryList, 0, tourDetail.category)
+
+      .inner-group
+        label(class="inner-label") Tags (Loại hình trải nghiệm)
+        .tags-wrapper
+          - var tourTags = Array.isArray(tourDetail.tags) ? tourDetail.tags : [];
+          .tag-item
+            input(type="checkbox" id="tag-adventure" name="tags" value="phiêu lưu" checked=(tourTags.indexOf('phiêu lưu') !== -1) disabled)
+            label(for="tag-adventure") Phiêu lưu
+          .tag-item
+            input(type="checkbox" id="tag-beach" name="tags" value="biển" checked=(tourTags.indexOf('biển') !== -1) disabled)
+            label(for="tag-beach") Biển
+          .tag-item
+            input(type="checkbox" id="tag-culture" name="tags" value="văn hóa" checked=(tourTags.indexOf('văn hóa') !== -1) disabled)
+            label(for="tag-culture") Văn hóa
+          .tag-item
+            input(type="checkbox" id="tag-mountain" name="tags" value="leo núi" checked=(tourTags.indexOf('leo núi') !== -1) disabled)
+            label(for="tag-mountain") Leo núi
+          .tag-item
+            input(type="checkbox" id="tag-city" name="tags" value="tham quan thành phố" checked=(tourTags.indexOf('tham quan thành phố') !== -1) disabled)
+            label(for="tag-city") Tham quan thành phố
+
+      .inner-group
+        label(for="position" class="inner-label") Vị trí
+        input(type="number" id="position" name="position" value=tourDetail.position disabled)
+
+      .inner-group
+        label(for="status" class="inner-label") Trạng thái
+        select(id="status" name="status" disabled)
+          option(value="active" selected=(tourDetail.status=='active')) Hoạt động
+          option(value="inactive" selected=(tourDetail.status=='inactive')) Tạm dừng
+
+      .inner-group.inner-two-col
+        label(for="avatar" class="inner-label") Ảnh đại diện
+        .sa-ro-media
+          if tourDetail.avatar
+            a(href=tourDetail.avatar target="_blank")
+              img(src=tourDetail.avatar alt=tourDetail.name class="sa-ro-avatar")
           else
-            span(style="color: #999;") Chưa có ảnh
-      
-      .detail-row
-        .detail-label Tên Tour:
-        .detail-value
-          strong(style="font-size: 18px;")= tour.name
-      
-      .detail-row
-        .detail-label Công ty:
-        .detail-value
-          if tour.companyId
-            span.badge.badge-info(style="font-size: 14px; padding: 6px 12px;")= tour.companyId.name
+            span.sa-ro-empty Chưa có ảnh
+
+      .inner-group.inner-two-col
+        label(for="images" class="inner-label") Danh sách ảnh
+        .sa-ro-media
+          if tourDetail.images && tourDetail.images.length
+            .sa-ro-image-gallery
+              each img_ in tourDetail.images
+                a(href=img_ target="_blank")
+                  img(src=img_ alt=tourDetail.name)
           else
-            span(style="color: #999;") N/A
-      
-      .detail-row
-        .detail-label Danh mục:
-        .detail-value
-          if tour.categoryName
-            = tour.categoryName
-          else if tour.category
-            span(style="color: #999;") Không tìm thấy danh mục
+            span.sa-ro-empty Chưa có ảnh
+
+      //- GIÁ CŨ
+      .inner-group
+        label(class="inner-label") Giá cũ
+        .inner-input-list
+          .inner-input-item
+            label(for="priceAdult") Người lớn
+            input(type="number" id="priceAdult" name="priceAdult" value=tourDetail.priceAdult disabled)
+          .inner-input-item
+            label(for="priceChildren") Trẻ em
+            input(type="number" id="priceChildren" name="priceChildren" value=tourDetail.priceChildren disabled)
+          .inner-input-item
+            label(for="priceBaby") Em bé
+            input(type="number" id="priceBaby" name="priceBaby" value=tourDetail.priceBaby disabled)
+
+      //- GIÁ MỚI
+      .inner-group
+        label(class="inner-label") Giá mới
+        .inner-input-list
+          .inner-input-item
+            label(for="priceNewAdult") Người lớn
+            input(type="number" id="priceNewAdult" name="priceNewAdult" value=tourDetail.priceNewAdult disabled)
+          .inner-input-item
+            label(for="priceNewChildren") Trẻ em
+            input(type="number" id="priceNewChildren" name="priceNewChildren" value=tourDetail.priceNewChildren disabled)
+          .inner-input-item
+            label(for="priceNewBaby") Em bé (fixed)
+            input(type="number" id="priceNewBaby" name="priceNewBaby" value=tourDetail.priceNewBaby disabled)
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Thời hạn khuyến mãi
+        .inner-input-list
+          .inner-input-item
+            label(for="discountFrom") Từ ngày
+            input(type="date" id="discountFrom" name="discountFrom" value=(tourDetail.discountFromInput || '') disabled)
+          .inner-input-item
+            label(for="discountTo") Đến ngày
+            input(type="date" id="discountTo" name="discountTo" value=(tourDetail.discountToInput || '') disabled)
+
+      //- ==== CÁCH TÍNH GIÁ EM BÉ ====
+      .inner-group
+        label(for="babyPricingMode" class="inner-label") Cách tính giá Em bé
+        select(id="babyPricingMode" name="babyPricingMode" disabled)
+          option(value="fixed" selected=(tourDetail.babyPricingMode!='tiered')) Cố định (dùng Giá mới Em bé)
+          option(value="tiered" selected=(tourDetail.babyPricingMode=='tiered')) Theo bậc (nhiều Em bé, nhiều mức %)
+
+      if tourDetail.babyPricingMode === 'tiered' && tourDetail.babyPricingRules && tourDetail.babyPricingRules.length
+        .inner-group
+          label(class="inner-label") Quy tắc bậc giá Em bé
+          .baby-rules-table
+            .baby-rules-header
+              .baby-rules-cell Bé từ (thứ mấy)
+              .baby-rules-cell đến (thứ mấy)
+              .baby-rules-cell % so với giá
+              .baby-rules-cell Giá tham chiếu
+              .baby-rules-cell(style="visibility:hidden;") &nbsp;
+            .baby-rules-body
+              each rule in tourDetail.babyPricingRules
+                .baby-rules-row
+                  .baby-rules-cell
+                    input(type="number" value=rule.from disabled)
+                  .baby-rules-cell
+                    input(type="text" value=(rule.to === 'inf' ? '∞' : rule.to) disabled)
+                  .baby-rules-cell
+                    input(type="number" value=rule.percent disabled)
+                  .baby-rules-cell
+                    input(type="text" value=(rule.ref === 'adult' ? 'Người lớn' : 'Trẻ em') disabled)
+                  .baby-rules-cell(style="visibility:hidden;") &nbsp;
+
+      //- ĐIỂM KHỞI HÀNH
+      .inner-group
+        label(for="departureCity" class="inner-label") Điểm khởi hành
+        select(id="departureCity" name="departureCity" disabled)
+          option(value="") -- Chọn điểm khởi hành --
+          each item in cityList
+            option(value=item.id selected=(tourDetail.departureCity && tourDetail.departureCity == item.id)) #{item.name}
+
+      //- ĐỊA ĐIỂM CÓ TRONG TOUR
+      .inner-group
+        label(class="inner-label") Những địa điểm có trong tour
+
+        //- Tour trong nước
+        .inner-group#vietnam-locations-group(style=isInternationalTour ? "display:none" : "")
+          label(class="inner-label") Địa điểm trong nước (Việt Nam)
+          .tour-locations-wrapper
+            if (tourDetail.locationBlocks && tourDetail.locationBlocks.length > 0)
+              each loc, idx in tourDetail.locationBlocks
+                .tour-location-item(data-index=idx)
+                  .inner-input-list
+                    .inner-input-item
+                      label Điểm đến
+                      select.location-city(disabled)
+                        option(value="") -- Chọn tỉnh/thành --
+                        each city in cityList
+                          option(value=city.id selected=(loc.city && loc.city == city.id)) #{city.name}
+                    .inner-input-item
+                      label Các địa điểm nổi tiếng
+                      .location-spots-list
+                        if loc.spots && loc.spots.length > 0
+                          each spot in loc.spots
+                            .location-spot-item
+                              .spot-input-group
+                                textarea.spot-input(rows="2" disabled)= spot
+                        else
+                          .location-spot-item
+                            .spot-input-group
+                              textarea.spot-input(rows="2" disabled)
+            else
+              p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có địa điểm
+
+        //- Tour nước ngoài
+        .inner-group#tour-countries-group(style=isInternationalTour ? "" : "display:none")
+          label(class="inner-label") Địa điểm nước ngoài (Châu Âu)
+          - var tcList = tourDetail.tourCountries || [];
+          - var lbcMap = tourDetail.locationsByCountry || {};
+          if tcList.length === 0
+            p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có quốc gia nào
           else
-            span(style="color: #999;") N/A
-      
-      .detail-row
-        .detail-label Trạng thái:
-        .detail-value
-          if tour.status === "active"
-            span.badge.badge-green Hoạt động
+            .countries-wrapper
+              each country in europeanCountries
+                - var countryIdStr = String(country._id);
+                - var selected = tcList.indexOf(countryIdStr) !== -1;
+                if selected
+                  .country-item(data-country-id=countryIdStr)
+                    .country-header
+                      input(type="checkbox" id=`country-${countryIdStr}` name="tourCountries" value=countryIdStr class="tour-country-checkbox" checked disabled)
+                      label(for=`country-${countryIdStr}` class="country-label")= country.name
+                    .country-locations-wrapper(data-country-id=countryIdStr)
+                      - var locsOfCountry = lbcMap[countryIdStr] || [];
+                      if locsOfCountry.length === 0
+                        p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có điểm đến
+                      else
+                        each loc, lIdx in locsOfCountry
+                          .tour-location-item(data-index=lIdx data-country-id=countryIdStr)
+                            .inner-input-list
+                              .inner-input-item
+                                label Điểm đến
+                                select.location-city(data-country-id=countryIdStr disabled)
+                                  option(value="") -- Chọn thành phố --
+                                  each city in europeanCities
+                                    if String(city.countryId) === countryIdStr
+                                      option(value=city.id selected=(loc.city && loc.city == city.id))= city.name
+                              .inner-input-item
+                                label Các địa điểm nổi tiếng
+                                .location-spots-list
+                                  if loc.spots && loc.spots.length > 0
+                                    each spot in loc.spots
+                                      .location-spot-item
+                                        .spot-input-group
+                                          textarea.spot-input(rows="2" disabled)= spot
+                                  else
+                                    .location-spot-item
+                                      .spot-input-group
+                                        textarea.spot-input(rows="2" disabled)
+
+      .inner-group
+        label(for="time" class="inner-label") Thời gian
+        input(type="text" id="time" name="time" value=tourDetail.time disabled)
+
+      .inner-group
+        label(for="vehicle" class="inner-label") Phương tiện
+        input(type="text" id="vehicle" name="vehicle" value=tourDetail.vehicle disabled)
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Ngày khởi hành & Ngày kết thúc
+        .inner-desc Danh sách các lịch khởi hành của tour.
+        .departures-wrapper
+          if (tourDetail.departuresBlocks && tourDetail.departuresBlocks.length > 0)
+            each pair, idx in tourDetail.departuresBlocks
+              .departure-pair-item(data-index=idx)
+                .departure-pair-inputs
+                  .departure-pair-field
+                    label Ngày khởi hành
+                    input(type="date" class="departure-date-input" value=pair.departureDateFormat disabled)
+                  .departure-pair-field
+                    label Ngày kết thúc
+                    input(type="date" class="end-date-input" value=pair.endDateFormat disabled)
+                  .departure-pair-field
+                    label Tổng số ghế
+                    input(type="number" class="seats-total-input" min="0" value=pair.seatsTotal disabled)
+                  .departure-pair-field
+                    label Ghế còn lại
+                    input(type="number" class="seats-remaining-input" min="0" value=pair.seatsRemaining disabled)
           else
-            span.badge.badge-red Dừng hoạt động
-      
-      .detail-row
-        .detail-label Giá Người lớn:
-        .detail-value
-          strong(style="color: #27ae60; font-size: 16px;")= (tour.priceNewAdult || tour.priceAdult || 0).toLocaleString('vi-VN') + ' đ'
-      
-      .detail-row
-        .detail-label Giá Trẻ em:
-        .detail-value
-          strong(style="color: #27ae60;")= (tour.priceNewChildren || tour.priceChildren || 0).toLocaleString('vi-VN') + ' đ'
-      
-      .detail-row
-        .detail-label Giá Em bé:
-        .detail-value
-          if tour.babyPricingMode === 'fixed'
-            strong(style="color: #27ae60;")= (tour.priceNewBaby || tour.priceBaby || 0).toLocaleString('vi-VN') + ' đ'
+            p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có lịch khởi hành
+
+      .inner-group.inner-two-col
+        label(for="information" class="inner-label") Thông tin tour
+        .sa-ro-html-box
+          if tourDetail.information
+            div!= tourDetail.information
           else
-            span.badge.badge-blue Theo bậc
-      
-      .detail-row
-        .detail-label Số ghế còn lại:
-        .detail-value= tour.seatsRemaining || 0
-      
-      .detail-row
-        .detail-label Tổng số ghế:
-        .detail-value= tour.seatsTotal || 0
-      
-      .detail-row
-        .detail-label Điểm khởi hành:
-        .detail-value
-          if tour.departureCity && tour.departureCity.name
-            = tour.departureCity.name
-          else if tour.departureCity
-            = tour.departureCity
+            span.sa-ro-empty Chưa có thông tin
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Điểm nổi bật
+        .tour-highlights-list
+          if tourDetail.highlights && tourDetail.highlights.length > 0
+            each highlight in tourDetail.highlights
+              .tour-highlight-item
+                .highlight-input-group
+                  textarea.highlight-input(rows="2" disabled)= highlight
           else
-            span(style="color: #999;") N/A
-      
-      .detail-row
-        .detail-label Ngày khởi hành:
-        .detail-value
-          if tour.departureDate
-            = new Date(tour.departureDate).toLocaleDateString('vi-VN')
+            p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Bao gồm
+        .tour-includes-list
+          if tourDetail.includes && tourDetail.includes.length > 0
+            each include in tourDetail.includes
+              .tour-include-item
+                .include-input-group
+                  textarea.include-input(rows="2" disabled)= include
           else
-            span(style="color: #999;") N/A
-      
-      .detail-row
-        .detail-label Thời gian:
-        .detail-value= tour.time || "N/A"
-      
-      .detail-row
-        .detail-label Phương tiện:
-        .detail-value= tour.vehicle || "N/A"
-      
-      if tour.information
-        .detail-row
-          .detail-label Thông tin tour:
-          .detail-value
-            div!= tour.information
-      
-      if tour.images && tour.images.length > 0
-        .detail-row
-          .detail-label Danh sách ảnh:
-          .detail-value
-            .image-gallery(style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;")
-              each image in tour.images
-                img(src=image, alt=tour.name, style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; cursor: pointer;", onclick=`window.open('${image}', '_blank')`)
-      
-      .detail-row
-        .detail-label Ngày tạo:
-        .detail-value
-          if tour.createdAt
-            = new Date(tour.createdAt).toLocaleDateString('vi-VN') + ' ' + new Date(tour.createdAt).toLocaleTimeString('vi-VN')
+            p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Không bao gồm
+        .tour-excludes-list
+          if tourDetail.excludes && tourDetail.excludes.length > 0
+            each exclude in tourDetail.excludes
+              .tour-exclude-item
+                .exclude-input-group
+                  textarea.exclude-input(rows="2" disabled)= exclude
           else
-            span(style="color: #999;") N/A
-      
-      .detail-row
-        .detail-label Ngày cập nhật:
-        .detail-value
-          if tour.updatedAt
-            = new Date(tour.updatedAt).toLocaleDateString('vi-VN') + ' ' + new Date(tour.updatedAt).toLocaleTimeString('vi-VN')
-          else
-            span(style="color: #999;") Chưa cập nhật
+            p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có
+
+      .inner-group.inner-two-col
+        label(class="inner-label") Lịch trình tour
+        .inner-schedule
+          .inner-schedule-list
+            if (tourDetail.schedules && tourDetail.schedules.length > 0)
+              each item in tourDetail.schedules
+                .inner-schedule-item
+                  .inner-schedule-head
+                    input(type="text" value=item.title disabled)
+                    span(class="inner-schedule-button inner-more")
+                      i.fa-solid.fa-angle-down
+                  .inner-schedule-body
+                    .sa-ro-html-box
+                      if item.description
+                        div!= item.description
+                      else
+                        span.sa-ro-empty Chưa có mô tả
+            else
+              p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có lịch trình
+
+    .inner-back
+      a(href=toursListBackUrl || `/${pathAdmin}/super-admin/tours`) Quay lại danh sách tour
 
   style.
-    .box-detail {
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .detail-row {
-      display: flex;
-      padding: 15px 0;
-      border-bottom: 1px solid #f0f0f0;
-    }
-    .detail-row:last-child {
-      border-bottom: none;
-    }
-    .detail-label {
-      font-weight: 600;
-      width: 200px;
-      color: #333;
-    }
-    .detail-value {
-      flex: 1;
-      color: #666;
-    }
-    .image-gallery img:hover {
-      transform: scale(1.05);
-      transition: transform 0.2s;
+    /* Disable rõ ràng các input để không gây nhầm lẫn */
+    .section-8 input[disabled],
+    .section-8 select[disabled],
+    .section-8 textarea[disabled] {
+      background: #f8fafc !important;
+      color: #1e293b !important;
+      cursor: default;
+      opacity: 1;
     }
 
+    .sa-ro-media { padding: 6px 0; }
+    .sa-ro-empty {
+      color: #94a3b8;
+      font-style: italic;
+    }
+    .sa-ro-avatar {
+      max-width: 260px;
+      max-height: 220px;
+      object-fit: cover;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    .sa-ro-image-gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .sa-ro-image-gallery img {
+      width: 140px;
+      height: 110px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 2px solid #e2e8f0;
+      transition: transform .2s, border-color .2s;
+    }
+    .sa-ro-image-gallery img:hover {
+      transform: scale(1.06);
+      border-color: #0d9488;
+    }
+
+    /* Khối hiển thị nội dung HTML (information/schedule.description) */
+    .sa-ro-html-box {
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      padding: 12px 14px;
+      border-radius: 8px;
+      color: #1e293b;
+      line-height: 1.7;
+      min-height: 60px;
+    }
+    .sa-ro-html-box img { max-width: 100%; border-radius: 6px; }

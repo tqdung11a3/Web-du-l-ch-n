@@ -87,6 +87,9 @@ if (listFilepondImage.length > 0) {
   FilePond.registerPlugin(FilePondPluginFileValidateType);
 
   listFilepondImage.forEach((filepondImage) => {
+    if (filepondImage.closest('#hotel-edit-form[data-read-only="1"]')) {
+      return;
+    }
     let files = null;
     const elementImageDefault = filepondImage.closest("[image-default]");
     if (elementImageDefault) {
@@ -119,6 +122,9 @@ if (listFilepondImageMulti.length > 0) {
   FilePond.registerPlugin(FilePondPluginFileValidateType);
 
   listFilepondImageMulti.forEach((filepondImage) => {
+    if (filepondImage.closest('#hotel-edit-form[data-read-only="1"]')) {
+      return;
+    }
     let files = null;
     const elementListImageDefault = filepondImage.closest(
       "[list-image-default]"
@@ -862,7 +868,10 @@ if (tourCreateForm) {
           <input type="number" class="seats-remaining-input" min="0" placeholder="VD: 40">
         </div>
       </div>
-      <button type="button" class="departure-pair-remove-btn">Xóa</button>
+      <div class="departure-pair-field departure-pair-field--remove">
+        <label aria-hidden="true">&nbsp;</label>
+        <button type="button" class="departure-pair-remove-btn">Xóa</button>
+      </div>
     `;
     return div;
   }
@@ -1131,7 +1140,9 @@ if (tourCreateForm) {
 
 // Order Edit Form
 const orderEditForm = document.querySelector("#order-edit-form");
-if (orderEditForm) {
+if (orderEditForm && orderEditForm.dataset.readOnly === "1") {
+  // Super admin xem chi tiết: không validate / không PATCH
+} else if (orderEditForm) {
   const validator = new JustValidate("#order-edit-form");
 
   validator
@@ -1885,27 +1896,42 @@ if (adminTabSwitch) {
 // Hotel Selector - Chỉ xử lý localStorage, không xử lý change event (đã có trong template)
 function initHotelSelector() {
   const hotelSelector = document.getElementById("hotelSelector");
-  
-  if (!hotelSelector) {
+
+  if (!hotelSelector || hotelSelector.options.length === 0) {
     return;
   }
-  
-  // Lấy hotel ID đã chọn từ localStorage hoặc query parameter
+
+  const optionValues = new Set(
+    Array.from(hotelSelector.options)
+      .map((o) => o.value)
+      .filter((v) => v != null && String(v).trim() !== "")
+  );
+
+  // Lấy hotel ID đã chọn từ URL hoặc localStorage
   const urlParams = new URLSearchParams(window.location.search);
   const hotelIdFromUrl = urlParams.get("hotelId");
   const savedHotelId = localStorage.getItem("selectedHotelId");
-  
-  // Ưu tiên hotelId từ URL, sau đó từ localStorage, cuối cùng là "all"
-  const initialHotelId = hotelIdFromUrl || savedHotelId || "all";
-  
-  // Set giá trị dropdown (nếu value chưa được set từ server)
-  if (hotelSelector.value !== initialHotelId) {
+
+  // Không dùng "all": dropdown không có option đó → select trống (hay gặp ở /hotel/tour-assignments)
+  let initialHotelId = hotelIdFromUrl || savedHotelId || "";
+  if (
+    !initialHotelId ||
+    initialHotelId === "all" ||
+    !optionValues.has(initialHotelId)
+  ) {
+    initialHotelId = hotelSelector.options[0]
+      ? String(hotelSelector.options[0].value)
+      : "";
+  }
+
+  if (initialHotelId && hotelSelector.value !== initialHotelId) {
     hotelSelector.value = initialHotelId;
   }
-  
-  // Lưu vào localStorage nếu chưa có trong URL
-  if (hotelIdFromUrl) {
+
+  if (hotelIdFromUrl && optionValues.has(hotelIdFromUrl)) {
     localStorage.setItem("selectedHotelId", hotelIdFromUrl);
+  } else if (!hotelIdFromUrl && initialHotelId && optionValues.has(initialHotelId)) {
+    localStorage.setItem("selectedHotelId", initialHotelId);
   }
 }
 
@@ -1921,11 +1947,14 @@ function appendHotelIdToSidebarLinks() {
   const hotelMenuLinks = [
     `/${pathAdmin}/hotel/dashboard`,
     `/${pathAdmin}/hotel/list`,
+    `/${pathAdmin}/hotel/link-requests`,
     `/${pathAdmin}/hotel/booking/list`,
+    `/${pathAdmin}/hotel/tour-assignments`,
     `/${pathAdmin}/hotel/room-types`,
     `/${pathAdmin}/hotel/rooms/list`,
     `/${pathAdmin}/hotel/customers`,
-    `/${pathAdmin}/hotel/payments`
+    `/${pathAdmin}/hotel/payments`,
+    `/${pathAdmin}/hotel/reviews`,
   ];
   
   // Tìm tất cả các links trong sidebar
@@ -2063,6 +2092,28 @@ if (sider) {
         // Kiểm tra nếu currentPath là bất kỳ trang booking nào
         // Pattern: /hotel/booking/list, /hotel/booking/calendar, /hotel/booking/:id, etc.
         if (currentPath.includes("/hotel/booking/")) {
+          isMatch = true;
+        }
+      }
+
+      // Ngoại lệ 5: Phân phòng cho tour — danh sách và /hotel/tour-assignments/:segmentId (kèm query)
+      if (!isMatch && hrefPath.includes("/hotel/tour-assignments")) {
+        if (
+          currentPath === hrefPath ||
+          currentPath.startsWith(hrefPath + "/")
+        ) {
+          isMatch = true;
+        }
+      }
+
+      // Ngoại lệ 6: Liên kết Tour – Khách sạn — list, /tour-hotel/detail/:tourId, /tour-hotel/assign/:segmentId
+      if (!isMatch && hrefPath.includes("/tour-hotel/list")) {
+        if (currentPath === hrefPath) {
+          isMatch = true;
+        } else if (
+          currentPath.includes("/tour-hotel/detail/") ||
+          currentPath.includes("/tour-hotel/assign/")
+        ) {
           isMatch = true;
         }
       }
@@ -2308,6 +2359,43 @@ if (changeMulti) {
       })
         .then((res) => res.json())
         .then((data) => {
+          // Trường hợp đặc biệt: bulk bật "Hoạt động" nhưng có tour bị chặn vì
+          // chưa đủ điều kiện hiển thị (canPublishTour). Hiển thị chi tiết.
+          var hasBlocked =
+            data && Array.isArray(data.blocked) && data.blocked.length > 0;
+          if (hasBlocked) {
+            var lines = [];
+            lines.push(data.message || "Một số tour không thể bật hiển thị:");
+            lines.push("");
+            data.blocked.forEach(function (b) {
+              lines.push("• " + (b.name || "(không tên)"));
+              (b.reasons || []).forEach(function (r) {
+                lines.push("    - " + r);
+              });
+            });
+            window.alert(lines.join("\n"));
+            window.location.reload();
+            return;
+          }
+
+          // Trường hợp editPatch trả về reasons[] khi từ chối bật hiển thị
+          if (
+            data &&
+            data.code === "error" &&
+            Array.isArray(data.reasons) &&
+            data.reasons.length > 0
+          ) {
+            var lines2 = [];
+            lines2.push(data.message || "Không thể thực hiện hành động:");
+            lines2.push("");
+            data.reasons.forEach(function (r) {
+              lines2.push("• " + r);
+            });
+            window.alert(lines2.join("\n"));
+            window.location.reload();
+            return;
+          }
+
           drawNotify(data.code, data.message);
           window.location.reload();
         });
@@ -2862,7 +2950,10 @@ if (tourEditForm) {
           <input type="number" class="seats-remaining-input" min="0" placeholder="VD: 40">
         </div>
       </div>
-      <button type="button" class="departure-pair-remove-btn">Xóa</button>
+      <div class="departure-pair-field departure-pair-field--remove">
+        <label aria-hidden="true">&nbsp;</label>
+        <button type="button" class="departure-pair-remove-btn">Xóa</button>
+      </div>
     `;
     return div;
   }
@@ -3117,7 +3208,17 @@ if (tourEditForm) {
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data.code === "error") return notify.error(data.message);
+          if (data.code === "error") {
+            // Khi server từ chối bật hiển thị, kèm reasons[] chi tiết
+            if (Array.isArray(data.reasons) && data.reasons.length > 0) {
+              const lines = [data.message || "Không thể lưu tour:"];
+              lines.push("");
+              data.reasons.forEach((r) => lines.push("• " + r));
+              window.alert(lines.join("\n"));
+              return;
+            }
+            return notify.error(data.message);
+          }
           if (data.code === "success") notify.success(data.message);
         });
     });
@@ -3700,7 +3801,9 @@ if (hotelCreateForm) {
 
 // ================== HOTEL EDIT FORM ==================
 const hotelEditForm = document.querySelector("#hotel-edit-form");
-if (hotelEditForm) {
+if (hotelEditForm && hotelEditForm.dataset.readOnly === "1") {
+  // Super admin xem chi tiết: không validate / không PATCH
+} else if (hotelEditForm) {
   const validator = new JustValidate("#hotel-edit-form");
 
   validator

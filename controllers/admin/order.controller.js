@@ -162,8 +162,10 @@ module.exports.list = async (req, res) => {
 
       const babyUnitForUi = babyUnitAt(ctx, Math.max(1, qBaby || 1));
 
+      const extraRoomCost = Number(it.extraRoomCost || 0);
+
       // Cộng vào tạm tính
-      subTotalView += qAdult * unitAdult + qChild * unitChild + babyTotal;
+      subTotalView += qAdult * unitAdult + qChild * unitChild + babyTotal + extraRoomCost;
 
       return {
         ...it,
@@ -204,130 +206,137 @@ module.exports.list = async (req, res) => {
   });
 };
 
+/**
+ * Chuẩn bị dữ liệu màn hình order-edit (dùng cho company admin và super admin).
+ * @param {string} id - Order _id
+ * @param {string|import("mongoose").Types.ObjectId|null} companyId - null = tất cả item (super admin không lọc theo công ty)
+ */
+async function buildOrderEditLocals(id, companyId) {
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
+  const filter = { _id: id, deleted: false };
+  if (companyId) filter["items.companyId"] = companyId;
+
+  const o = await Order.findOne(filter).lean();
+  if (!o) return null;
+
+  const visibleItems = companyId
+    ? (o.items || []).filter(
+        (it) => String(it.companyId) === String(companyId)
+      )
+    : o.items || [];
+
+  const cityIds = visibleItems
+    .map((i) => i.departureCity || i.locationFrom)
+    .filter(Boolean);
+
+  let cityMap = {};
+  if (cityIds.length) {
+    const cities = await City.find({ _id: { $in: cityIds } })
+      .select("_id name")
+      .lean();
+    cityMap = Object.fromEntries(cities.map((c) => [String(c._id), c.name]));
+  }
+
+  const needTourIds = new Set();
+  for (const it of visibleItems) {
+    const hasRules =
+      (it.babyPricingMode && it.babyPricingMode !== "fixed") ||
+      (Array.isArray(it.babyPricingRules) && it.babyPricingRules.length > 0);
+    if (!hasRules && it.tourId) {
+      needTourIds.add(String(it.tourId));
+    }
+  }
+
+  let tourById = {};
+  if (needTourIds.size) {
+    const tours = await Tour.find({
+      _id: { $in: Array.from(needTourIds) },
+      status: "active",
+      deleted: false,
+    })
+      .select(
+        "_id priceNewAdult priceNewChildren priceNewBaby babyPricingMode babyPricingRules"
+      )
+      .lean();
+
+    tourById = tours.reduce((acc, t) => {
+      acc[String(t._id)] = t;
+      return acc;
+    }, {});
+  }
+
+  let subTotalView = 0;
+
+  const items = visibleItems.map((i) => {
+    const departureDateFormat =
+      i.departureDateDisplay ||
+      (i.departureDate ? moment(i.departureDate).format("DD/MM/YYYY") : "");
+
+    const cityId = i.departureCity || i.locationFrom || null;
+    const cityName = cityId ? cityMap[String(cityId)] || "" : "";
+
+    const qAdult = Number(i.quantityAdult || 0);
+    const qChild = Number(i.quantityChildren || 0);
+    const qBaby = Number(i.quantityBaby || 0);
+
+    const unitAdult = Number(i.priceNewAdult || 0);
+    const unitChild = Number(i.priceNewChildren || 0);
+
+    const ctx = getBabyPricingCtx(i, tourById);
+
+    let babyTotal = 0;
+    for (let idx = 1; idx <= qBaby; idx++) {
+      babyTotal += babyUnitAt(ctx, idx);
+    }
+
+    const babyUnitForUi = babyUnitAt(ctx, Math.max(1, qBaby || 1));
+
+    const extraRoomCost = Number(i.extraRoomCost || 0);
+
+    subTotalView += qAdult * unitAdult + qChild * unitChild + babyTotal + extraRoomCost;
+
+    return {
+      ...i,
+      departureDateFormat,
+      cityName,
+      babyUnitForUi,
+    };
+  });
+
+  const discountView = 0;
+  const totalView = subTotalView - discountView;
+
+  const orderDetail = {
+    ...o,
+    items,
+    createdAtFormat: moment(o.createdAt).format("YYYY-MM-DDTHH:mm"),
+    subTotalView,
+    discountView,
+    totalView,
+  };
+
+  return {
+    orderDetail,
+    pageTitle: `Đơn hàng: ${orderDetail.code}`,
+  };
+}
+
+module.exports.buildOrderEditLocals = buildOrderEditLocals;
+
 module.exports.edit = async (req, res) => {
   try {
     const id = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.redirect(`/${pathAdmin}/order/list`);
-    }
-
     const companyId = req.account?.companyId || null;
-    const filter = { _id: id, deleted: false };
-    if (companyId) filter["items.companyId"] = companyId;
-
-    // Lấy đơn hàng
-    const o = await Order.findOne(filter).lean();
-    if (!o) return res.redirect(`/${pathAdmin}/order/list`);
-
-    // Chỉ giữ item thuộc công ty (nếu có companyId)
-    const visibleItems = companyId
-      ? (o.items || []).filter(
-          (it) => String(it.companyId) === String(companyId)
-        )
-      : o.items || [];
-
-    // ===== cityMap: ưu tiên departureCity, fallback locationFrom (đơn cũ) =====
-    const cityIds = visibleItems
-      .map((i) => i.departureCity || i.locationFrom)
-      .filter(Boolean);
-
-    let cityMap = {};
-    if (cityIds.length) {
-      const cities = await City.find({ _id: { $in: cityIds } })
-        .select("_id name")
-        .lean();
-      cityMap = Object.fromEntries(cities.map((c) => [String(c._id), c.name]));
-    }
-
-    // Chuẩn bị tourById để fallback rule em bé (giống hàm list)
-    const needTourIds = new Set();
-    for (const it of visibleItems) {
-      const hasRules =
-        (it.babyPricingMode && it.babyPricingMode !== "fixed") ||
-        (Array.isArray(it.babyPricingRules) && it.babyPricingRules.length > 0);
-      if (!hasRules && it.tourId) {
-        needTourIds.add(String(it.tourId));
-      }
-    }
-
-    let tourById = {};
-    if (needTourIds.size) {
-      const tours = await Tour.find({
-        _id: { $in: Array.from(needTourIds) },
-        status: "active",
-        deleted: false,
-      })
-        .select(
-          "_id priceNewAdult priceNewChildren priceNewBaby babyPricingMode babyPricingRules"
-        )
-        .lean();
-
-      tourById = tours.reduce((acc, t) => {
-        acc[String(t._id)] = t;
-        return acc;
-      }, {});
-    }
-
-    // Tính lại tiền cho subset item với rule em bé bậc thang
-    let subTotalView = 0;
-
-    const items = visibleItems.map((i) => {
-      // Ưu tiên departureDateDisplay (đã lưu sẵn DD/MM/YYYY từ client),
-      // fallback về departureDate cũ cho các đơn hàng trước đây
-      const departureDateFormat = i.departureDateDisplay
-        || (i.departureDate ? moment(i.departureDate).format("DD/MM/YYYY") : "");
-
-      const cityId = i.departureCity || i.locationFrom || null;
-      const cityName = cityId ? cityMap[String(cityId)] || "" : "";
-
-      const qAdult = Number(i.quantityAdult || 0);
-      const qChild = Number(i.quantityChildren || 0);
-      const qBaby = Number(i.quantityBaby || 0);
-
-      const unitAdult = Number(i.priceNewAdult || 0);
-      const unitChild = Number(i.priceNewChildren || 0);
-
-      // Lấy context rule em bé (ưu tiên snapshot trong item, thiếu thì lấy từ Tour)
-      const ctx = getBabyPricingCtx(i, tourById);
-
-      // Cộng dồn tiền em bé theo từng bậc
-      let babyTotal = 0;
-      for (let idx = 1; idx <= qBaby; idx++) {
-        babyTotal += babyUnitAt(ctx, idx);
-      }
-
-      // Đơn giá em bé để hiển thị (nếu cần dùng ở UI)
-      const babyUnitForUi = babyUnitAt(ctx, Math.max(1, qBaby || 1));
-
-      // Cộng vào tạm tính
-      subTotalView += qAdult * unitAdult + qChild * unitChild + babyTotal;
-
-      return {
-        ...i,
-        departureDateFormat,
-        cityName,
-        babyUnitForUi,
-      };
-    });
-
-    const discountView = 0;
-    const totalView = subTotalView - discountView;
-
-    const orderDetail = {
-      ...o,
-      items,
-      createdAtFormat: moment(o.createdAt).format("YYYY-MM-DDTHH:mm"),
-      subTotalView,
-      discountView,
-      totalView,
-    };
+    const vm = await buildOrderEditLocals(id, companyId);
+    if (!vm) return res.redirect(`/${pathAdmin}/order/list`);
 
     return res.render("admin/pages/order-edit", {
-      pageTitle: `Đơn hàng: ${orderDetail.code}`,
-      orderDetail,
+      pageTitle: vm.pageTitle,
+      orderDetail: vm.orderDetail,
       paymentMethodList,
       paymentStatusList,
       statusList,
+      readOnly: false,
     });
   } catch (e) {
     return res.redirect(`/${pathAdmin}/order/list`);

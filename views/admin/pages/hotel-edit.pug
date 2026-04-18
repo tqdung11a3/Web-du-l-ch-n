@@ -2,10 +2,11 @@
 extends ../layouts/default.pug
 
 block main
-  h1.box-title Chỉnh sửa khách sạn
+  - var _hotelReadOnly = readOnly === true
+  h1.box-title= _hotelReadOnly ? 'Chi tiết khách sạn' : 'Chỉnh sửa khách sạn'
 
-  .section-8.hotel-section
-    form(id="hotel-edit-form")
+  .section-8.hotel-section(class=_hotelReadOnly ? 'hotel-section--readonly' : '')
+    form#hotel-edit-form(data-read-only=(_hotelReadOnly ? '1' : '0'))
       // Id ẩn
       .inner-group(style="display:none;")
         label(for="id" class="inner-label") Id
@@ -120,26 +121,44 @@ block main
       // ===== Ảnh đại diện + Danh sách ảnh =====
       .inner-group.inner-two-col
         label(for="avatar" class="inner-label") Ảnh đại diện
-        .inner-upload-image(image-default=hotelDetail.avatar)
-          input(
-            type="file"
-            id="avatar"
-            name="avatar"
-            filepond-image
-          )
+        if _hotelReadOnly
+          .sa-hotel-ro-media
+            if hotelDetail.avatar
+              a(href=hotelDetail.avatar target="_blank" rel="noopener noreferrer")
+                img.sa-hotel-ro-avatar(src=hotelDetail.avatar alt=hotelDetail.name || '')
+            else
+              span.sa-ro-empty Chưa có ảnh
+        else
+          .inner-upload-image(image-default=hotelDetail.avatar)
+            input(
+              type="file"
+              id="avatar"
+              name="avatar"
+              filepond-image
+            )
 
       .inner-group.inner-two-col
         label(for="images" class="inner-label") Danh sách ảnh
-        .inner-upload-image-multi(list-image-default=hotelDetail.images)
-          input(
-            type="file"
-            id="images"
-            name="images"
-            filepond-image-multi
-            multiple
-            data-allow-reorder="true"
-            data-max-files="10"
-          )
+        if _hotelReadOnly
+          .sa-hotel-ro-media
+            if hotelDetail.images && hotelDetail.images.length
+              .sa-hotel-ro-gallery
+                each gimg in hotelDetail.images
+                  a(href=gimg target="_blank" rel="noopener noreferrer")
+                    img(src=gimg alt=hotelDetail.name || '')
+            else
+              span.sa-ro-empty Chưa có ảnh
+        else
+          .inner-upload-image-multi(list-image-default=hotelDetail.images)
+            input(
+              type="file"
+              id="images"
+              name="images"
+              filepond-image-multi
+              multiple
+              data-allow-reorder="true"
+              data-max-files="10"
+            )
 
       // ===== Tiện nghi =====
       .inner-group.inner-two-col
@@ -735,11 +754,15 @@ block main
 
       // ===== Loại phòng =====
       // ===== Nút cập nhật =====
-      .inner-button.inner-two-col
-        button(type="submit") Cập nhật
+      if !_hotelReadOnly
+        .inner-button.inner-two-col
+          button(type="submit") Cập nhật
 
   .inner-back
-    a(href=`/${pathAdmin}/hotel/list`) Quay lại danh sách
+    if _hotelReadOnly
+      a(href=hotelsListBackUrl || `/${pathAdmin}/super-admin/hotels`) Quay lại danh sách
+    else
+      a(href=`/${pathAdmin}/hotel/list`) Quay lại danh sách
 
   script.
     // Xử lý thêm/xóa điểm nổi bật
@@ -1388,3 +1411,53 @@ block main
         ageBandsList.appendChild(newItem);
       });
     });
+
+  if _hotelReadOnly
+    style.
+      .hotel-section--readonly input:not([type="hidden"]),
+      .hotel-section--readonly select,
+      .hotel-section--readonly textarea,
+      .hotel-section--readonly button {
+        background: #f8fafc !important;
+        color: #1e293b !important;
+        cursor: default;
+        opacity: 1;
+      }
+      .sa-ro-empty { color: #94a3b8; font-style: italic; }
+      .sa-hotel-ro-media { padding: 6px 0; }
+      .sa-hotel-ro-avatar {
+        max-width: 260px;
+        max-height: 220px;
+        object-fit: cover;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.12);
+        display: block;
+      }
+      .sa-hotel-ro-gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .sa-hotel-ro-gallery img {
+        width: 140px;
+        height: 110px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 2px solid #e2e8f0;
+      }
+
+    script.
+      document.addEventListener('DOMContentLoaded', function () {
+        var f = document.getElementById('hotel-edit-form');
+        if (!f || f.getAttribute('data-read-only') !== '1') return;
+        f.addEventListener('submit', function (e) { e.preventDefault(); });
+        f.querySelectorAll('.age-band-config-content').forEach(function (el) {
+          el.style.display = 'block';
+        });
+        f.querySelectorAll('.age-band-config-toggle i').forEach(function (ic) {
+          ic.className = 'fa-solid fa-chevron-up';
+        });
+        f.querySelectorAll('input:not([type="hidden"]), select, textarea, button').forEach(function (el) {
+          el.disabled = true;
+        });
+      });

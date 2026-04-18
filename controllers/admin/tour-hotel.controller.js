@@ -8,11 +8,16 @@ const Company     = require("../../models/company.model");
 const Hotel       = require("../../models/hotel.model");
 const HotelBooking= require("../../models/hotel-booking.model");
 const TourSegment = require("../../models/tour-segment.model");
+const HotelLinkRequest = require("../../models/hotel-link-request.model");
 const Order       = require("../../models/order.model");
+
 const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
 const { generateRandomNumber }     = require("../../helpers/generate.helper");
 const { pathAdmin } = require("../../config/variable.config");
 const moment = require("moment");
+const {
+  HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
+} = require("../../helpers/hotel-link-request-note.helper");
 
 // ── Danh sách tour của company ───────────────────────────────────────────────
 module.exports.list = async (req, res) => {
@@ -159,7 +164,7 @@ module.exports.hotelAvailability = async (req, res) => {
       checkIn:  { $lt: checkOut },
       checkOut: { $gt: checkIn },
     })
-      .select("roomTypeId rooms status checkIn checkOut")
+      .select("roomTypeId roomId rooms status checkIn checkOut")
       .lean();
 
     const roomTypes = (hotel.roomTypes || []).map((rt) => {
@@ -237,7 +242,7 @@ module.exports.suggestAllocation = async (req, res) => {
         checkIn:  { $lt: checkOut },
         checkOut: { $gt: checkIn },
       })
-        .select("roomTypeId rooms status checkIn checkOut")
+        .select("roomTypeId roomId rooms status checkIn checkOut")
         .lean();
 
       const roomTypes = (hotel.roomTypes || [])
@@ -342,7 +347,6 @@ module.exports.confirmSegments = async (req, res) => {
     }
 
     const TourModel = require("../../models/tour.model");
-    const HotelLinkRequest = require("../../models/hotel-link-request.model");
     const Notification = require("../../models/notification.model");
 
     const tourDoc = await TourModel.findById(tourId).select("name").lean();
@@ -359,11 +363,23 @@ module.exports.confirmSegments = async (req, res) => {
       { status: "cancelled" }
     );
 
-    // Huỷ các link request cũ đang pending
-    await HotelLinkRequest.updateMany(
-      { tourSegmentId: tourSeg._id, status: "pending" },
-      { status: "rejected", responseNote: "Đã huỷ do xác nhận lại segment" }
-    );
+    // Huỷ các link request cũ đang pending (ghi rõ: phía công ty gửi tour xác nhận lại, không phải đối tác từ chối)
+    const pendingOldLink = await HotelLinkRequest.find({
+      tourSegmentId: tourSeg._id,
+      status: "pending",
+    }).lean();
+    const fromDisp = fromCompanyName || "công ty tổ chức tour";
+    for (const lr of pendingOldLink) {
+      const toName = lr.toCompanyName || "công ty chủ khách sạn";
+      const hotel = lr.hotelName || "khách sạn";
+      const body =
+        `Company admin công ty «${fromDisp}» đã xác nhận lại cấu hình tour, nên yêu cầu cũ tới ${hotel} (thuộc công ty «${toName}») được hệ thống đóng để tạo yêu cầu mới theo cấu hình mới. ` +
+        `Đây không phải do công ty «${toName}» từ chối trên màn hình «Yêu cầu nhận được».`;
+      await HotelLinkRequest.updateOne(
+        { _id: lr._id },
+        { $set: { status: "rejected", responseNote: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG + body } }
+      );
+    }
 
     const newHoldIds = [];
     const newLinkRequestIds = [];
@@ -550,7 +566,6 @@ module.exports.cancelSegments = async (req, res) => {
   try {
     const companyId = req.account.companyId;
     const { tourId, departureDate } = req.body;
-    const HotelLinkRequest = require("../../models/hotel-link-request.model");
 
     const depDate = new Date(departureDate);
     const tourSeg = await TourSegment.findOne({ tourId, departureDate: depDate, companyId });
@@ -563,11 +578,24 @@ module.exports.cancelSegments = async (req, res) => {
       { status: "cancelled" }
     );
 
-    // Huỷ các link request đang pending
-    await HotelLinkRequest.updateMany(
-      { tourSegmentId: tourSeg._id, status: "pending" },
-      { status: "rejected", responseNote: "Đã huỷ do company admin huỷ cấu hình" }
-    );
+    const fromCo = await Company.findById(companyId).select("name").lean();
+    const fromCompanyName = fromCo?.name || "công ty tổ chức tour";
+
+    const pendingLink = await HotelLinkRequest.find({
+      tourSegmentId: tourSeg._id,
+      status: "pending",
+    }).lean();
+    for (const lr of pendingLink) {
+      const toName = lr.toCompanyName || "công ty chủ khách sạn";
+      const hotel = lr.hotelName || "khách sạn";
+      const body =
+        `Company admin công ty «${fromCompanyName}» đã huỷ cấu hình tour (nút «Huỷ & Giải phóng phòng» / huỷ segment) cho lịch khởi hành này. ` +
+        `Yêu cầu liên kết tới ${hotel} (thuộc công ty «${toName}») được hệ thống đóng tự động — không phải do công ty «${toName}» từ chối trên màn hình «Yêu cầu nhận được».`;
+      await HotelLinkRequest.updateOne(
+        { _id: lr._id },
+        { $set: { status: "rejected", responseNote: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG + body } }
+      );
+    }
 
     tourSeg.status         = "cancelled";
     tourSeg.holdBookingIds = [];
@@ -728,29 +756,123 @@ module.exports.assign = async (req, res) => {
         suggestedHotelId:     allocation?.allocations?.[0]?.hotelId || null,
         suggestedHotelName:   allocation?.allocations?.[0]?.hotelName || "",
         hotelAllocation:      allocation,
+        roomSelections:       Array.isArray(matchedItem.roomSelections) ? matchedItem.roomSelections : [],
+        extraRoomCost:        Number(matchedItem.extraRoomCost || 0),
       });
     }
 
-    // Map existing assignments
-    const existingAssignments = (tourSeg.assignments || []).map((a) => ({
-      ...a,
-      orderId:       String(a.orderId),
-      hotelId:       String(a.hotelId),
-      roomId:        String(a.roomId),
-      holdBookingId: a.holdBookingId ? String(a.holdBookingId) : null,
-    }));
+    // Sức chứa chuẩn / phòng theo từng booking giữ chỗ (để hiển thị & lưu numPeople đúng, không dùng tổng đơn)
+    const holdOccByBookingId = {};
+    for (const hb of enrichedHolds) {
+      const occ = Number(hb.baseOccupancy);
+      holdOccByBookingId[String(hb._id)] =
+        !Number.isNaN(occ) && occ > 0 ? Math.round(occ) : 2;
+    }
 
-    res.render("admin/pages/tour-hotel-assign", {
-      pageTitle:   "Phân công phòng – " + (tour?.name || ""),
-      tourSeg,
-      tour,
-      customers,
-      holdsByHotel: Object.values(holdsByHotel),
-      existingAssignments,
-      departureDateDisplay,
-      pathAdmin,
-      moment,
+    // Map existing assignments
+    const existingAssignments = (tourSeg.assignments || []).map((a) => {
+      const bid = a.holdBookingId ? String(a.holdBookingId) : "";
+      const fromHold = bid ? holdOccByBookingId[bid] : undefined;
+      const numPeople =
+        fromHold != null ? fromHold : Math.max(1, Math.round(Number(a.numPeople) || 1));
+      return {
+        ...a,
+        orderId:       String(a.orderId),
+        hotelId:       String(a.hotelId),
+        roomId:        String(a.roomId),
+        holdBookingId: a.holdBookingId ? String(a.holdBookingId) : null,
+        numPeople,
+      };
     });
+
+    const { orderId } = req.query;
+
+    if (orderId) {
+      // Detail mode: show single customer + room grid for assignment
+      const targetCust = customers.find((c) => c.orderId === orderId);
+      if (!targetCust) return res.redirect(`/${pathAdmin}/tour-hotel/assign/${segmentId}`);
+
+      res.render("admin/pages/tour-hotel-assign-detail", {
+        pageTitle:   "Phân công phòng – " + (targetCust.guestName || targetCust.orderCode),
+        tourSeg,
+        tour,
+        customer: targetCust,
+        customers,
+        holdsByHotel: Object.values(holdsByHotel),
+        existingAssignments,
+        departureDateDisplay,
+        pathAdmin,
+        moment,
+        readOnly: true,
+      });
+    } else {
+      // List mode: show all customers with assignment status
+      const custWithStatus = customers.map((cust) => {
+        const myAssigns = existingAssignments.filter((a) => a.orderId === cust.orderId);
+        let assignStatus = "none";
+        if (cust.roomSelections && cust.roomSelections.length > 0) {
+          const needed = {};
+          cust.roomSelections.forEach((rs) => {
+            const k = (rs.hotelId||'') + '|' + (rs.roomTypeId||'') + '|' + (rs.fromDate||'') + '|' + (rs.toDate||'');
+            if (!needed[k]) needed[k] = 0;
+            needed[k] += rs.selectedRooms;
+          });
+          let allOk = myAssigns.length > 0;
+          let hasShortfall = false;
+          let hasExcess = false;
+
+          const holdsByHotelArr = Object.values(holdsByHotel);
+          const assigned = {};
+          const toDateStr = (d) => d ? moment(d).format('YYYY-MM-DD') : '';
+          myAssigns.forEach((a) => {
+            let holdRoom = null;
+            holdsByHotelArr.forEach((hg) => {
+              (hg.rooms || []).forEach((r) => {
+                if (String(r._id) === a.holdBookingId) holdRoom = r;
+              });
+            });
+            if (!holdRoom) return;
+            const hId = String(holdRoom.hotel?.hotelId || '');
+            const rtId = holdRoom.roomTypeId ? String(holdRoom.roomTypeId) : '';
+            const ci = toDateStr(holdRoom.checkIn);
+            const co = toDateStr(holdRoom.checkOut);
+            Object.keys(needed).forEach((k) => {
+              const parts = k.split('|');
+              const nFrom = toDateStr(parts[2]);
+              const nTo = toDateStr(parts[3]);
+              if (hId === parts[0] && rtId === parts[1] && ci === nFrom && co === nTo) {
+                assigned[k] = (assigned[k] || 0) + 1;
+              }
+            });
+          });
+
+          Object.keys(needed).forEach((k) => {
+            const got = assigned[k] || 0;
+            if (got < needed[k]) { hasShortfall = true; allOk = false; }
+            else if (got > needed[k]) { hasExcess = true; allOk = false; }
+          });
+
+          if (allOk) assignStatus = "complete";
+          else if (hasExcess) assignStatus = "excess";
+          else if (myAssigns.length > 0) assignStatus = "partial";
+          else assignStatus = "none";
+        } else {
+          if (myAssigns.length > 0) assignStatus = "complete";
+        }
+        return { ...cust, assignedCount: myAssigns.length, assignStatus };
+      });
+
+      res.render("admin/pages/tour-hotel-assign", {
+        pageTitle:   "Phân công phòng – " + (tour?.name || ""),
+        tourSeg,
+        tour,
+        customers: custWithStatus,
+        departureDateDisplay,
+        pathAdmin,
+        moment,
+        readOnly: true,
+      });
+    }
   } catch (err) {
     console.error("[tour-hotel.assign]", err);
     res.render("admin/pages/error-404", { pageTitle: "Lỗi" });
@@ -817,12 +939,21 @@ module.exports.saveAssignments = async (req, res) => {
         ? (hotel.roomTypes || []).find((rt) => String(rt._id) === String(holdBooking?.roomTypeId))
         : null;
 
+      const occFromType =
+        rtEntry && rtEntry.baseOccupancy != null && !Number.isNaN(Number(rtEntry.baseOccupancy))
+          ? Math.round(Number(rtEntry.baseOccupancy))
+          : null;
+      const numPeople =
+        occFromType != null && occFromType > 0
+          ? occFromType
+          : Math.max(1, Math.round(Number(a.numPeople) || 1));
+
       return {
         orderId:       a.orderId,
         orderCode:     a.orderCode || "",
         guestName:     a.guestName || "",
         phone:         a.phone || "",
-        numPeople:     Number(a.numPeople) || 1,
+        numPeople,
         hotelId:       holdBooking ? holdBooking.hotel.hotelId : a.hotelId,
         hotelName:     hotel?.name || a.hotelName || "",
         roomId:        physicalRoomId,
@@ -841,7 +972,7 @@ module.exports.saveAssignments = async (req, res) => {
       await HotelBooking.findByIdAndUpdate(hb._id, {
         "guest.fullName": a.guestName || "Khách tour",
         "guest.phone":    a.phone || "",
-        note: `[TOUR] Đơn #${a.orderCode} – ${a.guestName || ""} – ${a.numPeople} người`,
+        note: `[TOUR] Đơn #${a.orderCode} – ${a.guestName || ""} – ${a.numPeople} người/phòng (loại phòng)`,
       });
     }
 

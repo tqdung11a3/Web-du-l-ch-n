@@ -356,6 +356,68 @@ block main
                   .age-inputs-group-label Em bé (0–#{babyMaxAge} tuổi)
                   .age-inputs-list#babies-ages-list
 
+            //- Chọn phòng khách sạn (bắt buộc nếu tour có liên kết khách sạn)
+            if tourRoomSegments && tourRoomSegments.length > 0
+              - const _segmentsJson = JSON.stringify(tourRoomSegments)
+              .inner-room-selection(data-room-segments=_segmentsJson data-required="1")
+                .inner-room-selection__header
+                  .inner-label Chọn phòng khách sạn
+                each seg in tourRoomSegments
+                  .room-time-segment(data-from-date=seg.fromDate data-to-date=seg.toDate)
+                    .room-time-segment__header
+                      i.fa-solid.fa-calendar-days(style="margin-right:6px;color:#6366f1")
+                      span.room-time-segment__label= seg.segmentLabel
+                    .room-time-segment__occupancy-live(role="status" aria-live="polite")
+                      span.room-time-segment__occupancy-live-label Tổng sức chứa quy đổi:
+                      strong.room-time-segment__occupancy-live-value —
+                      .room-time-segment__occupancy-live-detail
+                    .room-time-segment__segment-warnings
+                      .room-segment-extra-warning(style="display:none")
+                      .room-segment-capacity-warning(style="display:none")
+                    each hotel in seg.hotels
+                      .room-hotel-block(
+                        data-hotel-id=hotel.hotelId
+                        data-tour-segment-id=hotel.tourSegmentId
+                      )
+                        .room-hotel-block__header
+                          span.room-hotel-block__name= hotel.hotelName
+                        if hotel.ageBands && hotel.ageBands.length > 0
+                          .room-hotel-block__agebands
+                            .room-hotel-block__agebands-title Chính sách sức chứa
+                            ul.room-hotel-block__agebands-list
+                              each band in hotel.ageBands
+                                - var rangeText = band.maxAge === null || band.maxAge === undefined ? (band.minAge + ' tuổi trở lên') : (band.minAge + '–' + band.maxAge + ' tuổi')
+                                - var weightText = band.countInOccupancy ? (band.occupancyWeight === 0.5 ? '0,5' : String(band.occupancyWeight)) : 'không tính'
+                                li.room-hotel-block__agebands-item
+                                  span.room-hotel-block__agebands-range= rangeText
+                                  if band.bandName
+                                    span.room-hotel-block__agebands-name= ' · ' + band.bandName
+                                  span.room-hotel-block__agebands-weight= ': ' + weightText
+                        each rt in hotel.roomTypes
+                          .room-type-row(
+                            data-room-type-id=rt.roomTypeId
+                            data-hotel-id=hotel.hotelId
+                            data-base-occupancy=rt.baseOccupancy
+                            data-available-rooms=rt.availableRooms
+                            data-price-per-night=rt.pricePerNight
+                          )
+                            .room-type-row__info
+                              .room-type-row__name= rt.roomTypeName
+                              .room-type-row__meta #{rt.baseOccupancy} người/phòng · còn #{rt.availableRooms} phòng
+                            .room-type-row__input
+                              input.room-qty-input(
+                                type="number"
+                                min="0"
+                                max=rt.availableRooms
+                                value="0"
+                                placeholder="0"
+                              )
+                              span.room-type-row__input-unit phòng
+                .room-selection-required-warning(style="display:none") ⚠ Vui lòng chọn ít nhất một loại phòng khách sạn.
+
+            //- Khối cảnh báo phòng dư – hiển thị ngay trên Tổng cộng
+            .room-selection-global-extra-warning(style="display:none")
+
             .inner-total
               .inner-label Tổng cộng:
               .inner-price

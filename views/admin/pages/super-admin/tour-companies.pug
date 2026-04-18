@@ -1,0 +1,68 @@
+extends ../../layouts/default.pug
+
+block main
+
+  .box-head
+    h1.box-title Tours theo công ty
+    p.page-subtitle(style="margin:8px 0 0;color:#64748b;font-size:14px;")
+      | Chọn công ty để xem danh sách tour.
+
+  //- Bộ lọc
+  .section-4
+    form#form-filter-companies(method="GET" action=`/${pathAdmin}/super-admin/tours`)
+      .inner-form
+        .inner-input
+          input(
+            type="text",
+            name="keyword",
+            placeholder="Tìm tên công ty...",
+            value=keyword || ""
+          )
+        .inner-select
+          select(name="status")
+            option(value="") -- Tất cả trạng thái --
+            option(value="active", selected=statusFilter === "active") Hoạt động
+            option(value="inactive", selected=statusFilter === "inactive") Tạm dừng
+        .inner-button
+          button.inner-submit(type="submit") Lọc
+
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Logo
+            th Tên công ty
+            th Số tour
+            th Trạng thái
+            th Hành động
+        tbody
+          if companies && companies.length
+            each company, index in companies
+              tr
+                td= index + 1
+                td
+                  if company.logo
+                    img(src=company.logo alt=company.name style="width:56px;height:56px;object-fit:cover;border-radius:8px;")
+                  else
+                    span(style="color:#94a3b8;")
+                      i.fa-solid.fa-building(style="font-size:28px;")
+                td
+                  strong= company.name
+                td.text-center(style="color:#000;background:transparent;")= company.tourCount || 0
+                td.text-center(style="color:#000;background:transparent;")
+                  if company.status === "active"
+                    | Hoạt động
+                  else
+                    | Tạm dừng
+                td
+                  a.inner-btn.inner-btn-view(
+                    href=`/${pathAdmin}/super-admin/tours/company/${company._id}`
+                    title="Xem danh sách tour"
+                  )
+                    i.fa-solid.fa-eye
+                    |  Xem chi tiết
+          else
+            tr
+              td(colspan="6" style="text-align:center;padding:32px;color:#94a3b8;") Không có công ty nào

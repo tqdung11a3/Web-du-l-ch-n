@@ -1,11 +1,12 @@
 extends ../layouts/default.pug
 
 block main
+  - var _bdReadOnly = bookingDetailReadOnly === true
   .booking-detail-page
     .page-header
       h1.page-title Chi tiết đơn đặt phòng
       .page-actions
-        a.btn-back(href=`/${pathAdmin}/hotel/booking/list`)
+        a.btn-back(href=bookingListBackUrl || `/${pathAdmin}/hotel/booking/list`)
           i.fa-solid.fa-arrow-left
           |  Quay lại danh sách
 
@@ -16,9 +17,10 @@ block main
           .section-header
             i.fa-solid.fa-user
             h3 Thông tin khách hàng
-            button#editGuestBtn.btn-edit-guest(type="button" onclick="openEditGuestModal()")
-              i.fa-solid.fa-pen-to-square
-              |  Chỉnh sửa
+            if !_bdReadOnly
+              button#editGuestBtn.btn-edit-guest(type="button" onclick="openEditGuestModal()")
+                i.fa-solid.fa-pen-to-square
+                |  Chỉnh sửa
           .section-content
             .info-grid
               .info-item
@@ -41,76 +43,77 @@ block main
                       img(src=img alt="CCCD")
 
         //- Modal chỉnh sửa thông tin khách hàng
-        #editGuestModal.edit-guest-modal(style="display:none")
-          .edit-guest-modal__overlay(onclick="closeEditGuestModal()")
-          .edit-guest-modal__box
-            .edit-guest-modal__header
-              h4
-                i.fa-solid.fa-user-pen
-                |  Chỉnh sửa thông tin khách hàng
-              button.edit-guest-modal__close(type="button" onclick="closeEditGuestModal()")
-                i.fa-solid.fa-xmark
-            .edit-guest-modal__body
-              .edit-guest-field
-                label(for="editGuestName") Họ và tên
-                input#editGuestName(type="text" placeholder="Nhập họ và tên..." value=bookingDetail.guest.fullName || "")
-              .edit-guest-field
-                label(for="editGuestPhone") Số điện thoại
-                input#editGuestPhone(type="text" placeholder="Nhập số điện thoại..." value=bookingDetail.guest.phone || "")
-              .edit-guest-field
-                label(for="editGuestEmail") Email
-                input#editGuestEmail(type="email" placeholder="Nhập email..." value=bookingDetail.guest.email || "")
-            .edit-guest-modal__footer
-              button.btn-cancel-guest(type="button" onclick="closeEditGuestModal()") Hủy
-              button#saveGuestBtn.btn-save-guest(type="button" onclick="saveGuestInfo()") 
-                i.fa-solid.fa-floppy-disk
-                |  Lưu thay đổi
+        if !_bdReadOnly
+          #editGuestModal.edit-guest-modal(style="display:none")
+            .edit-guest-modal__overlay(onclick="closeEditGuestModal()")
+            .edit-guest-modal__box
+              .edit-guest-modal__header
+                h4
+                  i.fa-solid.fa-user-pen
+                  |  Chỉnh sửa thông tin khách hàng
+                button.edit-guest-modal__close(type="button" onclick="closeEditGuestModal()")
+                  i.fa-solid.fa-xmark
+              .edit-guest-modal__body
+                .edit-guest-field
+                  label(for="editGuestName") Họ và tên
+                  input#editGuestName(type="text" placeholder="Nhập họ và tên..." value=bookingDetail.guest.fullName || "")
+                .edit-guest-field
+                  label(for="editGuestPhone") Số điện thoại
+                  input#editGuestPhone(type="text" placeholder="Nhập số điện thoại..." value=bookingDetail.guest.phone || "")
+                .edit-guest-field
+                  label(for="editGuestEmail") Email
+                  input#editGuestEmail(type="email" placeholder="Nhập email..." value=bookingDetail.guest.email || "")
+              .edit-guest-modal__footer
+                button.btn-cancel-guest(type="button" onclick="closeEditGuestModal()") Hủy
+                button#saveGuestBtn.btn-save-guest(type="button" onclick="saveGuestInfo()") 
+                  i.fa-solid.fa-floppy-disk
+                  |  Lưu thay đổi
 
-        script.
-          var _bookingCode = '!{bookingDetail.code}';
-          var _pathAdmin = '!{pathAdmin}';
+          script.
+            var _bookingCode = '!{bookingDetail.code}';
+            var _pathAdmin = '!{pathAdmin}';
 
-          function openEditGuestModal() {
-            document.getElementById('editGuestModal').style.display = 'flex';
-          }
-          function closeEditGuestModal() {
-            document.getElementById('editGuestModal').style.display = 'none';
-          }
-          document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeEditGuestModal();
-          });
-          function saveGuestInfo() {
-            var fullName = document.getElementById('editGuestName').value.trim();
-            var phone    = document.getElementById('editGuestPhone').value.trim();
-            var email    = document.getElementById('editGuestEmail').value.trim();
-            if (!fullName) { alert('Vui lòng nhập họ và tên.'); return; }
-            var btn = document.getElementById('saveGuestBtn');
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
-            fetch('/' + _pathAdmin + '/hotel/booking/update-guest/' + _bookingCode, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fullName: fullName, phone: phone, email: email }),
-            })
-              .then(function(r) { return r.json(); })
-              .then(function(data) {
-                if (data.code === 'success') {
-                  document.getElementById('guestDisplayName').textContent  = fullName || '—';
-                  document.getElementById('guestDisplayPhone').textContent = phone   || '—';
-                  document.getElementById('guestDisplayEmail').textContent = email   || '—';
-                  closeEditGuestModal();
-                } else {
-                  alert('Lỗi: ' + (data.message || 'Không thể cập nhật thông tin'));
+            function openEditGuestModal() {
+              document.getElementById('editGuestModal').style.display = 'flex';
+            }
+            function closeEditGuestModal() {
+              document.getElementById('editGuestModal').style.display = 'none';
+            }
+            document.addEventListener('keydown', function(e) {
+              if (e.key === 'Escape') closeEditGuestModal();
+            });
+            function saveGuestInfo() {
+              var fullName = document.getElementById('editGuestName').value.trim();
+              var phone    = document.getElementById('editGuestPhone').value.trim();
+              var email    = document.getElementById('editGuestEmail').value.trim();
+              if (!fullName) { alert('Vui lòng nhập họ và tên.'); return; }
+              var btn = document.getElementById('saveGuestBtn');
+              btn.disabled = true;
+              btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+              fetch('/' + _pathAdmin + '/hotel/booking/update-guest/' + _bookingCode, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fullName: fullName, phone: phone, email: email }),
+              })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                  if (data.code === 'success') {
+                    document.getElementById('guestDisplayName').textContent  = fullName || '—';
+                    document.getElementById('guestDisplayPhone').textContent = phone   || '—';
+                    document.getElementById('guestDisplayEmail').textContent = email   || '—';
+                    closeEditGuestModal();
+                  } else {
+                    alert('Lỗi: ' + (data.message || 'Không thể cập nhật thông tin'));
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi';
+                  }
+                })
+                .catch(function() {
+                  alert('Có lỗi kết nối, vui lòng thử lại.');
                   btn.disabled = false;
                   btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi';
-                }
-              })
-              .catch(function() {
-                alert('Có lỗi kết nối, vui lòng thử lại.');
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi';
-              });
-          }
+                });
+            }
 
         //- Thông tin khách sạn
         .booking-section

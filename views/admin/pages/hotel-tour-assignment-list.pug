@@ -1,0 +1,62 @@
+extends ../layouts/default.pug
+
+block main
+  - var _htaListHotelQs = (typeof selectedHotelId !== 'undefined' && selectedHotelId) ? ('?hotelId=' + encodeURIComponent(String(selectedHotelId))) : ''
+  h1.box-title Phân phòng cho tour
+
+  .th-intro
+    p Chọn tour-segment có phòng của khách sạn bạn đã được giữ chỗ để phân khách vào phòng. Lọc theo khách sạn bằng thanh chọn khách sạn ở đầu trang (giống Dashboard, Đặt phòng, v.v.).
+
+  if !rows || rows.length === 0
+    .th-empty
+      i.fa-solid.fa-circle-info
+      span  Chưa có tour-segment nào có phòng được giữ chỗ tại khách sạn của công ty bạn.
+  else
+    .assign-cust-table-wrap
+      table.assign-cust-table
+        thead
+          tr
+            th STT
+            th Tour
+            th Khởi hành
+            th Kết thúc
+            th Khách sạn (của bạn)
+            th Số phòng giữ
+            th Đã phân
+            th Còn lại
+            th Thao tác
+        tbody
+          each row, idx in rows
+            tr
+              td= idx + 1
+              td
+                .assign-cust-table__name
+                  if row.tourAvatar
+                    img(src=row.tourAvatar alt=row.tourName style="width:28px;height:28px;border-radius:4px;margin-right:6px;object-fit:cover;vertical-align:middle;")
+                  else
+                    i.fa-solid.fa-map-route(style="margin-right:6px")
+                  | #{row.tourName}
+              td= row.departureDateDisplay
+              td= row.endDateDisplay
+              td
+                if row.hotelsInScope && row.hotelsInScope.length
+                  each h, i in row.hotelsInScope
+                    if i > 0
+                      | , 
+                    span= h.name
+                else
+                  | —
+              td
+                span.assign-status-badge.assign-status-badge--partial= row.holdCount
+              td
+                span.assign-status-badge.assign-status-badge--complete= row.assignedCount
+              td
+                if row.pendingCount > 0
+                  span.assign-status-badge.assign-status-badge--none= row.pendingCount
+                else
+                  span.assign-status-badge.assign-status-badge--complete
+                    i.fa-solid.fa-check
+              td
+                a.btn-assign-detail(href=`/${pathAdmin}/hotel/tour-assignments/${row.segmentId}${_htaListHotelQs}`)
+                  i.fa-solid.fa-user-tag
+                  |  Phân phòng

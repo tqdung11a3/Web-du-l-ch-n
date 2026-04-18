@@ -281,6 +281,13 @@ block main
                   .badge.badge-green Hoạt động
                 else if (item.status == "inactive")
                   .badge.badge-red Tạm dừng
+                - var pubInfo = (publishableMap || {})[String(item.id)]
+                if item.status !== "active" && pubInfo && !pubInfo.ok
+                  .tour-publish-mini-badge(
+                    title=(pubInfo.reasons && pubInfo.reasons.length ? pubInfo.reasons.join("\n") : "Tour chưa đủ điều kiện hiển thị")
+                  )
+                    i.fa-solid.fa-circle-exclamation
+                    |  Chưa xuất bản
               td
                 div #{item.createdByFullName}
                 div.inner-time #{item.createdAtFormat}

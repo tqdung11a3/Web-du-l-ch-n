@@ -10,6 +10,10 @@ const { pathAdmin } = require("../../config/variable.config");
 const moment = require("moment");
 const mongoose = require("mongoose");
 const slugify = require("slugify");
+const {
+  canPublishTour,
+  canPublishToursBulk,
+} = require("../../helpers/tour-publishable.helper");
 
 function escapeRegex(str = "") {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -533,6 +537,13 @@ module.exports.list = async (req, res) => {
       : null;
     const tourAgeBands = company?.tourAgeBands || { babyMaxAge: 3, childrenMaxAge: 11 };
 
+    // Tính publishableMap cho tất cả tour trên trang để view hiển thị
+    // badge "Chưa xuất bản" cho các tour inactive còn thiếu điều kiện.
+    const tourIdList = tourList.map((t) => String(t._id));
+    const publishableMap = companyId
+      ? await canPublishToursBulk(tourIdList, companyId)
+      : {};
+
     res.render("admin/pages/tour-list", {
       pageTitle: "Quản lý tour",
       tourList: tourList,
@@ -540,6 +551,7 @@ module.exports.list = async (req, res) => {
       currentTab: tab,
       tourAgeBands,
       pathAdmin,
+      publishableMap,
     });
   } catch (error) {
     console.error("Tour list error:", error);
@@ -663,8 +675,8 @@ module.exports.listDiscounts = async (req, res) => {
 
 module.exports.create = async (req, res) => {
   const companyId = req.account.companyId;
-  const categoryList = await Category.find({});
-
+  const categoryList =
+    await categoryHelper.getCategoriesForCompanyTourSelect();
   const categoryTree = categoryHelper.buildCategoryTree(categoryList, "");
 
   // Lấy danh sách thành phố Việt Nam (không có countryId hoặc countryName không phải Châu Âu)
@@ -1000,6 +1012,10 @@ module.exports.createPost = async (req, res) => {
     req.body.createdBy = req.account.id;
     req.body.updatedBy = req.account.id;
     req.body.companyId = companyId;
+
+    // Tour mới luôn ẩn khỏi client cho tới khi admin đã liên kết khách sạn,
+    // được duyệt cross-company và chủ động bật hiển thị ở trang chỉnh sửa.
+    req.body.status = "inactive";
     if (req.files && req.files.avatar && req.files.avatar.length > 0) {
       req.body.avatar = req.files.avatar[0].path;
     } else {
@@ -1117,7 +1133,9 @@ module.exports.edit = async (req, res) => {
       tourDetail.babyPricingRules || []
     );
 
-    const categoryList = await Category.find({});
+    const categoryList = await categoryHelper.getCategoriesForCompanyTourSelect(
+      { includeCategoryId: tourDetail.category }
+    );
     const categoryTree = categoryHelper.buildCategoryTree(categoryList, "");
 
     // Lấy danh sách thành phố Việt Nam (không có countryId hoặc countryName không phải Châu Âu)
@@ -1236,6 +1254,9 @@ module.exports.edit = async (req, res) => {
     tourDetail.tourCountries = tourCountries;
     tourDetail.locationsByCountry = locationsByCountry;
 
+    // Kiểm tra điều kiện hiển thị (publish gate) để view render checklist
+    const publishCheck = await canPublishTour(id, companyId);
+
     return res.render("admin/pages/tour-edit", {
       pageTitle: "Chỉnh sửa tour",
       categoryList: categoryTree,
@@ -1245,6 +1266,7 @@ module.exports.edit = async (req, res) => {
       europeanCities,
       isInternationalTour,
       pathAdmin,
+      publishCheck,
     });
   } catch (error) {
     console.error("tour.edit error:", error);
@@ -1264,6 +1286,22 @@ module.exports.editPatch = async (req, res) => {
     });
     if (!existed) {
       return res.json({ code: "error", message: "Tour không tồn tại!" });
+    }
+
+    // ── Gate xuất bản: chỉ cho chuyển sang "active" khi tour đủ điều kiện ──
+    // (đủ departure + segment + tất cả HotelLinkRequest đã approved/partially_approved)
+    const wantsActive =
+      req.body.status === "active" && existed.status !== "active";
+    if (wantsActive) {
+      const publishCheck = await canPublishTour(id, req.account.companyId);
+      if (!publishCheck.ok) {
+        return res.json({
+          code: "error",
+          message:
+            "Chưa thể bật hiển thị tour ở client. Vui lòng hoàn tất các điều kiện sau trước.",
+          reasons: publishCheck.reasons,
+        });
+      }
     }
 
     // position: nếu không gửi lên thì tái tính theo công ty
@@ -1653,7 +1691,73 @@ module.exports.changeMultiPatch = async (req, res) => {
     let result;
 
     switch (value) {
-      case "active":
+      case "active": {
+        // Bật hiển thị: phải gate từng tour (đủ KS + link request đã duyệt)
+        const filter = { ...baseFilter, deleted: false };
+        const tours = await Tour.find(filter).select("_id name status").lean();
+
+        if (tours.length === 0) {
+          return res.json({
+            code: "error",
+            message: "Không có tour hợp lệ để cập nhật!",
+          });
+        }
+
+        const tourIds = tours.map((t) => String(t._id));
+        const checkMap = await canPublishToursBulk(tourIds, companyId);
+
+        const allowedIds = [];
+        const blocked = [];
+        for (const t of tours) {
+          const tid = String(t._id);
+          const chk = checkMap[tid];
+          if (chk && chk.ok) {
+            allowedIds.push(t._id);
+          } else {
+            blocked.push({
+              id: tid,
+              name: t.name || "(không tên)",
+              reasons: (chk && chk.reasons) || [
+                "Tour chưa đủ điều kiện hiển thị.",
+              ],
+            });
+          }
+        }
+
+        let modifiedCount = 0;
+        if (allowedIds.length > 0) {
+          const upd = await Tour.updateMany(
+            { _id: { $in: allowedIds }, companyId, deleted: false },
+            {
+              $set: {
+                status: "active",
+                updatedBy: req.account.id,
+                updatedAt: new Date(),
+              },
+            }
+          );
+          modifiedCount = upd.modifiedCount || 0;
+        }
+
+        if (blocked.length > 0) {
+          // Có tour bị chặn → trả "partial" để client hiển thị chi tiết
+          return res.json({
+            code: allowedIds.length > 0 ? "partial" : "error",
+            message:
+              allowedIds.length > 0
+                ? `Đã bật hiển thị ${modifiedCount} tour. ${blocked.length} tour bị chặn vì chưa đủ điều kiện.`
+                : `Tất cả ${blocked.length} tour đều chưa đủ điều kiện hiển thị.`,
+            modifiedCount,
+            blocked,
+          });
+        }
+
+        return res.json({
+          code: "success",
+          message: `Đã bật hiển thị ${modifiedCount}/${tours.length} tour!`,
+        });
+      }
+
       case "inactive": {
         // Chỉ đổi trạng thái cho bản ghi chưa bị xóa
         const filter = { ...baseFilter, deleted: false };

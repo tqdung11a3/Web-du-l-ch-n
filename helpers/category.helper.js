@@ -1,4 +1,5 @@
 const Category = require("../models/category.model");
+const AccountAdmin = require("../models/account-admin.model");
 
 const buildCategoryTree = (categories, parentId = "") => {
   // Tạo một mảng để lưu các danh mục con
@@ -105,3 +106,56 @@ const list = (categories, parentId = "") => {
 };
 module.exports.list = list;
 // End list
+
+/**
+ * Danh mục cho form tạo/sửa tour (company admin): trạng thái active, do tài khoản super admin tạo
+ * (cùng nguồn với /admin/super-admin/category).
+ * @param {{ includeCategoryId?: string }} options
+ */
+const getCategoriesForCompanyTourSelect = async (options = {}) => {
+  const rawInc = options.includeCategoryId;
+  const includeCategoryId = rawInc
+    ? String(
+        typeof rawInc === "object" && rawInc !== null && rawInc._id
+          ? rawInc._id
+          : rawInc
+      )
+    : "";
+
+  const superAdmins = await AccountAdmin.find({
+    isSuperAdmin: true,
+    deleted: { $ne: true },
+  })
+    .select("_id")
+    .lean();
+
+  const createdByIn = superAdmins.map((a) => String(a._id));
+  if (!createdByIn.length) {
+    return [];
+  }
+
+  const filter = {
+    deleted: { $ne: true },
+    status: "active",
+    createdBy: { $in: createdByIn },
+  };
+
+  let categoryList = await Category.find(filter);
+
+  if (includeCategoryId) {
+    const has = categoryList.some((c) => String(c._id) === includeCategoryId);
+    if (!has) {
+      const extra = await Category.findOne({
+        _id: includeCategoryId,
+        deleted: { $ne: true },
+      });
+      if (extra) {
+        categoryList = [...categoryList, extra];
+      }
+    }
+  }
+
+  return categoryList;
+};
+module.exports.getCategoriesForCompanyTourSelect =
+  getCategoriesForCompanyTourSelect;

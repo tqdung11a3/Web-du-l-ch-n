@@ -235,11 +235,12 @@ module.exports.revenueChartPost = async (req, res) => {
 
     const buildSeries = async (r) => {
       if (!companyId) {
-        // Super admin: cộng theo order.total
+        // Super admin (nếu gọi API không gắn company): chỉ đơn đã thanh toán
         const rows = await Order.aggregate([
           {
             $match: {
               deleted: false,
+              paymentStatus: "paid",
               createdAt: { $gte: r.start, $lt: r.end },
             },
           },
@@ -260,6 +261,7 @@ module.exports.revenueChartPost = async (req, res) => {
         {
           $match: {
             deleted: false,
+            paymentStatus: "paid",
             createdAt: { $gte: r.start, $lt: r.end },
             "items.companyId": cId,
           },

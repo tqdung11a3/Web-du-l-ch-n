@@ -1,27 +1,18 @@
 extends ../../layouts/default.pug
 
 block main
-  
-  .box-head
-    h1.box-title Tất cả Hotels
 
-  //- Section: Cài đặt ảnh breadcrumb cho trang /hotel/search
-  .section-breadcrumb-setting(style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;")
-    h3(style="margin-top: 0; margin-bottom: 15px; font-size: 18px;") Cài đặt ảnh breadcrumb cho trang tìm kiếm khách sạn
-    form#form-breadcrumb-image(style="display: flex; gap: 15px; align-items: flex-end;")
-      .form-group(style="flex: 1;")
-        label(style="display: block; margin-bottom: 5px; font-weight: 500;") Ảnh breadcrumb (trang /hotel/search)
-        input#breadcrumbImage(type="file" name="breadcrumbImage" accept="image/*" style="display: block; width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;")
-        if hotelSearchBreadcrumbImage
-          .current-image(style="margin-top: 10px;")
-            span(style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;") Ảnh hiện tại:
-            img(src=hotelSearchBreadcrumbImage alt="Breadcrumb hiện tại" style="max-width: 300px; max-height: 150px; border-radius: 4px; border: 1px solid #ddd;")
-        else
-          p(style="margin-top: 10px; font-size: 14px; color: #999;") Chưa có ảnh breadcrumb
-      .form-group
-        button.btn.btn-primary(type="submit" style="padding: 8px 20px; background: #4502c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;") 
-          i.fa-solid.fa-upload(style="margin-right: 5px;")
-          | Upload ảnh
+  .box-head
+    if companyContext
+      a.button.button-outline(
+        href=`/${pathAdmin}/super-admin/hotels`
+        style="margin-bottom:12px;display:inline-flex;align-items:center;gap:8px;"
+      )
+        i.fa-solid.fa-arrow-left
+        |  Danh sách công ty
+      h1.box-title(style="margin-top:0")= pageTitle || ('Khách sạn — ' + companyContext.name)
+    else
+      h1.box-title Khách sạn
 
   //- Section 4: Bộ lọc
   .section-4
@@ -31,7 +22,7 @@ block main
           input(
             type="text",
             name="keyword",
-            placeholder="Tìm hotel...",
+            placeholder="Tìm khách sạn...",
             value=keyword || ""
           )
         .inner-select
@@ -39,11 +30,6 @@ block main
             option(value="") -- Tất cả trạng thái --
             option(value="active", selected=statusFilter === "active") Hoạt động
             option(value="inactive", selected=statusFilter === "inactive") Dừng hoạt động
-        .inner-select
-          select(name="companyId")
-            option(value="") -- Tất cả công ty --
-            each company in companies
-              option(value=company._id selected=companyFilter === company._id.toString())= company.name
         .inner-button
           button.inner-submit(type="submit") Lọc
 
@@ -55,7 +41,7 @@ block main
           tr
             th STT
             th Ảnh
-            th Tên Hotel
+            th Tên khách sạn
             th Công ty
             th Thành phố
             th Trạng thái
@@ -92,10 +78,10 @@ block main
                 td
                   .inner-buttons
                     a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/hotels/${hotel._id}`, title="Xem chi tiết")
-                      <i class="fa-solid fa-eye"></i>
+                      i.fa-solid.fa-eye
           else
             tr
-              td(colspan="8", style="text-align: center; padding: 30px; color: #999;") Không có hotel nào
+              td(colspan="8", style="text-align: center; padding: 30px; color: #999;") Không có khách sạn nào
 
   //- Section 7: Phân trang
   if pagination && pagination.totalPage > 1
@@ -107,45 +93,3 @@ block main
       select(class="inner-pagination" box-pagination)
         - for (let i = 1; i <= pagination.totalPage; i++)
           option(value=i selected=(i === pagination.currentPage)) Trang #{i}
-  //- End Section 7
-
-  //- JavaScript để xử lý form upload breadcrumb
-  script.
-    document.addEventListener('DOMContentLoaded', function() {
-      const form = document.getElementById('form-breadcrumb-image');
-      if (form) {
-        form.addEventListener('submit', async function(e) {
-          e.preventDefault();
-          
-          const fileInput = document.getElementById('breadcrumbImage');
-          if (!fileInput.files || !fileInput.files[0]) {
-            alert('Vui lòng chọn ảnh để upload!');
-            return;
-          }
-          
-          const formData = new FormData();
-          formData.append('breadcrumbImage', fileInput.files[0]);
-          
-          try {
-            const response = await fetch(`/${pathAdmin}/super-admin/hotels/breadcrumb-image`, {
-              method: 'PATCH',
-              body: formData,
-              credentials: 'same-origin', // Gửi cookies/session để xác thực
-            });
-            
-            const data = await response.json();
-            
-            if (data.code === 'success') {
-              alert('Upload ảnh breadcrumb thành công!');
-              location.reload();
-            } else {
-              alert('Lỗi: ' + (data.message || 'Có lỗi xảy ra!'));
-            }
-          } catch (error) {
-            console.error('Upload error:', error);
-            alert('Có lỗi xảy ra khi upload ảnh!');
-          }
-        });
-      }
-    });
-

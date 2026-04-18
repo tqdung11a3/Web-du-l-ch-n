@@ -59,7 +59,7 @@ const roomAssignmentSchema = new Schema(
     orderCode:      { type: String, default: "" },
     guestName:      { type: String, default: "" },
     phone:          { type: String, default: "" },
-    numPeople:      { type: Number, default: 1 }, // số người trong đơn được gán vào phòng này
+    numPeople:      { type: Number, default: 1 }, // sức chứa chuẩn / phòng (baseOccupancy loại phòng) cho slot giữ chỗ này
     hotelId:        { type: Types.ObjectId, ref: "Hotel", required: true },
     hotelName:      { type: String, default: "" },
     roomId:         { type: Types.ObjectId, required: true }, // phòng vật lý cụ thể

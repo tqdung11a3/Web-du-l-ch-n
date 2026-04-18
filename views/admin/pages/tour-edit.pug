@@ -47,9 +47,22 @@ block main
 
       .inner-group
         label(for="status" class="inner-label") Trạng thái
-        select(id="status" name="status")
+        - var pubOk = publishCheck && publishCheck.ok
+        - var pubReasons = (publishCheck && publishCheck.reasons) || []
+        select(id="status" name="status" data-pub-ok=(pubOk ? '1' : '0'))
           option(value="active" selected=(tourDetail.status=='active')) Hoạt động
           option(value="inactive" selected=(tourDetail.status=='inactive')) Tạm dừng
+
+        if !pubOk
+          p#status-edit-warn.tour-status-create-warn(style="display:none")
+            i.fa-solid.fa-triangle-exclamation
+            |  Tour chưa đủ điều kiện để bật "Hoạt động". Hãy xử lý các điểm sau:
+          ul#status-edit-reasons.tour-status-create-warn(style="display:none")
+            each r in pubReasons
+              li= r
+          a#status-edit-cta.tour-status-edit-cta(href=`/${pathAdmin}/tour-hotel/detail/${tourDetail.id}` style="display:none")
+            i.fa-solid.fa-arrow-up-right-from-square
+            |  Mở trang liên kết khách sạn cho tour
 
       .inner-group.inner-two-col
         label(for="avatar" class="inner-label") Ảnh đại diện
@@ -311,7 +324,9 @@ block main
                   .departure-pair-field
                     label Ghế còn lại
                     input(type="number" class="seats-remaining-input" min="0" value=pair.seatsRemaining)
-                button(type="button" class="departure-pair-remove-btn") Xóa
+                .departure-pair-field.departure-pair-field--remove
+                  label(aria-hidden="true") &nbsp;
+                  button(type="button" class="departure-pair-remove-btn") Xóa
           else
             .departure-pair-item(data-index="0")
               .departure-pair-inputs
@@ -327,7 +342,9 @@ block main
                 .departure-pair-field
                   label Ghế còn lại
                   input(type="number" class="seats-remaining-input" min="0" value="0")
-              button(type="button" class="departure-pair-remove-btn") Xóa
+              .departure-pair-field.departure-pair-field--remove
+                label(aria-hidden="true") &nbsp;
+                button(type="button" class="departure-pair-remove-btn") Xóa
         .departures-actions
           button(type="button" id="departure-pair-add-btn") + Thêm lịch khởi hành
         //- Input ẩn: JS sẽ ghi JSON mảng [{departureDate, endDate, seatsTotal, seatsRemaining}]
@@ -427,6 +444,43 @@ block main
 
   //- Script để lưu dữ liệu quốc gia và thành phố
   script.
+    // ── Cảnh báo khi chọn "Hoạt động" mà tour chưa đủ điều kiện ────────────
+    (function () {
+      var sel = document.getElementById('status');
+      if (!sel) return;
+      var pubOk = sel.getAttribute('data-pub-ok') === '1';
+      var warn   = document.getElementById('status-edit-warn');
+      var reasons = document.getElementById('status-edit-reasons');
+      var cta    = document.getElementById('status-edit-cta');
+      var prevVal = sel.value;
+
+      function syncWarn(val) {
+        if (!pubOk && val === 'active') {
+          if (warn)    warn.style.display    = '';
+          if (reasons) reasons.style.display = '';
+          if (cta)     cta.style.display     = '';
+        } else {
+          if (warn)    warn.style.display    = 'none';
+          if (reasons) reasons.style.display = 'none';
+          if (cta)     cta.style.display     = 'none';
+        }
+      }
+
+      sel.addEventListener('change', function () {
+        if (!pubOk && sel.value === 'active') {
+          syncWarn('active');
+          // Trả về giá trị trước; server cũng sẽ gate khi lưu
+          sel.value = prevVal;
+        } else {
+          prevVal = sel.value;
+          syncWarn(sel.value);
+        }
+      });
+
+      // Hiện cảnh báo ngay nếu trang load mà đang chọn "active" nhưng chưa đủ đk
+      syncWarn(sel.value);
+    })();
+
     window.europeanCountries = !{JSON.stringify(europeanCountries || [])};
     window.europeanCities = !{JSON.stringify(europeanCities || [])};
     window.vietnamCities = !{JSON.stringify(cityList || [])};

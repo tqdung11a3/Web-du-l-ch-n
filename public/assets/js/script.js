@@ -612,6 +612,9 @@ if (boxTourDetail) {
     return Math.round((base * pct) / 100);
   }
 
+  // Chi phí phòng dư (được cập nhật bởi updateRoomValidation)
+  let currentExtraRoomCost = 0;
+
   // ======== VẼ LẠI HỘP CHI TIẾT ========
   function drawBoxDetail(changedInput = null) {
     let adult = parseInt(inputAdult?.value) || 0;
@@ -693,8 +696,8 @@ if (boxTourDetail) {
     if (babyUnitSpan)
       babyUnitSpan.textContent = unitForUi.toLocaleString("vi-VN");
 
-    const totalPrice =
-      adult * priceAdultBase + child * priceChildBase + babyTotal;
+    const tourBasePrice = adult * priceAdultBase + child * priceChildBase + babyTotal;
+    const totalPrice = tourBasePrice + (currentExtraRoomCost || 0);
     if (elementTotalPrice) {
       elementTotalPrice.textContent = (totalPrice || 0).toLocaleString("vi-VN");
     }
@@ -768,6 +771,331 @@ if (boxTourDetail) {
   // Vẽ lần đầu
   updateAgeInputs();
 
+  // === ROOM SELECTION: validation, occupancy, extra cost (segment-level) ===
+  const roomSelectionWrap = boxTourDetail.querySelector(".inner-room-selection");
+  const requiredWarning = boxTourDetail.querySelector(".room-selection-required-warning");
+  const isRoomRequired = roomSelectionWrap && roomSelectionWrap.getAttribute("data-required") === "1";
+
+  let segmentsData = [];
+  if (roomSelectionWrap) {
+    try { segmentsData = JSON.parse(roomSelectionWrap.getAttribute("data-room-segments") || "[]"); } catch (_) {}
+  }
+
+  function getOccupancyWeight(age, ageBands) {
+    if (!ageBands || ageBands.length === 0) return 1;
+    for (const band of ageBands) {
+      const min = band.minAge ?? 0;
+      const max = band.maxAge;
+      if (max === null || max === undefined) {
+        if (age >= min) return band.occupancyWeight ?? 1;
+      } else {
+        if (age >= min && age <= max) return band.occupancyWeight ?? 1;
+      }
+    }
+    return 1;
+  }
+
+  function fmtOccNum(n) {
+    return (Math.round(Number(n) * 10) / 10).toFixed(1).replace(".", ",");
+  }
+
+  /** Lấy ageBands bảo thủ nhất (occupancyWeight cao nhất cho mỗi khoảng tuổi) từ tất cả hotels trong segment */
+  function getMergedAgeBandsForSegment(segObj) {
+    const allBands = [];
+    (segObj.hotels || []).forEach((h) => { (h.ageBands || []).forEach((b) => allBands.push(b)); });
+    if (allBands.length === 0) return [];
+    const map = {};
+    allBands.forEach((b) => {
+      const key = (b.minAge ?? 0) + "|" + (b.maxAge === null || b.maxAge === undefined ? "null" : b.maxAge);
+      if (!map[key] || (b.occupancyWeight ?? 1) > (map[key].occupancyWeight ?? 1)) {
+        map[key] = b;
+      }
+    });
+    return Object.values(map);
+  }
+
+  function getSegmentDataByKey(fromDate, toDate) {
+    return segmentsData.find((s) => s.fromDate === fromDate && s.toDate === toDate) || null;
+  }
+
+  function calcOccupancyBreakdown(ageBands) {
+    const adults = parseInt(boxTourDetail.querySelector(`[name="quantityAdult"]`)?.value || "0", 10) || 0;
+    const cAges = collectAges(childrenAgesList);
+    const bAges = collectAges(babiesAgesList);
+    let total = 0;
+    const parts = [];
+
+    if (adults > 0) {
+      const w = getOccupancyWeight(99, ageBands);
+      const sub = adults * w;
+      total += sub;
+      parts.push(adults + " người lớn × " + fmtOccNum(w) + " = " + fmtOccNum(sub));
+    }
+    if (cAges.length > 0) {
+      const per = cAges.map((a) => a + " tuổi: " + fmtOccNum(getOccupancyWeight(a, ageBands)));
+      const sub = cAges.reduce((s, a) => s + getOccupancyWeight(a, ageBands), 0);
+      total += sub;
+      parts.push(cAges.length + " trẻ em (" + per.join(" · ") + ") → " + fmtOccNum(sub));
+    }
+    if (bAges.length > 0) {
+      const per = bAges.map((a) => a + " tuổi: " + fmtOccNum(getOccupancyWeight(a, ageBands)));
+      const sub = bAges.reduce((s, a) => s + getOccupancyWeight(a, ageBands), 0);
+      total += sub;
+      parts.push(bAges.length + " em bé (" + per.join(" · ") + ") → " + fmtOccNum(sub));
+    }
+
+    if (parts.length === 0) return { total: 0, detail: "Chưa có hành khách." };
+    return { total, detail: parts.join("  |  ") };
+  }
+
+  function getTotalSelectedRooms() {
+    let total = 0;
+    if (!roomSelectionWrap) return total;
+    roomSelectionWrap.querySelectorAll(".room-qty-input").forEach((inp) => {
+      total += Math.max(0, parseInt(inp?.value || "0", 10));
+    });
+    return total;
+  }
+
+  function collectRoomSelections() {
+    const selections = [];
+    if (!roomSelectionWrap) return selections;
+    roomSelectionWrap.querySelectorAll(".room-time-segment").forEach((segEl) => {
+      const fromDate = segEl.getAttribute("data-from-date");
+      const toDate = segEl.getAttribute("data-to-date");
+      segEl.querySelectorAll(".room-hotel-block").forEach((hBlock) => {
+        const hotelId = hBlock.getAttribute("data-hotel-id");
+        const hotelName = hBlock.querySelector(".room-hotel-block__name")?.textContent?.trim() || "";
+        const tourSegmentId = hBlock.getAttribute("data-tour-segment-id");
+        hBlock.querySelectorAll(".room-type-row").forEach((row) => {
+          const qty = Math.max(0, parseInt(row.querySelector(".room-qty-input")?.value || "0", 10));
+          if (qty <= 0) return;
+          selections.push({
+            hotelId,
+            hotelName,
+            roomTypeId: row.getAttribute("data-room-type-id"),
+            roomTypeName: row.querySelector(".room-type-row__name")?.textContent?.trim() || "",
+            baseOccupancy: parseInt(row.getAttribute("data-base-occupancy") || "2", 10),
+            pricePerNight: parseFloat(row.getAttribute("data-price-per-night") || "0"),
+            selectedRooms: qty,
+            fromDate,
+            toDate,
+            tourSegmentId,
+          });
+        });
+      });
+    });
+    return selections;
+  }
+
+  const globalExtraWarn = boxTourDetail.querySelector(".room-selection-global-extra-warning");
+
+  function updateRoomValidation() {
+    currentExtraRoomCost = 0;
+    const totalRooms = getTotalSelectedRooms();
+    const allExtraLines = [];
+
+    // Cảnh báo chưa chọn phòng (bắt buộc)
+    if (requiredWarning) {
+      requiredWarning.style.display = (isRoomRequired && totalRooms === 0) ? "" : "none";
+    }
+
+    // Duyệt từng khung thời gian
+    if (roomSelectionWrap) {
+      roomSelectionWrap.querySelectorAll(".room-time-segment").forEach((segEl) => {
+        const fromDate = segEl.getAttribute("data-from-date");
+        const toDate = segEl.getAttribute("data-to-date");
+        const segObj = getSegmentDataByKey(fromDate, toDate);
+        const mergedBands = segObj ? getMergedAgeBandsForSegment(segObj) : [];
+
+        // -- Hiển thị tổng sức chứa quy đổi --
+        const { total: totalOcc, detail } = calcOccupancyBreakdown(mergedBands);
+        const valEl = segEl.querySelector(".room-time-segment__occupancy-live-value");
+        const detEl = segEl.querySelector(".room-time-segment__occupancy-live-detail");
+        if (valEl) valEl.textContent = fmtOccNum(totalOcc);
+        if (detEl) detEl.textContent = detail;
+
+        // -- Cộng dồn capacity trong toàn bộ khung thời gian --
+        let segTotalCap = 0;
+        const selectedItems = [];
+        segEl.querySelectorAll(".room-type-row").forEach((row) => {
+          const qty = Math.max(0, parseInt(row.querySelector(".room-qty-input")?.value || "0", 10));
+          if (qty <= 0) return;
+          const baseOcc = parseInt(row.getAttribute("data-base-occupancy") || "2", 10);
+          const pricePerNight = parseFloat(row.getAttribute("data-price-per-night") || "0");
+          const roomTypeName = row.querySelector(".room-type-row__name")?.textContent?.trim() || "";
+          const hotelBlock = row.closest(".room-hotel-block");
+          const hotelName = hotelBlock?.querySelector(".room-hotel-block__name")?.textContent?.trim() || "";
+          segTotalCap += qty * baseOcc;
+          selectedItems.push({ qty, baseOcc, pricePerNight, roomTypeName, hotelName });
+        });
+
+        const capWarn = segEl.querySelector(".room-segment-capacity-warning");
+
+        // -- Kiểm tra thiếu sức chứa --
+        if (capWarn) {
+          if (segTotalCap > 0 && totalOcc > segTotalCap) {
+            capWarn.textContent = "⚠ Sức chứa quy đổi (" + fmtOccNum(totalOcc) + ") vượt quá tổng phòng đã chọn (" + segTotalCap + "). Vui lòng chọn thêm phòng.";
+            capWarn.style.display = "";
+          } else {
+            capWarn.style.display = "none";
+          }
+        }
+
+        // -- Kiểm tra phòng dư (segment level) → gom vào danh sách global --
+        if (segTotalCap > 0 && totalOcc > 0 && segTotalCap > Math.ceil(totalOcc)) {
+          let nights = 1;
+          if (fromDate && toDate) {
+            nights = Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000));
+          }
+
+          // Tách tất cả phòng thành từng đơn vị để xử lý độc lập
+          const allRooms = [];
+          for (const item of selectedItems) {
+            for (let r = 0; r < item.qty; r++) {
+              allRooms.push({ ...item, qty: 1 });
+            }
+          }
+
+          const neededCap = Math.ceil(totalOcc);
+
+          // Tìm tập "giữ" tối ưu: là minimal cover (không thể bỏ thêm phòng mà
+          // vẫn đủ sức chứa) và có tổng giá LỚN NHẤT → phần "dư" (phần còn lại)
+          // có tổng giá nhỏ nhất cho khách.
+          //   Điều kiện minimal cover của tập K:
+          //     sumCap(K) >= needed  và  min(cap in K) > sumCap(K) - needed
+          //
+          // Với n nhỏ (≤ 22) dùng brute force 2^n; với n lớn fallback greedy
+          // theo giá tăng dần (bỏ rẻ trước, vẫn tốt hơn code cũ).
+          const n = allRooms.length;
+          let keptMask = 0;
+
+          if (n > 0 && n <= 22) {
+            let bestKeptPrice = -1;
+            const totalMasks = 1 << n;
+            for (let mask = 1; mask < totalMasks; mask++) {
+              let sumCap = 0;
+              let sumPrice = 0;
+              let minCap = Infinity;
+              for (let i = 0; i < n; i++) {
+                if (mask & (1 << i)) {
+                  const rm = allRooms[i];
+                  sumCap += rm.baseOcc;
+                  sumPrice += rm.pricePerNight;
+                  if (rm.baseOcc < minCap) minCap = rm.baseOcc;
+                }
+              }
+              if (sumCap < neededCap) continue;
+              // Minimal cover: bỏ phòng nhỏ nhất vẫn phá vỡ coverage
+              if (minCap <= sumCap - neededCap) continue;
+              if (sumPrice > bestKeptPrice) {
+                bestKeptPrice = sumPrice;
+                keptMask = mask;
+              }
+            }
+          } else if (n > 22) {
+            // Fallback: sort theo giá TĂNG DẦN, bỏ rẻ nhất trước miễn vẫn đủ
+            // (heuristic tốt hơn bỏ đắt nhất trước).
+            const order = allRooms
+              .map((_, i) => i)
+              .sort(
+                (a, b) =>
+                  allRooms[a].pricePerNight - allRooms[b].pricePerNight ||
+                  allRooms[a].baseOcc - allRooms[b].baseOcc
+              );
+            const kept = new Array(n).fill(true);
+            let remain = segTotalCap;
+            for (const idx of order) {
+              if (remain - allRooms[idx].baseOcc >= neededCap) {
+                kept[idx] = false;
+                remain -= allRooms[idx].baseOcc;
+              }
+            }
+            for (let i = 0; i < n; i++) if (kept[i]) keptMask |= (1 << i);
+          }
+
+          let extraCostSeg = 0;
+          const extraDetails = [];
+          for (let i = 0; i < n; i++) {
+            if (keptMask & (1 << i)) continue; // phòng giữ
+            const room = allRooms[i];
+            const cost = room.pricePerNight * nights;
+            extraCostSeg += cost;
+            const existing = extraDetails.find(
+              (d) => d.roomTypeName === room.roomTypeName && d.hotelName === room.hotelName
+            );
+            if (existing) {
+              existing.extra++;
+              existing.cost += cost;
+            } else {
+              extraDetails.push({
+                hotelName: room.hotelName,
+                roomTypeName: room.roomTypeName,
+                pricePerNight: room.pricePerNight,
+                extra: 1,
+                cost,
+                nights,
+              });
+            }
+          }
+
+          if (extraCostSeg > 0) {
+            currentExtraRoomCost += extraCostSeg;
+            const segLabel = segEl.querySelector(".room-time-segment__label")?.textContent?.trim() || (fromDate + " → " + toDate);
+            allExtraLines.push({ segLabel, extraDetails, extraCostSeg });
+          }
+        }
+      });
+    }
+
+    // -- Khối cảnh báo phòng dư toàn cục (trên Tổng cộng) --
+    if (globalExtraWarn) {
+      if (allExtraLines.length > 0) {
+        let html = "";
+        allExtraLines.forEach((seg) => {
+          html += "<div style='margin-bottom:6px'><span style='font-size:12px;color:#6b7280'>" + seg.segLabel + "</span><br>";
+          seg.extraDetails.forEach((d) => {
+            const priceStr = d.pricePerNight > 0 ? " (giá " + d.pricePerNight.toLocaleString("vi-VN") + "đ/đêm × " + d.nights + " đêm)" : "";
+            html += "⚠ <strong>" + d.roomTypeName + "</strong> tại " + d.hotelName
+              + ": dư <strong>" + d.extra + " phòng</strong>" + priceStr
+              + " — phát sinh <strong>" + d.cost.toLocaleString("vi-VN") + "đ</strong><br>";
+          });
+          html += "Chi phí dư khung này: <strong>" + seg.extraCostSeg.toLocaleString("vi-VN") + "đ</strong>";
+          html += "</div>";
+        });
+        if (allExtraLines.length > 1) {
+          html += "<div style='border-top:1px solid #fde68a;margin-top:4px;padding-top:6px'>Tổng chi phí phòng dư: <strong>" + currentExtraRoomCost.toLocaleString("vi-VN") + "đ</strong></div>";
+        }
+        globalExtraWarn.innerHTML = html;
+        globalExtraWarn.style.display = "";
+      } else {
+        globalExtraWarn.style.display = "none";
+      }
+    }
+
+    drawBoxDetail();
+  }
+
+  if (roomSelectionWrap) {
+    roomSelectionWrap.addEventListener("input", (e) => {
+      const inp = e.target;
+      if (inp.classList.contains("room-qty-input")) {
+        const max = parseInt(inp.getAttribute("max") || "999", 10);
+        let val = Math.max(0, parseInt(inp.value || "0", 10));
+        if (isNaN(val)) val = 0;
+        if (val > max) { val = max; inp.value = max; }
+        else if (inp.value !== String(val)) inp.value = val;
+      }
+      updateRoomValidation();
+    });
+    boxTourDetail.querySelectorAll("[input-quantity]").forEach((inp) => {
+      inp.addEventListener("input", updateRoomValidation);
+    });
+    if (childrenAgesList) childrenAgesList.addEventListener("input", updateRoomValidation);
+    if (babiesAgesList) babiesAgesList.addEventListener("input", updateRoomValidation);
+    updateRoomValidation();
+  }
+
   // === ĐẶT NGAY (không còn locationFrom) ===
   const buttonAddToCart = boxTourDetail.querySelector(".inner-button-add-cart");
   if (buttonAddToCart) {
@@ -787,7 +1115,6 @@ if (boxTourDetail) {
       const quantityBaby = parseInt(qbEl?.value || "0", 10) || 0;
       const babySeat = seatBabyCheckbox ? !!seatBabyCheckbox.checked : false;
 
-      // Yêu cầu chọn ngày khởi hành nếu có danh sách
       let departureDateDisplay = "";
       if (departureSelect) {
         const hasMultiple =
@@ -806,9 +1133,18 @@ if (boxTourDetail) {
       }
 
       if (quantityAdult > 0 || quantityChild > 0 || quantityBaby > 0) {
-        // Thu thập tuổi
         const childrenAges = collectAges(childrenAgesList);
         const babyAges     = collectAges(babiesAgesList);
+
+        const roomSelections = collectRoomSelections();
+
+        // Kiểm tra bắt buộc chọn phòng
+        if (isRoomRequired && roomSelections.length === 0) {
+          if (requiredWarning) requiredWarning.style.display = "";
+          requiredWarning?.scrollIntoView({ behavior: "smooth", block: "center" });
+          notify?.error?.("Vui lòng chọn ít nhất một loại phòng khách sạn.");
+          return;
+        }
 
         const item = {
           tourId: tourId,
@@ -821,6 +1157,8 @@ if (boxTourDetail) {
           childrenAges,
           babyAges,
           ageBands: { babyMaxAge: agebabyMax, childrenMinAge: ageChildMin, childrenMaxAge: ageChildMax },
+          roomSelections,
+          extraRoomCost: currentExtraRoomCost || 0,
         };
         sessionStorage.setItem("cart_once_mode", "quick-order");
         setSessionCart([item]);
@@ -988,7 +1326,7 @@ if (orderForm) {
         })
           .then((res) => res.json())
           .then((data) => {
-            if (data.code == "error") {
+            if (data.code == "error" || data.code == "room_unavailable") {
               notify.error(data.message);
               return;
             }
@@ -1254,9 +1592,11 @@ const drawCart = () => {
         // Đơn giá để hiển thị "x ..." (lấy theo bậc của bé #1 nếu chưa có số lượng)
         const unitBabyForUi = babyUnitAtForItem(item, Math.max(1, qBaby || 1));
 
+        const itemExtraRoomCost = Number(item.extraRoomCost || 0);
+
         // cộng tiền chỉ khi item được tick
         if (item.checked) {
-          subTotal += qAdult * unitAdult + qChild * unitChild + babyTotal;
+          subTotal += qAdult * unitAdult + qChild * unitChild + babyTotal + itemExtraRoomCost;
         }
 
         // Build age info display for cart
@@ -1350,6 +1690,66 @@ const drawCart = () => {
                 </div>
               </div>
             </div>
+
+            ${(() => {
+              const roomSels = Array.isArray(item.roomSelections) ? item.roomSelections : [];
+              if (roomSels.length === 0) return "";
+
+              // Nhóm theo khung thời gian
+              const segMap = {};
+              roomSels.forEach((sel) => {
+                const key = (sel.fromDate || "") + "__" + (sel.toDate || "");
+                if (!segMap[key]) segMap[key] = { fromDate: sel.fromDate, toDate: sel.toDate, items: [] };
+                segMap[key].items.push(sel);
+              });
+
+              const fmtDate = (d) => {
+                if (!d) return "";
+                const dt = new Date(d);
+                if (isNaN(dt)) return d;
+                const dd = String(dt.getDate()).padStart(2, "0");
+                const mm = String(dt.getMonth() + 1).padStart(2, "0");
+                const yyyy = dt.getFullYear();
+                return dd + "/" + mm + "/" + yyyy;
+              };
+
+              let html = `<div class="inner-room-selections"><div class="inner-label">Phòng khách sạn đã chọn</div><div class="inner-room-seg-list">`;
+
+              Object.values(segMap).forEach((seg) => {
+                const segLabel = fmtDate(seg.fromDate) + " → " + fmtDate(seg.toDate);
+                html += `<div class="inner-room-seg">
+                  <div class="inner-room-seg__header">${segLabel}</div>`;
+
+                // Nhóm theo tên khách sạn
+                const hotelMap = {};
+                seg.items.forEach((sel) => {
+                  if (!hotelMap[sel.hotelName]) hotelMap[sel.hotelName] = [];
+                  hotelMap[sel.hotelName].push(sel);
+                });
+
+                Object.entries(hotelMap).forEach(([hotelName, sels]) => {
+                  html += `<div class="inner-room-hotel">
+                    <div class="inner-room-hotel__name">${hotelName}</div>`;
+                  sels.forEach((sel) => {
+                    html += `<div class="inner-room-row">
+                      <span class="inner-room-row__type">${sel.roomTypeName}</span>
+                      <span class="inner-room-row__qty">${sel.selectedRooms} phòng</span>
+                      <span class="inner-room-row__occ">(${sel.baseOccupancy} người/phòng)</span>
+                    </div>`;
+                  });
+                  html += `</div>`;
+                });
+
+                html += `</div>`;
+              });
+
+              if (itemExtraRoomCost > 0) {
+                html += `<div class="inner-room-extra-cost">⚠ Chi phí phòng dư: <strong>${itemExtraRoomCost.toLocaleString("vi-VN")}đ</strong></div>`;
+              }
+
+              html += `</div></div>`;
+              return html;
+            })()}
           </div>
         `;
       });
@@ -1485,9 +1885,17 @@ const drawCart = () => {
 
 if (pageCart) {
   drawCart();
-  // Khi rời trang giỏ hàng, nếu đang ở chế độ ĐẶT NGAY thì xoá giỏ tạm
+  // Khi điều hướng sang trang khác (không phải reload), xoá giỏ tạm ĐẶT NGAY
+  let isNavigatingAway = false;
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[href]");
+    if (a && !a.getAttribute("href").startsWith("#") && !a.getAttribute("href").startsWith("javascript")) {
+      isNavigatingAway = true;
+    }
+  });
+  document.addEventListener("submit", () => { isNavigatingAway = true; });
   window.addEventListener("pagehide", () => {
-    if (isQuickOrderMode()) clearSessionCart();
+    if (isQuickOrderMode() && isNavigatingAway) clearSessionCart();
   });
 }
 

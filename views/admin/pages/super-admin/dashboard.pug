@@ -70,20 +70,48 @@ block main
         small(style="color: #666;") Người dùng đã đăng ký
   //- End Section 1
 
-  //- Doanh thu theo công ty
-  if revenueByCompany && revenueByCompany.length
-    .section-3(style="margin-top: 30px;")
-      .box-title Doanh thu theo từng công ty
-      .table-1
+  style.
+    .sa-revenue-section { margin-top: 32px; }
+    .sa-revenue-section__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+    .sa-revenue-section__title { font-size: 18px; font-weight: 700; color: #1e293b; margin: 0; }
+    .sa-revenue-section__hint { font-size: 13px; color: #64748b; max-width: 720px; line-height: 1.45; }
+    /* Mỗi biểu đồ một hàng full width — dễ đọc hơn so với nhiều cột */
+    .sa-company-chart-grid { display: flex; flex-direction: column; gap: 24px; }
+    .sa-company-chart-card {
+      border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .sa-company-chart-card__head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .sa-company-chart-card__head img { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; }
+    .sa-company-chart-card__name { font-weight: 600; font-size: 15px; color: #0f172a; flex: 1; min-width: 0; }
+    .sa-company-chart-card__total { font-size: 13px; color: #059669; font-weight: 600; white-space: nowrap; }
+    .sa-chart-wrap { position: relative; height: min(380px, 55vh); min-height: 300px; width: 100%; }
+    .sa-hotel-company-block { margin-bottom: 36px; padding-bottom: 28px; border-bottom: 1px solid #e2e8f0; }
+    .sa-hotel-company-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .sa-hotel-company-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .sa-hotel-company-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; }
+    .sa-hotel-company-head .sa-badge-count { font-size: 12px; color: #64748b; font-weight: 500; }
+
+  //- Khối 1: Doanh thu theo tour
+  .section-3.sa-revenue-section
+    .sa-revenue-section__head
+      h2.sa-revenue-section__title
+        i.fa-solid.fa-route(style="margin-right:8px;color:#2563eb")
+        | Doanh thu theo tour
+      p.sa-revenue-section__hint
+        | Chỉ tính đơn tour đã thanh toán (paymentStatus = paid); không yêu cầu trạng thái đơn «done». Theo ngày tạo đơn.
+
+    if tourRevenueByCompany && tourRevenueByCompany.length
+      .table-1(style="margin-bottom: 20px;")
         table
           thead
             tr
               th STT
               th Công ty
-              th Doanh thu
+              th Doanh thu (tổng)
               th Số đơn hàng
           tbody
-            each company, index in revenueByCompany
+            each company, index in tourRevenueByCompany
               tr
                 td= index + 1
                 td
@@ -91,12 +119,83 @@ block main
                     img(src=company.companyLogo alt=company.companyName style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; vertical-align: middle;")
                   = company.companyName || 'N/A'
                 td
-                  strong(style="color: #27ae60; font-size: 15px;")= company.revenue.toLocaleString('vi-VN') + ' đ'
+                  strong(style="color: #2563eb; font-size: 15px;")= company.revenue.toLocaleString('vi-VN') + ' đ'
                 td.text-center= company.orderCount
-  else
-    .section-3(style="margin-top: 30px;")
-      .box-title Doanh thu theo từng công ty
-      p(style="padding: 20px; text-align: center; color: #999;") Chưa có doanh thu từ các công ty
+    else
+      p(style="padding: 12px 0; color: #94a3b8;") Chưa có doanh thu tour theo công ty.
+
+    if companiesWithCharts && companiesWithCharts.length
+      .sa-company-chart-grid
+        each co in companiesWithCharts
+          .sa-company-chart-card
+            .sa-company-chart-card__head
+              if co.logo
+                img(src=co.logo alt=co.name)
+              else
+                span(style="width:36px;height:36px;border-radius:8px;background:#e2e8f0;display:inline-flex;align-items:center;justify-content:center;color:#64748b;")
+                  i.fa-solid.fa-building
+              span.sa-company-chart-card__name= co.name
+              span.sa-company-chart-card__total 12 tháng: #{co.tourTotal12m.toLocaleString('vi-VN')}đ
+            .sa-chart-wrap
+              canvas(id=`sa-chart-tour-${co._id}`)
+    else
+      p(style="padding: 12px 0; color: #94a3b8;") Chưa có công ty nào trong hệ thống.
+
+  //- Khối 2: Doanh thu theo từng khách sạn (theo công ty)
+  .section-3.sa-revenue-section
+    .sa-revenue-section__head
+      h2.sa-revenue-section__title
+        i.fa-solid.fa-hotel(style="margin-right:8px;color:#0d9488")
+        | Doanh thu theo từng khách sạn
+      p.sa-revenue-section__hint
+        | Mỗi khách sạn một biểu đồ. Chỉ tính booking đã thanh toán và không hủy.
+
+    if companiesWithHotelCharts && companiesWithHotelCharts.length
+      each block in companiesWithHotelCharts
+        .sa-hotel-company-block
+          .sa-hotel-company-head
+            if block.logo
+              img(src=block.logo alt=block.name style="width:32px;height:32px;border-radius:8px;object-fit:cover;")
+            else
+              span(style="width:32px;height:32px;border-radius:8px;background:#e2e8f0;display:inline-flex;align-items:center;justify-content:center;color:#64748b;")
+                i.fa-solid.fa-building
+            h3= block.name
+            span.sa-badge-count
+              | #{block.hotels.length} khách sạn
+
+          if !block.hotels || !block.hotels.length
+            p(style="padding: 8px 0; color: #94a3b8;") Công ty chưa có khách sạn nào.
+          else
+            .table-1(style="margin-bottom: 20px;")
+              table
+                thead
+                  tr
+                    th STT
+                    th Khách sạn
+                    th Doanh thu (12 tháng)
+                    th Số booking
+                tbody
+                  each h, hi in block.hotels
+                    tr
+                      td= hi + 1
+                      td
+                        strong(style="color:#0f172a")= h.name
+                      td
+                        strong(style="color: #0d9488; font-size: 15px;")= h.total12m.toLocaleString('vi-VN') + ' đ'
+                      td.text-center= h.bookingCount12m
+
+            .sa-company-chart-grid
+              each h in block.hotels
+                .sa-company-chart-card
+                  .sa-company-chart-card__head
+                    span(style="width:36px;height:36px;border-radius:8px;background:#ccfbf1;display:inline-flex;align-items:center;justify-content:center;color:#0f766e;")
+                      i.fa-solid.fa-bed
+                    span.sa-company-chart-card__name= h.name
+                    span.sa-company-chart-card__total 12 tháng: #{h.total12m.toLocaleString('vi-VN')}đ
+                  .sa-chart-wrap
+                    canvas(id=`sa-chart-hotel-${h._id}`)
+    else
+      p(style="padding: 12px 0; color: #94a3b8;") Chưa có dữ liệu công ty / khách sạn.
 
   //- Pending Admins
   if pendingAdmins && pendingAdmins.length
@@ -138,6 +237,74 @@ block main
                     |  Từ chối
 
   script.
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof Chart === 'undefined') return;
+      var monthLabels = !{JSON.stringify(monthLabels || [])};
+      var companies = !{JSON.stringify(companiesWithCharts || [])};
+      companies.forEach(function (c) {
+        var tid = 'sa-chart-tour-' + c._id;
+        var elTour = document.getElementById(tid);
+        if (elTour) {
+          new Chart(elTour, {
+            type: 'bar',
+            data: {
+              labels: monthLabels,
+              datasets: [
+                {
+                  label: 'Doanh thu tour (đ)',
+                  data: c.tourByMonth,
+                  backgroundColor: 'rgba(37, 99, 235, 0.55)',
+                  borderColor: 'rgba(37, 99, 235, 1)',
+                  borderWidth: 1,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: true } },
+              scales: {
+                x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
+                y: { beginAtZero: true, ticks: { callback: function (v) { return Number(v).toLocaleString('vi-VN'); } } },
+              },
+            },
+          });
+        }
+      });
+
+      var hotelBlocks = !{JSON.stringify(companiesWithHotelCharts || [])};
+      hotelBlocks.forEach(function (block) {
+        (block.hotels || []).forEach(function (h) {
+          var elHotel = document.getElementById('sa-chart-hotel-' + h._id);
+          if (!elHotel) return;
+          new Chart(elHotel, {
+            type: 'bar',
+            data: {
+              labels: monthLabels,
+              datasets: [
+                {
+                  label: 'Doanh thu (đ)',
+                  data: h.hotelByMonth,
+                  backgroundColor: 'rgba(13, 148, 136, 0.55)',
+                  borderColor: 'rgba(13, 148, 136, 1)',
+                  borderWidth: 1,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: true } },
+              scales: {
+                x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
+                y: { beginAtZero: true, ticks: { callback: function (v) { return Number(v).toLocaleString('vi-VN'); } } },
+              },
+            },
+          });
+        });
+      });
+    });
+
     function approveAdmin(id) {
       if (!confirm('Phê duyệt tài khoản này?')) return;
       

@@ -521,12 +521,11 @@ module.exports.createPost = async (req, res) => {
       createdBookings.push(booking);
     }
 
-    // Tạo thông báo cho company admin (chỉ 1 notification cho toàn bộ đơn)
+    // Tạo thông báo cho company admin (chỉ khi thanh toán tiền mặt hoặc chuyển khoản)
+    if (paymentMethod !== "vnpay") {
     try {
       const paymentMethodName = 
-        paymentMethod === "vnpay" ? "VNPay" :
-        paymentMethod === "bank" ? "Chuyển khoản ngân hàng" :
-        "Tiền mặt";
+        paymentMethod === "bank" ? "Chuyển khoản ngân hàng" : "Tiền mặt";
       
       // Tính tổng số phòng
       const totalRoomsBooked = cart.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -536,7 +535,7 @@ module.exports.createPost = async (req, res) => {
         type: "hotel_booking",
         title: "Đặt phòng mới",
         content: `${fullName.trim()} đã đặt ${totalRoomsBooked} phòng (${cart.items.length} loại phòng) tại ${hotel.name}`,
-        link: `/${pathAdmin}/hotel/booking/list?hotelId=${hotel._id}`,
+        link: `/${pathAdmin}/hotel/booking/detail/${baseCode}`,
         metadata: {
           bookingCode: baseCode,
           customerName: fullName.trim(),
@@ -550,8 +549,8 @@ module.exports.createPost = async (req, res) => {
       });
     } catch (notifError) {
       console.error("Error creating notification:", notifError);
-      // Không throw error, chỉ log để không ảnh hưởng đến booking
     }
+    } // end if paymentMethod !== "vnpay"
 
     // Xóa cart sau khi tạo booking thành công
     await Cart.deleteOne({ _id: cart._id });

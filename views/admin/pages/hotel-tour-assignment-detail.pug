@@ -1,0 +1,739 @@
+extends ../layouts/default.pug
+
+block main
+  //- Giữ ?hotelId= khi điều hướng (đồng bộ hotel-selector-bar)
+  - var _htaHid = (typeof selectedHotelId !== 'undefined' && selectedHotelId) ? String(selectedHotelId) : ''
+  - var _htaTourListQs = _htaHid ? ('?hotelId=' + encodeURIComponent(_htaHid)) : ''
+  - var _htaSegQs = _htaHid ? ('?hotelId=' + encodeURIComponent(_htaHid)) : ''
+  - var _htaOrderHotelAmp = _htaHid ? ('&hotelId=' + encodeURIComponent(_htaHid)) : ''
+
+  //- ══════════════════════════════════════════════════════════════════════════
+  //- MODE 1: Danh sách khách hàng của 1 tour-segment (customer == null)
+  //- ══════════════════════════════════════════════════════════════════════════
+  if !customer
+    h1.box-title Phân phòng khách tour – #{tour ? tour.name : 'Tour'}
+
+    .th-breadcrumb
+      a(href=`/${pathAdmin}/hotel/tour-assignments${_htaTourListQs}`)
+        i.fa-solid.fa-arrow-left
+        |  Phân phòng cho tour
+      span.th-sep  /
+      span Khởi hành #{departureDateDisplay}
+
+    .assign-info-bar
+      .assign-info-bar__item
+        i.fa-solid.fa-map-route
+        span= tour ? tour.name : 'Tour'
+      .assign-info-bar__item
+        i.fa-solid.fa-calendar-day
+        span  Khởi hành: #{departureDateDisplay}
+      .assign-info-bar__item
+        i.fa-solid.fa-calendar-check
+        span  Kết thúc: #{moment(tourSeg.endDate).format('DD/MM/YYYY')}
+      .assign-info-bar__item
+        i.fa-solid.fa-hotel
+        span  Phòng (của bạn): #{holdsByHotel.reduce((s,h) => s + h.rooms.length, 0)}
+
+    .assign-customer-list-section
+      h2.assign-col__title
+        i.fa-solid.fa-list-check
+        |  Khách hàng đã đặt phòng của bạn (#{customers.length} đơn)
+
+      if !customers || customers.length === 0
+        .assign-empty
+          i.fa-solid.fa-circle-info
+          |  Chưa có đơn hàng nào liên quan đến khách sạn của bạn trong lịch khởi hành này.
+      else
+        .assign-cust-table-wrap
+          table.assign-cust-table
+            thead
+              tr
+                th STT
+                th Khách hàng
+                th Số điện thoại
+                th Mã đơn hàng
+                th Số người
+                th Trạng thái gán phòng
+                th Thao tác
+            tbody
+              each cust, idx in customers
+                tr
+                  td= idx + 1
+                  td
+                    .assign-cust-table__name
+                      i.fa-solid.fa-user
+                      |  #{cust.guestName || 'Khách'}
+                  td= cust.phone || '—'
+                  td
+                    span.assign-cust-table__code= '#' + cust.orderCode
+                  td
+                    span.assign-pax-badge.assign-pax-badge--adult
+                      | #{cust.quantityAdult} NL
+                    if cust.quantityChildren > 0
+                      |  
+                      span.assign-pax-badge.assign-pax-badge--child
+                        | #{cust.quantityChildren} TE
+                    if cust.quantityBaby > 0
+                      |  
+                      span.assign-pax-badge.assign-pax-badge--baby
+                        | #{cust.quantityBaby} EB
+                  td
+                    if cust.assignStatus === 'complete'
+                      span.assign-status-badge.assign-status-badge--complete
+                        i.fa-solid.fa-circle-check
+                        |  Đã gán đủ
+                    else if cust.assignStatus === 'excess'
+                      span.assign-status-badge.assign-status-badge--excess
+                        i.fa-solid.fa-layer-group
+                        |  Gán dư phòng
+                    else if cust.assignStatus === 'partial'
+                      span.assign-status-badge.assign-status-badge--partial
+                        i.fa-solid.fa-clock
+                        |  Gán chưa đủ (#{cust.assignedCount} phòng)
+                    else
+                      span.assign-status-badge.assign-status-badge--none
+                        i.fa-solid.fa-triangle-exclamation
+                        |  Chưa gán phòng
+                  td
+                    a.btn-assign-detail(href=`/${pathAdmin}/hotel/tour-assignments/${tourSeg._id}?orderId=${cust.orderId}${_htaOrderHotelAmp}`)
+                      i.fa-solid.fa-user-tag
+                      |  Phân phòng
+
+  //- ══════════════════════════════════════════════════════════════════════════
+  //- MODE 2: Phân phòng cho 1 khách hàng cụ thể
+  //- ══════════════════════════════════════════════════════════════════════════
+  else
+    h1.box-title Phân phòng – #{customer.guestName || customer.orderCode}
+
+    .th-breadcrumb
+      a(href=`/${pathAdmin}/hotel/tour-assignments${_htaTourListQs}`)
+        i.fa-solid.fa-arrow-left
+        |  Phân phòng cho tour
+      span.th-sep  /
+      a(href=`/${pathAdmin}/hotel/tour-assignments/${tourSeg._id}${_htaSegQs}`) Danh sách khách
+      span.th-sep  /
+      span #{customer.guestName || customer.orderCode}
+
+    .assign-info-bar
+      .assign-info-bar__item
+        i.fa-solid.fa-map-route
+        span= tour ? tour.name : 'Tour'
+      .assign-info-bar__item
+        i.fa-solid.fa-calendar-day
+        span  Khởi hành: #{departureDateDisplay}
+      .assign-info-bar__item
+        i.fa-solid.fa-calendar-check
+        span  Kết thúc: #{moment(tourSeg.endDate).format('DD/MM/YYYY')}
+
+    .assign-layout
+
+      .assign-col.assign-col--left
+        h2.assign-col__title
+          i.fa-solid.fa-user-circle
+          |  Thông tin khách hàng
+
+        .assign-customer-card.assign-customer-card--single(data-order-id=customer.orderId)
+          .assign-customer-card__header
+            .assign-customer-card__meta
+              span.assign-customer-card__name
+                i.fa-solid.fa-user
+                |  #{customer.guestName || 'Khách'}
+              span.assign-customer-card__phone #{customer.phone}
+            .assign-customer-card__code ##{customer.orderCode}
+          if customer.note
+            .assign-customer-card__note
+              i.fa-solid.fa-note-sticky
+              |  #{customer.note}
+          .assign-customer-card__body
+            .assign-customer-card__people
+              if customer.quantityAdult > 0
+                span.assign-pax-badge.assign-pax-badge--adult
+                  i.fa-solid.fa-user
+                  |  #{customer.quantityAdult} NL
+              if customer.quantityChildren > 0
+                span.assign-pax-badge.assign-pax-badge--child
+                  i.fa-solid.fa-child
+                  |  #{customer.quantityChildren} TE
+                  if customer.childrenAges && customer.childrenAges.length
+                    span.assign-pax-ages
+                      |  (
+                      each age, idx in customer.childrenAges
+                        if idx > 0
+                          | ,#{' '}
+                        | #{age}t
+                      | )
+              if customer.quantityBaby > 0
+                span.assign-pax-badge.assign-pax-badge--baby
+                  i.fa-solid.fa-baby
+                  |  #{customer.quantityBaby} EB
+                  if customer.babyAges && customer.babyAges.length
+                    span.assign-pax-ages
+                      |  (
+                      each age, idx in customer.babyAges
+                        if idx > 0
+                          | ,#{' '}
+                        | #{age}t
+                      | )
+              span.assign-pax-total  · #{customer.totalPeople} người
+            if customer.roomSelections && customer.roomSelections.length > 0
+              .assign-customer-card__booked-rooms
+                .assign-customer-card__booked-rooms-title
+                  i.fa-solid.fa-bed(style="margin-right:4px")
+                  | Phòng đã đặt tại KS của bạn:
+                - var rsSegMap = {}
+                each rs in customer.roomSelections
+                  - var rsKey = (rs.fromDate||'') + '__' + (rs.toDate||'')
+                  - if (!rsSegMap[rsKey]) rsSegMap[rsKey] = { fromDate: rs.fromDate, toDate: rs.toDate, items: [] }
+                  - rsSegMap[rsKey].items.push(rs)
+                each seg in Object.values(rsSegMap)
+                  .assign-booked-seg
+                    .assign-booked-seg__date= seg.fromDate + ' → ' + seg.toDate
+                    each rs in seg.items
+                      .assign-booked-row
+                        span.assign-booked-row__hotel= rs.hotelName
+                        span.assign-booked-row__type= rs.roomTypeName
+                        span.assign-booked-row__qty= rs.selectedRooms + ' phòng'
+                        if rs.baseOccupancy
+                          span.assign-booked-row__occ= '(' + rs.baseOccupancy + ' người/phòng)'
+
+          .assign-customer-card__validation
+          .assign-customer-card__rooms
+            - const assigned = existingAssignments.filter(a => a.orderId === customer.orderId)
+            if assigned.length > 0
+              each a in assigned
+                .assign-tag(data-room-id=a.roomId)
+                  i.fa-solid.fa-door-open
+                  |  Phòng #{a.roomNumber} – #{a.hotelName}
+                  if a.roomTypeName
+                    span.assign-tag__type  (#{a.roomTypeName})
+                  span.assign-tag__num  #{a.numPeople} người/phòng
+                  button.assign-tag__remove(
+                    type="button"
+                    title="Bỏ phân công phòng này"
+                    onclick="removeAssignment(this)"
+                    data-order-id=customer.orderId
+                    data-room-id=a.roomId
+                  )
+                    i.fa-solid.fa-xmark
+            else
+              span.assign-customer-card__unassigned
+                i.fa-solid.fa-triangle-exclamation
+                |  Chưa phân công phòng nào
+
+      .assign-col.assign-col--right
+        .assign-rooms-panel
+          h2.assign-col__title
+            i.fa-solid.fa-hotel
+            |  Phòng đang giữ chỗ (KS của bạn)
+            span.assign-rooms-panel__total#rooms-total-label
+              |  (#{holdsByHotel.reduce((s,h) => s + h.rooms.length, 0)} phòng)
+
+          if holdsByHotel.length === 0
+            .assign-empty
+              i.fa-solid.fa-circle-info
+              |  Không có phòng nào của khách sạn bạn được giữ chỗ cho tour này.
+          else
+            .assign-hotel-tabs#hotel-tabs
+              each hg, hi in holdsByHotel
+                button.assign-hotel-tab(
+                  type="button"
+                  data-hotel-idx=hi
+                  class=(hi === 0 ? 'assign-hotel-tab--active' : '')
+                )
+                  i.fa-solid.fa-building
+                  |  #{hg.hotelName}
+                  span.assign-hotel-tab__count  (#{hg.rooms.length})
+
+            .assign-room-filters
+              select#filter-floor.assign-filter-select
+                option(value="") Tất cả tầng
+              select#filter-type.assign-filter-select
+                option(value="") Tất cả loại phòng
+              select#filter-status.assign-filter-select
+                option(value="") Tất cả trạng thái
+                option(value="free") Còn trống
+                option(value="assigned") Đã gán
+              .assign-filter-count#filter-count
+
+            .assign-room-grid#room-grid
+
+            script#holds-data(type="application/json")
+              | !{JSON.stringify(holdsByHotel)}
+
+    .assign-action-box#assign-action-box(style="display:none")
+      .assign-action-box__content
+        .assign-action-box__info
+          p#assign-box-text Chọn các phòng để phân công
+          .assign-multi-room-list#assign-multi-room-list
+        .assign-action-box__btns
+          button#btn-do-assign.btn-primary(type="button" onclick="doAssign()")
+            i.fa-solid.fa-link
+            span#btn-do-assign-label  Gán phòng
+          button#btn-cancel-select.btn-secondary(type="button" onclick="cancelSelect()")
+            |  Huỷ chọn
+
+    .assign-save-bar
+      button#btn-save-assignments.btn-primary(type="button" onclick="saveAllAssignments()")
+        i.fa-solid.fa-floppy-disk
+        |  Lưu phân công
+      span#assign-save-msg
+
+    script.
+      var SEGMENT_ID          = "!{String(tourSeg._id)}";
+      var PATH_ADMIN          = "!{pathAdmin}";
+      var SAVE_URL            = "/" + PATH_ADMIN + "/hotel/tour-assignments/" + SEGMENT_ID + "/save";
+      //- Gửi kèm khi có ?hotelId= để server chỉ ghi đè phân công của đúng KS đó
+      var SCOPE_HOTEL_ID      = !{JSON.stringify(selectedHotelId || '')};
+      var customer            = !{JSON.stringify(customer)};
+      var customers           = !{JSON.stringify(customers)};
+      var existingAssignments = !{JSON.stringify(existingAssignments)};
+      var assignments         = existingAssignments.slice();
+      var selectedRoomIds     = [];
+      var activeHotelIdx      = 0;
+
+      var holdsData = JSON.parse(document.getElementById('holds-data').textContent);
+      var tourSegsData = !{JSON.stringify(tourSeg.segments || [])};
+
+      var holdSegmentMap = {};
+      (function() {
+        holdsData.forEach(function(hotelGroup) {
+          (hotelGroup.rooms || []).forEach(function(room) {
+            var holdId  = String(room._id);
+            var checkIn = room.checkIn ? new Date(room.checkIn).getTime() : null;
+            if (checkIn === null) return;
+            tourSegsData.forEach(function(seg, idx) {
+              var segFrom = new Date(seg.fromDate).getTime();
+              if (Math.abs(checkIn - segFrom) < 2 * 86400000) {
+                holdSegmentMap[holdId] = idx;
+              }
+            });
+          });
+        });
+      })();
+
+      function formatSegDate(dateStr) {
+        if (!dateStr) return '?';
+        var d = new Date(dateStr);
+        return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2);
+      }
+
+      function escHtmlText(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      function escAttr(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      }
+
+      function renderRoomGrid() {
+        var grid      = document.getElementById('room-grid');
+        var hg        = holdsData[activeHotelIdx];
+        if (!hg) { grid.innerHTML = ''; return; }
+
+        var filterFloor  = document.getElementById('filter-floor').value;
+        var filterType   = document.getElementById('filter-type').value;
+        var filterStatus = document.getElementById('filter-status').value;
+
+        var rooms = hg.rooms.filter(function(r) {
+          if (filterFloor  && r.floor        !== filterFloor)  return false;
+          if (filterType   && r.roomTypeName !== filterType)   return false;
+          var slotKey = String(r._id);
+          if (filterStatus === 'free'     && assignments.some(function(a) { return a.holdBookingId === slotKey; })) return false;
+          if (filterStatus === 'assigned' && !assignments.some(function(a) { return a.holdBookingId === slotKey; })) return false;
+          return true;
+        });
+
+        document.getElementById('filter-count').textContent =
+          rooms.length + ' / ' + hg.rooms.length + ' phòng';
+
+        if (rooms.length === 0) {
+          grid.innerHTML = '<div class="assign-room-grid__empty"><i class="fa-solid fa-magnifying-glass"></i> Không có phòng phù hợp</div>';
+          return;
+        }
+
+        var physicalRoomCount = {};
+        rooms.forEach(function(r) {
+          var pid = String(r.roomId || '');
+          physicalRoomCount[pid] = (physicalRoomCount[pid] || 0) + 1;
+        });
+
+        grid.innerHTML = rooms.map(function(r) {
+          var slotId   = String(r._id);
+          var physRoomId = String(r.roomId || slotId);
+          var isAssigned  = assignments.some(function(a) { return a.holdBookingId === slotId; });
+          var isSelecting = selectedRoomIds.indexOf(slotId) !== -1;
+          var assignee = isAssigned
+            ? assignments.find(function(a) { return a.holdBookingId === slotId; })
+            : null;
+
+          var cls = 'assign-room-tile';
+          if (isSelecting)  cls += ' assign-room-tile--selecting';
+          else if (isAssigned) cls += ' assign-room-tile--assigned';
+
+          var showDates = physicalRoomCount[physRoomId] > 1;
+          var dateLabel = showDates && r.checkIn && r.checkOut
+            ? '<div class="assign-room-tile__dates">' + formatSegDate(r.checkIn) + ' → ' + formatSegDate(r.checkOut) + '</div>'
+            : '';
+
+          var gname = assignee ? (assignee.guestName || assignee.orderCode || '') : '';
+          var assigneeLabel = isAssigned && assignee
+            ? '<div class="assign-room-tile__assignee" title="' + escAttr(gname) + '">'
+              + '<i class="fa-solid fa-user-check" aria-hidden="true"></i>'
+              + '<span class="assign-room-tile__assignee-name">' + escHtmlText(gname) + '</span>'
+              + '</div>'
+            : '';
+
+          return '<div class="' + cls + '" data-room-id="' + slotId + '"'
+            + ' data-physical-room-id="' + physRoomId + '"'
+            + ' data-room-number="' + (r.roomNumber || '') + '"'
+            + ' data-room-type="' + (r.roomTypeName || '') + '"'
+            + ' data-hotel-id="' + (r.hotel && r.hotel.hotelId ? r.hotel.hotelId : '') + '"'
+            + ' data-hotel-name="' + (r.hotelName || '') + '"'
+            + ' data-base-occ="' + (r.baseOccupancy || 2) + '"'
+            + ' data-max-occ="' + (r.maxOccupancy || r.baseOccupancy || 2) + '"'
+            + ' onclick="selectRoom(\'' + slotId + '\')">'
+            + '<div class="assign-room-tile__number">' + (r.roomNumber || '?') + '</div>'
+            + '<div class="assign-room-tile__type">' + (r.roomTypeName || '') + '</div>'
+            + '<div class="assign-room-tile__occ">' + (r.baseOccupancy || 2) + ' <i class="fa-solid fa-user-group fa-xs"></i></div>'
+            + dateLabel
+            + assigneeLabel
+            + '</div>';
+        }).join('');
+      }
+
+      function refreshFilters() {
+        var hg = holdsData[activeHotelIdx];
+        if (!hg) return;
+        var floors = []; var types = [];
+        hg.rooms.forEach(function(r) {
+          if (r.floor && floors.indexOf(r.floor) === -1) floors.push(r.floor);
+          if (r.roomTypeName && types.indexOf(r.roomTypeName) === -1) types.push(r.roomTypeName);
+        });
+        floors.sort(); types.sort();
+        var floorSel = document.getElementById('filter-floor');
+        var typeSel  = document.getElementById('filter-type');
+        floorSel.innerHTML = '<option value="">Tất cả tầng</option>' + floors.map(function(f) { return '<option value="' + f + '">Tầng ' + f + '</option>'; }).join('');
+        typeSel.innerHTML  = '<option value="">Tất cả loại phòng</option>' + types.map(function(t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
+      }
+
+      document.querySelectorAll('.assign-filter-select').forEach(function(s) {
+        s.addEventListener('change', function() { renderRoomGrid(); });
+      });
+
+      document.querySelectorAll('.assign-hotel-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          document.querySelectorAll('.assign-hotel-tab').forEach(function(t) { t.classList.remove('assign-hotel-tab--active'); });
+          tab.classList.add('assign-hotel-tab--active');
+          activeHotelIdx = parseInt(tab.dataset.hotelIdx) || 0;
+          refreshFilters();
+          renderRoomGrid();
+        });
+      });
+
+      function selectRoom(roomId) {
+        var idx = selectedRoomIds.indexOf(roomId);
+        if (idx !== -1) {
+          selectedRoomIds.splice(idx, 1);
+        } else {
+          selectedRoomIds.push(roomId);
+        }
+        renderRoomGrid();
+        updateActionBox();
+      }
+
+      function updateActionBox() {
+        var box = document.getElementById('assign-action-box');
+        var txt = document.getElementById('assign-box-text');
+        var listEl = document.getElementById('assign-multi-room-list');
+        var btnLabel = document.getElementById('btn-do-assign-label');
+
+        if (selectedRoomIds.length > 0) {
+          var custName = customer.guestName || customer.orderCode;
+          txt.textContent = 'Gán ' + selectedRoomIds.length + ' phòng cho "' + custName + '" (#' + customer.orderCode + ')';
+          btnLabel.textContent = '  Gán ' + selectedRoomIds.length + ' phòng';
+
+          var html = '';
+          selectedRoomIds.forEach(function(rid) {
+            var tile = document.querySelector('.assign-room-tile[data-room-id="' + rid + '"]');
+            if (!tile) return;
+            html += '<div class="assign-multi-room-item">'
+              + '<i class="fa-solid fa-door-open"></i> '
+              + 'Phòng <b>' + (tile.dataset.roomNumber || '?') + '</b>'
+              + ' – ' + (tile.dataset.hotelName || '')
+              + ' <span style="color:#6b7280">(' + (tile.dataset.roomType || '') + ', ' + (tile.dataset.baseOcc || '2') + ' người)</span>'
+              + '<button type="button" class="assign-multi-room-remove" onclick="deselectRoom(\'' + rid + '\')">'
+              + '<i class="fa-solid fa-xmark"></i></button>'
+              + '</div>';
+          });
+          listEl.innerHTML = html;
+          box.style.display = '';
+        } else {
+          box.style.display = 'none';
+          listEl.innerHTML = '';
+        }
+      }
+
+      function deselectRoom(roomId) {
+        var idx = selectedRoomIds.indexOf(roomId);
+        if (idx !== -1) selectedRoomIds.splice(idx, 1);
+        renderRoomGrid();
+        updateActionBox();
+      }
+
+      function doAssign() {
+        if (selectedRoomIds.length === 0) return;
+        var cust = customer;
+
+        var conflictMsgs = [];
+        selectedRoomIds.forEach(function(slotId) {
+          var alreadyOtherOrder = assignments.find(function(a) {
+            return a.holdBookingId === slotId && a.orderId !== cust.orderId;
+          });
+          if (alreadyOtherOrder) {
+            var tile = document.querySelector('.assign-room-tile[data-room-id="' + slotId + '"]');
+            conflictMsgs.push('Phòng ' + (tile ? tile.dataset.roomNumber : slotId) + ' đã gán cho đơn ' + alreadyOtherOrder.orderCode);
+          }
+        });
+        if (conflictMsgs.length > 0) {
+          if (!confirm(conflictMsgs.join('\n') + '\n\nGán lại tất cả?')) return;
+          selectedRoomIds.forEach(function(slotId) {
+            assignments = assignments.filter(function(a) {
+              return !(a.holdBookingId === slotId && a.orderId !== cust.orderId);
+            });
+          });
+        }
+
+        selectedRoomIds.forEach(function(slotId) {
+          var roomTile = document.querySelector('.assign-room-tile[data-room-id="' + slotId + '"]');
+          if (!roomTile) return;
+          var baseOcc = parseFloat(roomTile.dataset.baseOcc);
+          if (!baseOcc || baseOcc < 1) baseOcc = 2;
+          baseOcc = Math.round(baseOcc);
+
+          var existing = assignments.find(function(a) {
+            return a.orderId === cust.orderId && a.holdBookingId === slotId;
+          });
+          if (!existing) {
+            assignments.push({
+              orderId:       cust.orderId,
+              orderCode:     cust.orderCode,
+              guestName:     cust.guestName,
+              phone:         cust.phone,
+              numPeople:     baseOcc,
+              effectiveOcc:  baseOcc,
+              totalEffOcc:   cust.totalPeople,
+              hotelId:       roomTile.dataset.hotelId,
+              hotelName:     roomTile.dataset.hotelName,
+              roomId:        roomTile.dataset.physicalRoomId || slotId,
+              roomNumber:    roomTile.dataset.roomNumber,
+              roomTypeName:  roomTile.dataset.roomType,
+              holdBookingId: slotId,
+            });
+          }
+        });
+
+        selectedRoomIds = [];
+        document.getElementById('assign-action-box').style.display = 'none';
+        rerenderCustomerCard();
+        renderRoomGrid();
+      }
+
+      function removeAssignment(btn) {
+        var orderId = btn.dataset.orderId;
+        var roomId  = btn.dataset.roomId;
+        assignments = assignments.filter(function(a) {
+          return !(a.orderId === orderId && a.roomId === roomId);
+        });
+        rerenderCustomerCard();
+        renderRoomGrid();
+      }
+
+      function cancelSelect() {
+        selectedRoomIds = [];
+        document.getElementById('assign-action-box').style.display = 'none';
+        renderRoomGrid();
+      }
+
+      function validateAssignments(cust, myAssigns) {
+        if (!cust.roomSelections || cust.roomSelections.length === 0) return '';
+        var needed = {};
+        cust.roomSelections.forEach(function(rs) {
+          var k = (rs.hotelId||'') + '|' + (rs.roomTypeId||'') + '|' + (rs.fromDate||'') + '|' + (rs.toDate||'');
+          if (!needed[k]) needed[k] = { hotelName: rs.hotelName, roomTypeName: rs.roomTypeName, selectedRooms: 0, baseOccupancy: rs.baseOccupancy, fromDate: rs.fromDate, toDate: rs.toDate, hotelId: rs.hotelId, roomTypeId: rs.roomTypeId };
+          needed[k].selectedRooms += rs.selectedRooms;
+        });
+
+        var assigned = {};
+        myAssigns.forEach(function(a) {
+          var holdRoom = null;
+          holdsData.forEach(function(hg) {
+            hg.rooms.forEach(function(r) {
+              if (String(r._id) === a.holdBookingId) holdRoom = r;
+            });
+          });
+          if (!holdRoom) return;
+          var hId = String(holdRoom.hotel && holdRoom.hotel.hotelId ? holdRoom.hotel.hotelId : '');
+          var rtId = holdRoom.roomTypeId ? String(holdRoom.roomTypeId) : '';
+          var ci = holdRoom.checkIn ? holdRoom.checkIn.split('T')[0] : '';
+          var co = holdRoom.checkOut ? holdRoom.checkOut.split('T')[0] : '';
+          Object.keys(needed).forEach(function(k) {
+            var n = needed[k];
+            var nFrom = n.fromDate ? n.fromDate.split('T')[0] : '';
+            var nTo = n.toDate ? n.toDate.split('T')[0] : '';
+            if (hId === (n.hotelId||'') && rtId === (n.roomTypeId||'') && ci === nFrom && co === nTo) {
+              assigned[k] = (assigned[k] || 0) + 1;
+            }
+          });
+        });
+
+        var shortfall = [];
+        var excess = [];
+        Object.keys(needed).forEach(function(k) {
+          var n = needed[k];
+          var got = assigned[k] || 0;
+          if (got < n.selectedRooms) {
+            shortfall.push('<b>' + n.roomTypeName + '</b> tại ' + n.hotelName + ': gán ' + got + '/' + n.selectedRooms + ' phòng');
+          } else if (got > n.selectedRooms) {
+            excess.push('<b>' + n.roomTypeName + '</b> tại ' + n.hotelName + ': gán ' + got + '/' + n.selectedRooms + ' phòng (dư ' + (got - n.selectedRooms) + ' phòng)');
+          }
+        });
+
+        if (shortfall.length === 0 && excess.length === 0 && myAssigns.length > 0) {
+          return '<div class="assign-validation-ok"><i class="fa-solid fa-circle-check"></i> Đã gán đủ phòng theo đơn đặt</div>';
+        }
+
+        var parts = [];
+        if (shortfall.length > 0) {
+          parts.push('<div class="assign-validation-warn"><i class="fa-solid fa-triangle-exclamation"></i><div>Chưa gán đủ phòng theo đơn đặt:<br>' + shortfall.join('<br>') + '</div></div>');
+        }
+        if (excess.length > 0) {
+          parts.push('<div class="assign-validation-excess"><i class="fa-solid fa-layer-group"></i><div>Gán dư phòng so với đơn đặt:<br>' + excess.join('<br>') + '</div></div>');
+        }
+        return parts.join('');
+      }
+
+      function rerenderCustomerCard() {
+        var card = document.querySelector('.assign-customer-card--single');
+        if (!card) return;
+        var myAssigns = assignments.filter(function(a) { return a.orderId === customer.orderId; });
+        var container = card.querySelector('.assign-customer-card__rooms');
+
+        var valEl = card.querySelector('.assign-customer-card__validation');
+        if (customer.roomSelections && customer.roomSelections.length > 0) {
+          valEl.innerHTML = validateAssignments(customer, myAssigns);
+        } else {
+          valEl.innerHTML = '';
+        }
+
+        if (myAssigns.length > 0) {
+          container.innerHTML = myAssigns.map(function(a) {
+            var segIdx  = holdSegmentMap[a.holdBookingId];
+            var segInfo = segIdx != null && tourSegsData[segIdx]
+              ? '<span class="assign-tag__seg">' + formatSegDate(tourSegsData[segIdx].fromDate) + '→' + formatSegDate(tourSegsData[segIdx].toDate) + '</span> '
+              : '';
+            return '<div class="assign-tag" data-room-id="' + a.roomId + '">'
+              + '<i class="fa-solid fa-door-open"></i> '
+              + segInfo
+              + 'Phòng ' + a.roomNumber + ' – ' + a.hotelName
+              + (a.roomTypeName ? ' <span class="assign-tag__type">(' + a.roomTypeName + ')</span>' : '')
+              + ' <span class="assign-tag__num">' + a.numPeople + ' người/phòng</span>'
+              + '<button class="assign-tag__remove" type="button" title="Bỏ phân công"'
+              + ' onclick="removeAssignment(this)" data-order-id="' + a.orderId + '" data-room-id="' + a.roomId + '">'
+              + '<i class="fa-solid fa-xmark"></i></button>'
+              + '</div>';
+          }).join('');
+        } else {
+          container.innerHTML = '<span class="assign-customer-card__unassigned">'
+            + '<i class="fa-solid fa-triangle-exclamation"></i> Chưa phân công phòng nào'
+            + '</span>';
+        }
+      }
+
+      function analyzeAssignmentIssues() {
+        var myAssigns = assignments.filter(function(a) { return a.orderId === customer.orderId; });
+        var cust = customer;
+        if (!cust.roomSelections || cust.roomSelections.length === 0) {
+          return { shortfall: false, excess: false };
+        }
+        var needed = {};
+        cust.roomSelections.forEach(function(rs) {
+          var k = (rs.hotelId||'') + '|' + (rs.roomTypeId||'') + '|' + (rs.fromDate||'') + '|' + (rs.toDate||'');
+          if (!needed[k]) needed[k] = 0;
+          needed[k] += rs.selectedRooms;
+        });
+
+        var assigned = {};
+        myAssigns.forEach(function(a) {
+          var holdRoom = null;
+          holdsData.forEach(function(hg) {
+            hg.rooms.forEach(function(r) { if (String(r._id) === a.holdBookingId) holdRoom = r; });
+          });
+          if (!holdRoom) return;
+          var hId = String(holdRoom.hotel && holdRoom.hotel.hotelId ? holdRoom.hotel.hotelId : '');
+          var rtId = holdRoom.roomTypeId ? String(holdRoom.roomTypeId) : '';
+          var ci = holdRoom.checkIn ? holdRoom.checkIn.split('T')[0] : '';
+          var co = holdRoom.checkOut ? holdRoom.checkOut.split('T')[0] : '';
+          Object.keys(needed).forEach(function(k) {
+            var parts = k.split('|');
+            var nFrom = parts[2] ? parts[2].split('T')[0] : '';
+            var nTo = parts[3] ? parts[3].split('T')[0] : '';
+            if (hId === parts[0] && rtId === parts[1] && ci === nFrom && co === nTo) {
+              assigned[k] = (assigned[k] || 0) + 1;
+            }
+          });
+        });
+
+        var hasShortfall = false;
+        var hasExcess = false;
+        Object.keys(needed).forEach(function(k) {
+          var got = assigned[k] || 0;
+          if (got < needed[k]) hasShortfall = true;
+          else if (got > needed[k]) hasExcess = true;
+        });
+        return { shortfall: hasShortfall, excess: hasExcess };
+      }
+
+      function saveAllAssignments() {
+        var btn = document.getElementById('btn-save-assignments');
+        var msg = document.getElementById('assign-save-msg');
+
+        var issues = analyzeAssignmentIssues();
+        if (issues.shortfall || issues.excess) {
+          var parts = [];
+          if (issues.shortfall) parts.push('Chưa gán đủ phòng đúng loại');
+          if (issues.excess) parts.push('Gán dư phòng so với đơn đặt');
+          msg.textContent = parts.join(' — ');
+          msg.style.color = '#ef4444';
+          return;
+        }
+
+        btn.disabled = true;
+        msg.textContent = 'Đang lưu...';
+        msg.style.color = '#6b7280';
+        var savePayload = { assignments: assignments };
+        if (SCOPE_HOTEL_ID) savePayload.hotelId = SCOPE_HOTEL_ID;
+        fetch(SAVE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(savePayload),
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            btn.disabled = false;
+            if (data.success) {
+              msg.textContent = data.message || 'Đã lưu thành công!';
+              msg.style.color = '#22c55e';
+            } else {
+              msg.textContent = data.message || 'Lỗi';
+              msg.style.color = '#ef4444';
+            }
+          })
+          .catch(function() {
+            btn.disabled = false;
+            msg.textContent = 'Lỗi kết nối';
+            msg.style.color = '#ef4444';
+          });
+      }
+
+      refreshFilters();
+      renderRoomGrid();
+      rerenderCustomerCard();

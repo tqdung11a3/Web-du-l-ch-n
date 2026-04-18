@@ -105,6 +105,28 @@ block main
                     |  • Mã đơn: #{it.orderCode}
                     |  • Thanh toán: #{it.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
                   .qty Số lượng: NL #{it.qtyA} • TE #{it.qtyC} • EB #{it.qtyB}
+                  if it.roomSelections && it.roomSelections.length > 0
+                    - var segMap = {}
+                    each rs in it.roomSelections
+                      - var key = (rs.fromDate||'') + '__' + (rs.toDate||'')
+                      - if (!segMap[key]) segMap[key] = { fromDate: rs.fromDate, toDate: rs.toDate, items: [] }
+                      - segMap[key].items.push(rs)
+                    .trip-rooms
+                      .trip-rooms__title
+                        i.fa-solid.fa-bed(style="margin-right:4px")
+                        | Phòng khách sạn:
+                      each seg in Object.values(segMap)
+                        .trip-rooms__seg
+                          span.trip-rooms__seg-date= seg.fromDate + ' → ' + seg.toDate
+                          each rs in seg.items
+                            .trip-rooms__row
+                              span.trip-rooms__hotel= rs.hotelName
+                              span.trip-rooms__info= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
+                  if it.extraRoomCost && it.extraRoomCost > 0
+                    .trip-extra-cost
+                      i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
+                      | Chi phí phòng dư: 
+                      strong #{Number(it.extraRoomCost).toLocaleString('vi-VN')}đ
                 .money #{(it.total||0).toLocaleString('vi-VN')}đ
 
       // ========== TAB: LỊCH SỬ CHUYẾN ĐI ==========
@@ -131,6 +153,28 @@ block main
                     |  • Mã đơn: #{it.orderCode}
                     |  • Thanh toán: #{it.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
                   .qty Số lượng: NL #{it.qtyA} • TE #{it.qtyC} • EB #{it.qtyB}
+                  if it.roomSelections && it.roomSelections.length > 0
+                    - var segMap2 = {}
+                    each rs in it.roomSelections
+                      - var key2 = (rs.fromDate||'') + '__' + (rs.toDate||'')
+                      - if (!segMap2[key2]) segMap2[key2] = { fromDate: rs.fromDate, toDate: rs.toDate, items: [] }
+                      - segMap2[key2].items.push(rs)
+                    .trip-rooms
+                      .trip-rooms__title
+                        i.fa-solid.fa-bed(style="margin-right:4px")
+                        | Phòng khách sạn:
+                      each seg in Object.values(segMap2)
+                        .trip-rooms__seg
+                          span.trip-rooms__seg-date= seg.fromDate + ' → ' + seg.toDate
+                          each rs in seg.items
+                            .trip-rooms__row
+                              span.trip-rooms__hotel= rs.hotelName
+                              span.trip-rooms__info= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
+                  if it.extraRoomCost && it.extraRoomCost > 0
+                    .trip-extra-cost
+                      i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
+                      | Chi phí phòng dư: 
+                      strong #{Number(it.extraRoomCost).toLocaleString('vi-VN')}đ
                 .money #{(it.total||0).toLocaleString('vi-VN')}đ
 
       // ========== TAB: LỊCH SỬ ĐẶT PHÒNG ==========
