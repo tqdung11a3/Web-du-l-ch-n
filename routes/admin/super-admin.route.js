@@ -7,12 +7,25 @@ const tourController = require("../../controllers/admin/super-admin/tour.control
 const customerController = require("../../controllers/admin/super-admin/customer.controller");
 const categoryController = require("../../controllers/admin/super-admin/category.controller");
 const roleMiddleware = require("../../middlewares/admin/role.middleware");
+const profileController = require("../../controllers/admin/profile.controller");
 const multer = require("multer");
 const cloudinaryHelper = require("../../helpers/cloudinary.helper");
 const upload = multer({ storage: cloudinaryHelper.storage });
 
 // Tất cả routes dưới đây đều yêu cầu Super Admin
 router.use(roleMiddleware.requireSuperAdmin);
+
+// Hồ sơ Super Admin (URL riêng, không sửa chức vụ / nhóm quyền)
+router.get("/profile/edit", profileController.editSuperAdmin);
+router.patch(
+  "/profile/edit",
+  upload.single("avatar"),
+  profileController.editPatchSuperAdmin
+);
+router.get(
+  "/profile/change-password",
+  profileController.changePasswordSuperAdmin
+);
 
 // Dashboard
 router.get("/", dashboardController.index);
@@ -42,6 +55,7 @@ router.get("/category/edit/:id", categoryController.edit);
 router.patch("/category/edit/:id", upload.single("avatar"), categoryController.editPatch);
 router.patch("/category/delete/:id", categoryController.deletePatch);
 router.patch("/category/change-status", categoryController.changeStatus);
+router.patch("/category/change-multi", categoryController.changeMultiPatch);
 router.patch("/category/change-position", categoryController.changePosition);
 router.delete("/category/:id", categoryController.deleteItem);
 router.get("/category/detail/:id", categoryController.detail);
@@ -98,6 +112,66 @@ router.get("/orders", orderController.companyList);
 // Quản lý khách hàng
 router.get("/customers", customerController.list);
 router.get("/customers/:id", customerController.detail);
+
+// Trung tâm liên hệ
+const contactController = require("../../controllers/admin/super-admin/contact.controller");
+router.get("/contacts", contactController.list);
+router.patch("/contacts/mark-handled", contactController.markHandled);
+router.delete("/contacts/:id", contactController.remove);
+
+// Kiểm duyệt đánh giá
+const reviewController = require("../../controllers/admin/super-admin/review.controller");
+router.get("/reviews", reviewController.list);
+router.patch("/reviews/toggle-hidden", reviewController.toggleHidden);
+router.delete("/reviews/:tab/:id", reviewController.remove);
+
+// Trung tâm thông báo
+const notifController = require("../../controllers/admin/super-admin/notification.controller");
+router.get("/notifications", notifController.list);
+router.get("/notifications/broadcast", notifController.broadcastForm);
+router.post("/notifications/broadcast", notifController.broadcast);
+router.delete("/notifications/:id", notifController.remove);
+
+// Yêu cầu liên kết khách sạn (giữa các công ty)
+const hotelLinkReqController = require("../../controllers/admin/super-admin/hotel-link-request.controller");
+router.get("/hotel-link-requests", hotelLinkReqController.list);
+router.get("/hotel-link-requests/:id", hotelLinkReqController.detail);
+router.patch(
+  "/hotel-link-requests/:id/force-cancel",
+  hotelLinkReqController.forceCancel
+);
+
+// Báo cáo tài chính
+const financeController = require("../../controllers/admin/super-admin/finance.controller");
+router.get("/finance", financeController.index);
+
+// Cấu hình website toàn hệ thống (chỉ Super Admin — URL có prefix super-admin)
+const settingController = require("../../controllers/admin/setting.controller");
+router.get("/setting/website-info", settingController.websiteInfo);
+router.patch(
+  "/setting/website-info",
+  upload.fields([{ name: "logo", maxCount: 1 }]),
+  settingController.websiteInfoPatch
+);
+
+// Quản lý vai trò (toàn hệ thống)
+const roleController = require("../../controllers/admin/super-admin/role.controller");
+router.get("/roles", roleController.list);
+router.get("/roles/create", roleController.createGet);
+router.post("/roles/create", roleController.createPost);
+router.get("/roles/edit/:id", roleController.editGet);
+router.patch("/roles/edit/:id", roleController.editPatch);
+router.delete("/roles/:id", roleController.remove);
+
+// Nhật ký thao tác (audit log)
+const auditLogController = require("../../controllers/admin/super-admin/audit-log.controller");
+router.get("/audit", auditLogController.list);
+// Alias: menu / bookmark cũ dùng `audit-logs` — router thực tế là `/audit`
+router.get("/audit-logs", auditLogController.list);
+
+// Super Admin override "act as company X"
+const superAdminOverrideRoutes = require("./super-admin-override.route");
+router.use("/as-company/:companyId", superAdminOverrideRoutes);
 
 module.exports = router;
 

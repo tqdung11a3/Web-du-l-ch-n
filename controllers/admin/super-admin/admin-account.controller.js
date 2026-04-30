@@ -3,6 +3,7 @@ const AccountAdmin = require("../../../models/account-admin.model");
 const Company = require("../../../models/company.model");
 const Role = require("../../../models/role.model");
 const bcrypt = require("bcrypt");
+const auditLogHelper = require("../../../helpers/audit-log.helper");
 
 /**
  * Danh sách tất cả company admin (chờ duyệt & đã duyệt)
@@ -74,6 +75,13 @@ module.exports.approve = async (req, res) => {
       }
     );
 
+    await auditLogHelper.log(req, {
+      action: "admin.approve",
+      resourceType: "AccountAdmin",
+      resourceId: id,
+      metadata: { email: admin.email },
+    });
+
     res.json({
       code: "success",
       message: "Đã phê duyệt tài khoản thành công!",
@@ -118,6 +126,13 @@ module.exports.reject = async (req, res) => {
       }
     );
 
+    await auditLogHelper.log(req, {
+      action: "admin.reject",
+      resourceType: "AccountAdmin",
+      resourceId: id,
+      metadata: { email: admin.email },
+    });
+
     res.json({
       code: "success",
       message: "Đã từ chối/vô hiệu hóa tài khoản!",
@@ -156,6 +171,13 @@ module.exports.deleteAdmin = async (req, res) => {
 
     // Hard delete - xóa hẳn khỏi database
     await AccountAdmin.deleteOne({ _id: id });
+
+    await auditLogHelper.log(req, {
+      action: "admin.delete",
+      resourceType: "AccountAdmin",
+      resourceId: id,
+      metadata: { email: admin.email },
+    });
 
     res.json({
       code: "success",
@@ -283,6 +305,13 @@ module.exports.createPost = async (req, res) => {
     });
 
     await newAdmin.save();
+
+    await auditLogHelper.log(req, {
+      action: "admin.create",
+      resourceType: "AccountAdmin",
+      resourceId: newAdmin._id,
+      metadata: { email: newAdmin.email, companyId: String(finalCompanyId) },
+    });
 
     res.json({
       code: "success",
@@ -423,6 +452,13 @@ module.exports.editPatch = async (req, res) => {
     }
 
     await AccountAdmin.updateOne({ _id: id }, updateData);
+
+    await auditLogHelper.log(req, {
+      action: "admin.update",
+      resourceType: "AccountAdmin",
+      resourceId: id,
+      metadata: { email, companyId: String(companyId) },
+    });
 
     console.log("=== UPDATE SUCCESS ===");
 

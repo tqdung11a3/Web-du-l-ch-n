@@ -5,6 +5,116 @@
 const moment = require("moment");
 const Order = require("../models/order.model");
 const Tour  = require("../models/tour.model");
+const TourSegment = require("../models/tour-segment.model");
+const HotelBooking = require("../models/hotel-booking.model");
+
+/**
+ * Release các TH (Tour Hold) HotelBooking đang được gán cho đơn hàng đã hết
+ * hạn — đẩy assignment khỏi TourSegment và reset TH về placeholder
+ * "[Tour Hold]" để giữ nguyên quota cho tour. Cũng xóa các HotelBooking dạng
+ * khách-tự-tạo (HB...) gắn theo orderCode.
+ */
+async function releaseHotelHoldsForExpiredOrder(order) {
+  try {
+    // 1) Tìm các segment có assignment thuộc đơn này. Xử lý share cross-order:
+    //    nếu TH còn đơn khác đang share → chỉ rebuild note + chuyển primary
+    //    sang đơn còn lại; chỉ reset hẳn TH nếu không còn đơn nào dùng.
+    const segments = await TourSegment.find({
+      "assignments.orderId": order._id,
+    })
+      .select("_id tourId departureDate endDate assignments")
+      .lean();
+
+    for (const seg of segments) {
+      const toRelease = (seg.assignments || []).filter(
+        (a) => String(a.orderId) === String(order._id)
+      );
+      const holdBookingIdsAll = toRelease
+        .map((a) => a.holdBookingId)
+        .filter(Boolean);
+
+      const holdToReset = [];
+      const holdToKeep = [];
+      for (const thId of holdBookingIdsAll) {
+        const remaining = (seg.assignments || []).filter(
+          (a) =>
+            String(a.holdBookingId || "") === String(thId) &&
+            String(a.orderId) !== String(order._id)
+        );
+        if (remaining.length === 0) holdToReset.push(thId);
+        else holdToKeep.push({ thId, remaining });
+      }
+
+      await TourSegment.updateOne(
+        { _id: seg._id },
+        { $pull: { assignments: { orderId: order._id } } }
+      );
+
+      if (holdToReset.length) {
+        const tourDoc = await Tour.findById(seg.tourId).select("name").lean();
+        const tourName = tourDoc?.name || "Tour";
+        const depDateFmt = moment(seg.departureDate).format("DD/MM/YYYY");
+        const endDateFmt = seg.endDate
+          ? moment(seg.endDate).format("DD/MM/YYYY")
+          : "—";
+        const resetNote = `[Tour Hold] ${tourName} | ${depDateFmt} – ${endDateFmt}`;
+
+        await HotelBooking.updateMany(
+          { _id: { $in: holdToReset } },
+          {
+            $set: {
+              "guest.fullName": "[Tour Hold]",
+              "guest.phone": "",
+              "guest.email": "",
+              note: resetNote,
+              status: "confirmed",
+              isTemporaryHold: false,
+            },
+            $unset: {
+              orderCode: "",
+              holdExpiresAt: "",
+              userId: "",
+            },
+          }
+        );
+      }
+
+      for (const { thId, remaining } of holdToKeep) {
+        const sorted = [...remaining].sort((a, b) =>
+          String(a.orderCode || "").localeCompare(String(b.orderCode || ""))
+        );
+        const primary = sorted[0];
+        const noteParts = sorted.map((entry) => {
+          const labels =
+            Array.isArray(entry.atomLabels) && entry.atomLabels.length
+              ? entry.atomLabels.join(" || ")
+              : entry.guestName || "";
+          return `Đơn ${entry.orderCode || "?"}: ${labels}`;
+        });
+        const newNote = `[Tour Booking - Ở ghép] Share phòng | ${noteParts.join(" || ")}`;
+        await HotelBooking.findByIdAndUpdate(thId, {
+          $set: {
+            "guest.fullName": primary.guestName || "Khách tour",
+            "guest.phone": primary.phone || "",
+            orderCode: primary.orderCode || "",
+            note: newNote,
+          },
+        });
+      }
+    }
+
+    // 2) Xóa các HotelBooking khách-tự-tạo (HB...) gắn theo orderCode (lúc
+    //    này TH đã bị clear orderCode ở bước 1 → không bị xóa nhầm).
+    if (order.code) {
+      await HotelBooking.deleteMany({ orderCode: order.code });
+    }
+  } catch (err) {
+    console.error(
+      "[cleanup-expired-orders] release hotel holds error:",
+      err.message
+    );
+  }
+}
 
 async function cleanupExpiredOrders() {
   try {
@@ -41,6 +151,9 @@ async function cleanupExpiredOrders() {
           { $inc: { seatsRemaining: seatsToRestore } }
         );
       }
+
+      // ── Release TH bookings + xóa HotelBooking khách-tự-tạo ──────────────
+      await releaseHotelHoldsForExpiredOrder(order);
 
       // ── Đánh dấu đơn là đã hủy ────────────────────────────────────────────
       await Order.updateOne(

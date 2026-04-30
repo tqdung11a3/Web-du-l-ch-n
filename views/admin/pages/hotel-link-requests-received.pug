@@ -1,9 +1,45 @@
 extends ../layouts/default.pug
 
 block main
+  - var lf = lrFilter || {}
+  - var _lrReceivedBase = `/${pathAdmin}/hotel/link-requests`
+  - var _hotelsR = Array.isArray(allHotelsForFilter) ? allHotelsForFilter : []
+  - var _hSelR = (lf.hotelId && String(lf.hotelId)) || (typeof selectedHotelId !== 'undefined' && selectedHotelId ? String(selectedHotelId) : '')
   .link-requests-page
     h1.box-title Yêu cầu liên kết khách sạn
     p.lr-subtitle Các công ty khác đang yêu cầu giữ phòng tại khách sạn của bạn để phục vụ tour du lịch.
+
+    form.lr-filter-form(method="GET" action=_lrReceivedBase)
+      .lr-filter-bar
+        .lr-filter-field.lr-filter-field--grow
+          label(for="lr-q-received") Tìm kiếm
+          input#lr-q-received(type="search" name="q" value=lf.q placeholder="Tour, khách sạn, công ty gửi, ghi chú…")
+        .lr-filter-field
+          label(for="lr-hotel-received") Khách sạn
+          select#lr-hotel-received(name="hotelId")
+            option(value="" selected=!_hSelR) Tất cả khách sạn
+            each h in _hotelsR
+              option(value=h._id selected=(_hSelR === String(h._id)))= h.name
+        .lr-filter-field
+          label(for="lr-status-received") Trạng thái
+          select#lr-status-received(name="status")
+            option(value="" selected=(lf.status === "" || !lf.status)) Tất cả
+            option(value="pending" selected=(lf.status === "pending")) Chờ duyệt
+            option(value="approved" selected=(lf.status === "approved")) Đã duyệt
+            option(value="rejected" selected=(lf.status === "rejected")) Từ chối
+        .lr-filter-field
+          label(for="lr-dep-from-r") Khởi hành từ
+          input#lr-dep-from-r(type="date" name="departureFrom" value=lf.departureFrom)
+        .lr-filter-field
+          label(for="lr-dep-to-r") Khởi hành đến
+          input#lr-dep-to-r(type="date" name="departureTo" value=lf.departureTo)
+        .lr-filter-actions
+          button.lr-filter-btn.lr-filter-btn--primary(type="submit")
+            i.fa-solid.fa-filter
+            |  Lọc
+          a.lr-filter-btn.lr-filter-btn--ghost(href=_lrReceivedBase)
+            i.fa-solid.fa-rotate-left
+            |  Xóa lọc
 
     if receivedRequests && receivedRequests.length > 0
       each req in receivedRequests
@@ -138,6 +174,28 @@ block main
 
   style.
     .link-requests-page { padding: 20px; max-width: 1100px; }
+    .lr-filter-form { margin-bottom: 18px; }
+    .lr-filter-bar {
+      display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: flex-end;
+      padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
+    }
+    .lr-filter-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .lr-filter-field--grow { flex: 1 1 200px; }
+    .lr-filter-field label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: #64748b; }
+    .lr-filter-field input, .lr-filter-field select {
+      min-height: 38px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px;
+      font-size: 13px; color: #1e293b; background: #fff; max-width: 100%;
+    }
+    .lr-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+    .lr-filter-btn {
+      display: inline-flex; align-items: center; gap: 6px; min-height: 38px;
+      padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; text-decoration: none; border: 1px solid transparent;
+    }
+    .lr-filter-btn--primary { background: #2d3e90; color: #fff; border-color: #2d3e90; }
+    .lr-filter-btn--primary:hover { filter: brightness(1.08); }
+    .lr-filter-btn--ghost { background: #fff; color: #475569; border-color: #cbd5e1; }
+    .lr-filter-btn--ghost:hover { background: #f1f5f9; }
     .lr-subtitle { color: #64748b; font-size: 14px; margin: -8px 0 20px; }
     .lr-card {
       background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;

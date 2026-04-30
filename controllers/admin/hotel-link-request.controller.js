@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const HotelLinkRequest = require("../../models/hotel-link-request.model");
 const HotelBooking = require("../../models/hotel-booking.model");
 const Hotel = require("../../models/hotel.model");
@@ -6,10 +7,172 @@ const Notification = require("../../models/notification.model");
 const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
 const { generateRandomNumber } = require("../../helpers/generate.helper");
 const { pathAdmin } = require("../../config/variable.config");
+/** Trang “Yêu cầu nhận được” — công ty sở hữu khách sạn. */
+const linkHotelLinkRequestsList = `/${pathAdmin}/hotel/link-requests`;
+/** Trang “Yêu cầu đã gửi” — công ty tour (xem phản hồi / lý do từ chối). */
+const linkTourHotelLinkRequestsList = `/${pathAdmin}/tour-hotel/link-requests`;
 const moment = require("moment");
 const {
   HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
 } = require("../../helpers/hotel-link-request-note.helper");
+const auditLogHelper = require("../../helpers/audit-log.helper");
+
+/**
+ * Suy luận lại trạng thái của một TourSegment dựa trên toàn bộ HotelLinkRequest
+ * liên quan. Dùng chung cho approve / reject / cancel / force-cancel.
+ *
+ * Quy ước:
+ * - Còn bất kỳ request `pending` → segment `pending_approval`.
+ * - Hết pending, có request `rejected` (công ty sở hữu KS từ chối) → segment
+ *   `rejected` (để admin gửi tour biết rõ đã bị từ chối, và bởi công ty nào).
+ * - Hết pending, có request `cancelled` nhưng không có request `rejected`
+ *   → `draft` (bên gửi/Super Admin tự huỷ, segment cần cấu hình lại).
+ * - Ngược lại (tất cả `approved` / `partially_approved`, hoặc không có
+ *   link request nào) → `confirmed`.
+ */
+async function recomputeTourSegmentStatus(tourSegmentId) {
+  if (!tourSegmentId) return;
+  const tourSeg = await TourSegment.findById(tourSegmentId);
+  if (!tourSeg) return;
+
+  // Chỉ xét request mới nhất cho mỗi khách sạn — các request cũ (bị reject /
+  // cancel ở lượt trước) được coi là lịch sử, không còn phản ánh trạng thái
+  // hiện tại của segment sau khi admin cấu hình lại và gửi yêu cầu mới.
+  const effectiveRequests = await pickLatestRequestPerHotel(tourSegmentId);
+
+  const hasPending = effectiveRequests.some((r) => r.status === "pending");
+  const hasRejected = effectiveRequests.some((r) => r.status === "rejected");
+  const hasCancelled = effectiveRequests.some((r) => r.status === "cancelled");
+
+  let nextStatus;
+  if (hasPending) {
+    nextStatus = "pending_approval";
+  } else if (hasRejected) {
+    nextStatus = "rejected";
+  } else if (hasCancelled) {
+    nextStatus = "draft";
+  } else {
+    nextStatus = "confirmed";
+  }
+
+  if (tourSeg.status !== nextStatus) {
+    tourSeg.status = nextStatus;
+    await tourSeg.save();
+  }
+}
+
+/**
+ * Với mỗi hotel trong segment, lấy HotelLinkRequest mới nhất (theo createdAt)
+ * để dùng xét trạng thái hiệu dụng. Giúp khi admin "cấu hình lại và gửi mới"
+ * thì những request cũ đã reject/cancel không còn ảnh hưởng.
+ */
+async function pickLatestRequestPerHotel(tourSegmentId) {
+  const all = await HotelLinkRequest.find({ tourSegmentId })
+    .select("status hotelId hotelName toCompanyName responseNote createdAt")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const seen = new Set();
+  const latest = [];
+  for (const r of all) {
+    const key = String(r.hotelId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    latest.push(r);
+  }
+  return latest;
+}
+
+module.exports._pickLatestRequestPerHotel = pickLatestRequestPerHotel;
+
+module.exports._recomputeTourSegmentStatus = recomputeTourSegmentStatus;
+
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Tìm theo chuỗi trên tên tour, KS, công ty, ghi chú */
+function buildTextSearchCondition(q) {
+  const trimmed = (q && String(q).trim()) || "";
+  if (!trimmed) return null;
+  const re = new RegExp(escapeRegex(trimmed), "i");
+  return {
+    $or: [
+      { tourName: re },
+      { hotelName: re },
+      { fromCompanyName: re },
+      { toCompanyName: re },
+      { note: re },
+      { responseNote: re },
+    ],
+  };
+}
+
+function applyDepartureDateRange(filter, departureFrom, departureTo) {
+  const range = {};
+  if (departureFrom) {
+    const m = moment(departureFrom, ["YYYY-MM-DD", moment.ISO_8601], true);
+    if (m.isValid()) range.$gte = m.startOf("day").toDate();
+  }
+  if (departureTo) {
+    const m = moment(departureTo, ["YYYY-MM-DD", moment.ISO_8601], true);
+    if (m.isValid()) range.$lte = m.endOf("day").toDate();
+  }
+  if (Object.keys(range).length) filter.departureDate = range;
+}
+
+/**
+ * UI chỉ 4 giá trị: Tất cả | pending | approved (gồm partially_approved) | rejected
+ * - received + rỗng: ẩn cancelled (giữ hành vi “mặc định” trang nhận).
+ * - sent + rỗng: không lọc status (mọi trạng thái, kể cả cancelled).
+ */
+function applyLinkRequestStatusFour(filter, statusParam, pageKind) {
+  const s = (statusParam || "").trim().toLowerCase();
+  if (!s) {
+    if (pageKind === "received") filter.status = { $ne: "cancelled" };
+    return;
+  }
+  if (s === "pending") {
+    filter.status = "pending";
+    return;
+  }
+  if (s === "rejected") {
+    filter.status = "rejected";
+    return;
+  }
+  if (s === "approved") {
+    filter.status = { $in: ["approved", "partially_approved"] };
+    return;
+  }
+  if (pageKind === "received") filter.status = { $ne: "cancelled" };
+}
+
+function readListFilters(req) {
+  return {
+    q: (req.query.q && String(req.query.q).trim()) || "",
+    status: (req.query.status && String(req.query.status).trim()) || "",
+    departureFrom: (req.query.departureFrom && String(req.query.departureFrom).trim()) || "",
+    departureTo: (req.query.departureTo && String(req.query.departureTo).trim()) || "",
+    hotelId: (req.query.hotelId && String(req.query.hotelId).trim()) || "",
+  };
+}
+
+/** Khách sạn thuộc công ty — dùng lọc trang «Yêu cầu nhận được» (hotel company). */
+async function loadHotelsOwnedByCompanyForFilter(companyId) {
+  if (!companyId) return [];
+  return Hotel.find({ companyId, deleted: { $ne: true } })
+    .select("name")
+    .sort({ name: 1 })
+    .lean();
+}
+
+/** Toàn bộ khách sạn (lọc form trang «đã gửi» — tour chọn KS đích trong hệ thống). */
+async function loadAllHotelsForLinkRequestFilter() {
+  return Hotel.find({ deleted: { $ne: true } })
+    .select("name")
+    .sort({ name: 1 })
+    .lean();
+}
 
 // ── Helper: enrich request list ─────────────────────────────────────────────
 function enrichRequests(list) {
@@ -85,20 +248,31 @@ async function enrichReceivedRequestsWithAvailability(list) {
 module.exports.listReceived = async (req, res) => {
   try {
     const companyId = req.account.companyId;
-    const hotelId = req.query.hotelId;
+    const f = readListFilters(req);
+    const hotelId =
+      f.hotelId && mongoose.Types.ObjectId.isValid(f.hotelId) ? f.hotelId : undefined;
 
-    const filter = { toCompanyId: companyId, status: { $ne: "cancelled" } };
+    const filter = { toCompanyId: companyId };
+    applyLinkRequestStatusFour(filter, f.status, "received");
     if (hotelId) filter.hotelId = hotelId;
 
-    const receivedRequests = await HotelLinkRequest.find(filter)
-      .sort({ createdAt: -1 })
-      .lean();
+    const textCond = buildTextSearchCondition(f.q);
+    if (textCond) Object.assign(filter, textCond);
+
+    applyDepartureDateRange(filter, f.departureFrom, f.departureTo);
+
+    const [receivedRequests, allHotelsForFilter] = await Promise.all([
+      HotelLinkRequest.find(filter).sort({ createdAt: -1 }).lean(),
+      loadHotelsOwnedByCompanyForFilter(companyId),
+    ]);
     enrichRequests(receivedRequests);
     await enrichReceivedRequestsWithAvailability(receivedRequests);
     res.render("admin/pages/hotel-link-requests-received", {
       pageTitle: "Yêu cầu liên kết khách sạn",
       receivedRequests,
       selectedHotelId: hotelId || "",
+      allHotelsForFilter,
+      lrFilter: f,
       pathAdmin,
       hotelLinkAutoBySenderTag: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
     });
@@ -112,13 +286,31 @@ module.exports.listReceived = async (req, res) => {
 module.exports.listSent = async (req, res) => {
   try {
     const companyId = req.account.companyId;
-    const sentRequests = await HotelLinkRequest.find({ fromCompanyId: companyId })
-      .sort({ createdAt: -1 })
-      .lean();
+    const f = readListFilters(req);
+
+    const filter = { fromCompanyId: companyId };
+    applyLinkRequestStatusFour(filter, f.status, "sent");
+    if (f.hotelId && mongoose.Types.ObjectId.isValid(f.hotelId)) {
+      filter.hotelId = f.hotelId;
+    } else if (f.hotelId) {
+      f.hotelId = "";
+    }
+
+    const textCond = buildTextSearchCondition(f.q);
+    if (textCond) Object.assign(filter, textCond);
+
+    applyDepartureDateRange(filter, f.departureFrom, f.departureTo);
+
+    const [sentRequests, allHotelsForFilter] = await Promise.all([
+      HotelLinkRequest.find(filter).sort({ createdAt: -1 }).lean(),
+      loadAllHotelsForLinkRequestFilter(),
+    ]);
     enrichRequests(sentRequests);
     res.render("admin/pages/hotel-link-requests-sent", {
       pageTitle: "Yêu cầu liên kết đã gửi",
       sentRequests,
+      allHotelsForFilter,
+      lrFilter: f,
       pathAdmin,
       hotelLinkAutoBySenderTag: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
     });
@@ -278,18 +470,11 @@ module.exports.approve = async (req, res) => {
       ...(tourSeg.holdBookingIds || []),
       ...newHoldIds,
     ];
-
-    // Kiểm tra tất cả link requests của tourSegment đã xử lý chưa
-    const pendingCount = await HotelLinkRequest.countDocuments({
-      tourSegmentId: tourSeg._id,
-      status: "pending",
-    });
-
-    if (pendingCount === 0) {
-      tourSeg.status = "confirmed";
-    }
-
     await tourSeg.save();
+
+    // Suy luận lại trạng thái segment từ toàn bộ link request liên quan
+    // (approved / partially_approved / rejected / cancelled / pending).
+    await recomputeTourSegmentStatus(tourSeg._id);
 
     // Gửi notification cho company gửi yêu cầu
     const statusText = linkReq.status === "approved"
@@ -303,13 +488,28 @@ module.exports.approve = async (req, res) => {
       type: "other",
       title: "Phản hồi yêu cầu liên kết khách sạn",
       content: `Yêu cầu giữ phòng tại ${linkReq.hotelName} cho tour "${tourName}" ${statusText}. Đã duyệt ${totalApproved}/${totalRequested} phòng.`,
-      link: `/admin/hotel/link-requests`,
+      link: linkTourHotelLinkRequestsList,
     });
 
     let message = `Đã duyệt ${totalApproved} phòng.`;
     if (warnings.length > 0) {
       message += ` Cảnh báo: ${warnings.join("; ")}`;
     }
+
+    auditLogHelper.log(req, {
+      action: "hotel-link-request.accept",
+      resourceType: "HotelLinkRequest",
+      resourceId: linkReq._id,
+      resourceLabel: `${linkReq.hotelName || "KS"} – ${tourName}`,
+      before: { status: "pending" },
+      after: {
+        status: linkReq.status,
+        approvedRooms: totalApproved,
+        requestedRooms: totalRequested,
+      },
+      summary: `Chấp nhận yêu cầu liên kết của tour "${tourName}" tại "${linkReq.hotelName}" (${totalApproved}/${totalRequested} phòng)`,
+      metadata: { responseNote: responseNote || "" },
+    });
 
     return res.json({ success: true, message });
   } catch (err) {
@@ -337,25 +537,24 @@ module.exports.cancel = async (req, res) => {
     linkReq.status = "cancelled";
     await linkReq.save();
 
-    const tourSeg = await TourSegment.findById(linkReq.tourSegmentId);
-    if (tourSeg) {
-      const pendingCount = await HotelLinkRequest.countDocuments({
-        tourSegmentId: tourSeg._id,
-        status: "pending",
-      });
+    auditLogHelper.log(req, {
+      action: "hotel-link-request.cancel",
+      resourceType: "HotelLinkRequest",
+      resourceId: linkReq._id,
+      resourceLabel: `${linkReq.hotelName || "KS"} – ${linkReq.tourName || "Tour"}`,
+      before: { status: "pending" },
+      after: { status: "cancelled" },
+      summary: `Thu hồi yêu cầu liên kết gửi tới "${linkReq.hotelName || ""}"`,
+    });
 
-      if (pendingCount === 0 && tourSeg.status === "pending_approval") {
-        tourSeg.status = "confirmed";
-        await tourSeg.save();
-      }
-    }
+    await recomputeTourSegmentStatus(linkReq.tourSegmentId);
 
     await Notification.create({
       companyId: linkReq.toCompanyId,
       type: "other",
       title: "Yêu cầu liên kết khách sạn đã bị thu hồi",
       content: `Yêu cầu giữ phòng tại ${linkReq.hotelName} cho tour "${linkReq.tourName || "Tour"}" đã được bên gửi thu hồi.`,
-      link: `/admin/hotel/link-requests`,
+      link: linkHotelLinkRequestsList,
     });
 
     return res.json({ success: true, message: "Đã thu hồi yêu cầu" });
@@ -385,19 +584,20 @@ module.exports.reject = async (req, res) => {
     linkReq.responseNote = responseNote || "";
     await linkReq.save();
 
-    // Kiểm tra tất cả link requests của tourSegment đã xử lý chưa
-    const tourSeg = await TourSegment.findById(linkReq.tourSegmentId);
-    if (tourSeg) {
-      const pendingCount = await HotelLinkRequest.countDocuments({
-        tourSegmentId: tourSeg._id,
-        status: "pending",
-      });
+    auditLogHelper.log(req, {
+      action: "hotel-link-request.reject",
+      resourceType: "HotelLinkRequest",
+      resourceId: linkReq._id,
+      resourceLabel: `${linkReq.hotelName || "KS"} – ${linkReq.tourName || "Tour"}`,
+      before: { status: "pending" },
+      after: { status: "rejected" },
+      summary: `Từ chối yêu cầu liên kết từ tour "${linkReq.tourName || ""}" tại "${linkReq.hotelName || ""}"`,
+      metadata: { responseNote: responseNote || "" },
+    });
 
-      if (pendingCount === 0) {
-        tourSeg.status = "confirmed";
-        await tourSeg.save();
-      }
-    }
+    // Cập nhật lại trạng thái segment (bao gồm cả trường hợp mọi request đều
+    // bị từ chối → segment rơi về "draft" để admin cấu hình lại).
+    await recomputeTourSegmentStatus(linkReq.tourSegmentId);
 
     // Gửi notification
     await Notification.create({
@@ -405,7 +605,7 @@ module.exports.reject = async (req, res) => {
       type: "other",
       title: "Yêu cầu liên kết khách sạn bị từ chối",
       content: `Yêu cầu giữ phòng tại ${linkReq.hotelName} cho tour "${linkReq.tourName}" đã bị từ chối.${responseNote ? " Lý do: " + responseNote : ""}`,
-      link: `/admin/hotel/link-requests`,
+      link: linkTourHotelLinkRequestsList,
     });
 
     return res.json({ success: true, message: "Đã từ chối yêu cầu" });

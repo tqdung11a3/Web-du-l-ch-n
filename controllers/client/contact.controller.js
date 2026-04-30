@@ -1,4 +1,5 @@
 const Contact = require("../../models/contact.model");
+const auditLogHelper = require("../../helpers/audit-log.helper");
 
 module.exports.createPost = async (req, res) => {
   const { email } = req.body;
@@ -20,6 +21,15 @@ module.exports.createPost = async (req, res) => {
     email: email,
   });
   await newRecord.save();
+
+  auditLogHelper.log(req, {
+    action: "customer.contact.create",
+    resourceType: "Contact",
+    resourceId: newRecord._id,
+    resourceLabel: email || "",
+    after: { email: email || "" },
+    summary: `Khách gửi liên hệ từ email "${email || ""}"`,
+  });
 
   res.json({
     code: "success",

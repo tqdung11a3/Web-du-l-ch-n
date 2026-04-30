@@ -10,7 +10,9 @@ html
     link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css")
     link(rel="stylesheet", href="/admin/assets/css/style.css")
     
-    script(src="https://cdn.tiny.cloud/1/rijgljx4ucnbxnd0bua0bmwyynhvrpr0pmhir2pccx9jc8xe/tinymce/8/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous")
+    //- TinyMCE Community Edition (OSS) qua jsDelivr — không cần API key,
+    //- không bị "API key required" / "domain not registered" của bản Cloud.
+    script(src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin")
     script.
       const pathAdmin = "#{pathAdmin}";
     script(src="/admin/assets/js/tinymce-config.js") 

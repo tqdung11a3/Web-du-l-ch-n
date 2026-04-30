@@ -10,43 +10,44 @@ block main
 
   //- Section 8
   .section-8
-    form(id="news-create-form")
-      .inner-group
+    form#news-create-form.news-admin-form
+      .inner-group.inner-two-col
         label(for="title" class="inner-label") Tiêu đề *
         input(type="text" id="title" name="title" placeholder="Nhập tiêu đề..." required)
       
-      .inner-group
+      .inner-group.inner-two-col
         label(for="shortDescription" class="inner-label") Mô tả ngắn
         textarea(id="shortDescription" name="shortDescription" rows="3" placeholder="Nhập mô tả ngắn...")
       
-      .inner-group
+      .inner-group.inner-two-col
         label(for="content" class="inner-label") Nội dung *
         textarea(id="content" name="content" rows="10" placeholder="Nhập nội dung..." required)
       
-      .inner-group
+      .inner-group.inner-two-col
         label(for="avatar" class="inner-label") Ảnh đại diện
         input(type="file" id="avatar" name="avatar" accept="image/*")
-        #preview(style="margin-top: 10px;")
+        #preview.news-admin-form__preview
       
-      .inner-group
-        label(for="publishedAt" class="inner-label") Ngày xuất bản
-        input(type="date" id="publishedAt" name="publishedAt" value=new Date().toISOString().split('T')[0])
+      .news-admin-form__meta-row
+        .inner-group.inner-half
+          label(for="publishedAt" class="inner-label") Ngày xuất bản
+          input(type="date" id="publishedAt" name="publishedAt" value=new Date().toISOString().split('T')[0])
+        .inner-group.inner-half
+          label(for="status" class="inner-label") Trạng thái *
+          select(id="status" name="status" required)
+            option(value="active" selected) Hoạt động
+            option(value="inactive") Dừng hoạt động
       
-      .inner-group
-        label(for="status" class="inner-label") Trạng thái *
-        select(id="status" name="status" required)
-          option(value="active" selected) Hoạt động
-          option(value="inactive") Dừng hoạt động
-      
-      .inner-group
-        label(class="inner-label") Nổi bật
-        .inner-checkbox
+      .inner-group.inner-two-col.news-admin-form__featured
+        span.inner-label Nổi bật
+        .news-admin-form__checkbox-row
           input(type="checkbox" id="isFeatured" name="isFeatured" value="true")
           label(for="isFeatured") Đánh dấu là tin tức nổi bật
       
-      .inner-group
-        button(type="submit" class="button button-primary")
-          <i class="fa-solid fa-save"></i> Tạo mới
+      .inner-group.inner-two-col.news-admin-form__actions
+        button.button.button-primary(type="submit")
+          i.fa-solid.fa-save
+          |  Tạo mới
 
   script.
     document.addEventListener('DOMContentLoaded', function() {

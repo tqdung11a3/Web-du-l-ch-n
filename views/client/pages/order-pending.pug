@@ -102,20 +102,132 @@ block main
                             .pending-tour-ages
                               each age, idx in item.babyAges
                                 span.pending-tour-age-tag Em bé #{idx + 1}: #{age} tuổi
-                    if item.roomSelections && item.roomSelections.length > 0
+                    if item.accommodationMode === 'shared' && item.sharedRoomRequest && item.sharedRoomRequest.length > 0
+                      .pending-tour-rooms
+                        .pending-tour-rooms__title
+                          i.fa-solid.fa-people-group(style="margin-right:4px")
+                          | Hình thức ở ghép — chờ admin xếp phòng:
+                        each rs in item.sharedRoomRequest
+                          .pending-tour-rooms__item
+                            .pending-tour-rooms__meta-row
+                              if rs.candidateHotels && rs.candidateHotels.length > 1
+                                span.pending-tour-rooms__hotel
+                                  | Hệ thống sẽ ưu tiên sắp xếp theo thứ tự:
+                                  each h, hi in rs.candidateHotels
+                                    if hi > 0
+                                      |  · 
+                                    |  #{hi + 1}. #{h.hotelName || h.hotelId}
+                              else
+                                span.pending-tour-rooms__hotel= rs.hotelName
+                              span.pending-tour-rooms__type= 'Số người lớn ở ghép: ' + (rs.males || 0) + ' nam, ' + (rs.females || 0) + ' nữ'
+                              span.pending-tour-rooms__date= rs.fromDate + ' → ' + rs.toDate
+                            span.pending-tour-rooms__note Khách sạn thực tế sẽ được hệ thống sắp xếp theo khả năng ghép phòng.
+
+                      if item.passengers && item.passengers.length
+                        -
+                          var psList = item.passengers || [];
+                          var adultByIdx = {};
+                          psList.forEach(function(p){ if (p.type === 'adult') adultByIdx[p.idx] = p; });
+                        .pending-passenger-list
+                          .pending-passenger-list__title
+                            i.fa-solid.fa-id-card(style="margin-right:6px")
+                            | Danh sách hành khách (#{psList.length} người)
+                          .pending-passenger-list__rows
+                            each p in psList
+                              .pending-passenger-row(class=`pending-passenger-row--${p.type || 'adult'}`)
+                                span.pending-passenger-badge(class=`pending-passenger-badge--${p.type || 'adult'}`)
+                                  if p.type === 'adult'
+                                    | Người lớn
+                                  else if p.type === 'child'
+                                    | Trẻ em
+                                  else
+                                    | Em bé
+                                span.pending-passenger-name= p.name || '(chưa có tên)'
+                                span.pending-passenger-age #{p.age} tuổi
+                                if p.gender === 'male'
+                                  span.pending-passenger-gender
+                                    i.fa-solid.fa-mars(style="color:#3b82f6")
+                                    |  Nam
+                                else if p.gender === 'female'
+                                  span.pending-passenger-gender
+                                    i.fa-solid.fa-venus(style="color:#ec4899")
+                                    |  Nữ
+                                if p.type !== 'adult'
+                                  - var guardian = adultByIdx[p.guardianIdx];
+                                  span.pending-passenger-guardian
+                                    i.fa-solid.fa-link(style="margin-right:3px")
+                                    |  Ở cùng: 
+                                    strong #{guardian ? (guardian.name || ('Người lớn #' + (guardian.idx + 1))) : '—'}
+                    else if item.roomSelections && item.roomSelections.length > 0
+                      -
+                        var paxByIdxPrivate = {};
+                        var adultByIdxPrivate = {};
+                        (item.passengers || []).forEach(function(p){
+                          paxByIdxPrivate[p.idx] = p;
+                          if (p.type === 'adult') adultByIdxPrivate[p.idx] = p;
+                        });
                       .pending-tour-rooms
                         .pending-tour-rooms__title
                           i.fa-solid.fa-bed(style="margin-right:4px")
-                          | Phòng khách sạn đã chọn:
+                          | Phòng khách sạn đã chọn (ở riêng):
                         each rs in item.roomSelections
                           .pending-tour-rooms__item
-                            span.pending-tour-rooms__hotel= rs.hotelName
-                            span.pending-tour-rooms__type= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
-                            span.pending-tour-rooms__date= rs.fromDate + ' → ' + rs.toDate
+                            .pending-tour-rooms__meta-row
+                              span.pending-tour-rooms__hotel= rs.hotelName
+                              span.pending-tour-rooms__type= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
+                              span.pending-tour-rooms__date= rs.fromDate + ' → ' + rs.toDate
+                            if rs.roomAssignments && rs.roomAssignments.length && (item.passengers || []).length
+                              .inner-room-assignments
+                                each a, ridx in rs.roomAssignments
+                                  .inner-room-assign-row
+                                    .inner-room-assign-row__title
+                                      i.fa-solid.fa-bed(style="margin-right:4px;color:#0071c2")
+                                      | Phòng #{rs.roomTypeName} #
+                                      = (ridx + 1)
+                                      if a.usedCapacity !== undefined && a.usedCapacity !== null
+                                        |  · sức chứa quy đổi #{a.usedCapacity}/#{rs.baseOccupancy}
+                                    .inner-room-assign-row__pax
+                                      if !a.passengerIdxs || a.passengerIdxs.length === 0
+                                        span.inner-room-assign-empty — chưa gán hành khách —
+                                      else
+                                        each idx in a.passengerIdxs
+                                          - var p = paxByIdxPrivate[idx];
+                                          if p
+                                            span.inner-room-assign-pax(class=`inner-room-assign-pax--${p.type || 'adult'}`)
+                                              strong= p.name || ('Hành khách #' + (idx + 1))
+                                              span.inner-room-assign-pax__meta
+                                                = (p.type === 'child' ? 'TE' : (p.type === 'baby' ? 'EB' : 'NL'))
+                                                if p.age !== undefined && p.age !== ''
+                                                  =  ' · ' + p.age + 't'
+                      if item.passengers && item.passengers.length
+                        .pending-passenger-list
+                          .pending-passenger-list__title
+                            i.fa-solid.fa-id-card(style="margin-right:6px")
+                            | Danh sách hành khách (#{item.passengers.length} người)
+                          .pending-passenger-list__rows
+                            each p in item.passengers
+                              .pending-passenger-row(class=`pending-passenger-row--${p.type || 'adult'}`)
+                                span.pending-passenger-badge(class=`pending-passenger-badge--${p.type || 'adult'}`)
+                                  if p.type === 'adult'
+                                    | Người lớn
+                                  else if p.type === 'child'
+                                    | Trẻ em
+                                  else
+                                    | Em bé
+                                span.pending-passenger-name= p.name || '(chưa có tên)'
+                                span.pending-passenger-age #{p.age} tuổi
+                                if p.gender === 'male'
+                                  span.pending-passenger-gender
+                                    i.fa-solid.fa-mars(style="color:#3b82f6")
+                                    |  Nam
+                                else if p.gender === 'female'
+                                  span.pending-passenger-gender
+                                    i.fa-solid.fa-venus(style="color:#ec4899")
+                                    |  Nữ
                     if item.extraRoomCost && item.extraRoomCost > 0
                       .pending-tour-extra-cost
                         i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
-                        | Chi phí phòng dư: #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
+                        | Chi phí phòng (ở riêng): #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
 
             //- ── Tổng tiền ──
             .info-card.info-card--total
@@ -188,12 +300,21 @@ block main
                   strong  Thanh toán tiền mặt
                 p Nhân viên sẽ liên hệ với bạn để xác nhận và hướng dẫn thanh toán. Vui lòng giữ điện thoại để nhận cuộc gọi.
 
-          a.btn-primary(href="/tour") Tìm thêm tour
-          a.btn-secondary(href="/") Về trang chủ
           if orderDetail && orderDetail.isTemporaryHold && orderDetail.paymentStatus === 'unpaid'
             button#btnCancelHold.btn-cancel-hold(type="button")
               i.fa-solid.fa-xmark
               |  Hủy đơn & trả lại ghế
+
+            //- Modal xác nhận hủy (thay cho confirm trình duyệt)
+            #cancelHoldModal.cancel-hold-modal(aria-hidden="true")
+              button.cancel-hold-modal__overlay(type="button" tabindex="-1" aria-label="Đóng")
+              .cancel-hold-modal__dialog(role="dialog" aria-modal="true" aria-labelledby="cancelHoldModalTitle")
+                h3#cancelHoldModalTitle Xác nhận hủy đơn
+                p.cancel-hold-modal__lead
+                  | Bạn chắc chắn muốn hủy đơn và trả lại ghế tour? Các phòng khách sạn đã chọn cũng sẽ được trả lại.
+                .cancel-hold-modal__actions
+                  button#cancelHoldModalDismiss.cancel-hold-modal__btn.cancel-hold-modal__btn--muted(type="button") Không, giữ đơn
+                  button#cancelHoldModalConfirm.cancel-hold-modal__btn.cancel-hold-modal__btn--danger(type="button") Xác nhận hủy đơn
 
   //- sendBeacon: hủy đơn khi user thực sự rời đi (không thanh toán, không refresh)
   if orderDetail && orderDetail.isTemporaryHold && orderDetail.paymentStatus === 'unpaid'
@@ -209,21 +330,63 @@ block main
           payBtn.addEventListener('click', function () { goingToPayment = true; });
         }
 
-        // Nút "Hủy đơn" → gọi API với header explicit rồi về trang chủ
+        // Nút "Hủy đơn" → modal xác nhận → gọi API với header explicit rồi về trang chủ
         var cancelBtn = document.getElementById('btnCancelHold');
-        if (cancelBtn) {
-          cancelBtn.addEventListener('click', function () {
-            if (!confirm('Bạn chắc chắn muốn hủy đơn và trả lại ghế?')) return;
-            goingToPayment = true; // tắt beacon tránh gọi 2 lần
+        var cancelModal = document.getElementById('cancelHoldModal');
+        var cancelModalDismiss = document.getElementById('cancelHoldModalDismiss');
+        var cancelModalConfirm = document.getElementById('cancelHoldModalConfirm');
+        var cancelModalOverlay = cancelModal ? cancelModal.querySelector('.cancel-hold-modal__overlay') : null;
+
+        function openCancelHoldModal() {
+          if (!cancelModal) return;
+          cancelModal.classList.add('is-open');
+          cancelModal.setAttribute('aria-hidden', 'false');
+          document.body.style.overflow = 'hidden';
+          if (cancelModalConfirm) cancelModalConfirm.focus();
+        }
+        function closeCancelHoldModal() {
+          if (!cancelModal) return;
+          cancelModal.classList.remove('is-open');
+          cancelModal.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+        }
+
+        function runCancelHoldRequest() {
+          goingToPayment = true; // tắt beacon tránh gọi 2 lần
+          if (cancelBtn) {
             cancelBtn.disabled = true;
             cancelBtn.textContent = 'Đang hủy...';
-            fetch('/order/cancel-hold?orderCode=' + encodeURIComponent(orderCode) +
-                  '&phone=' + encodeURIComponent(phone), {
-                    headers: { 'X-Cancel-Reason': 'explicit' }
-                  })
-              .finally(function () { window.location.href = '/'; });
+          }
+          fetch('/order/cancel-hold?orderCode=' + encodeURIComponent(orderCode) +
+                '&phone=' + encodeURIComponent(phone), {
+                  headers: { 'X-Cancel-Reason': 'explicit' }
+                })
+            .finally(function () { window.location.href = '/'; });
+        }
+
+        if (cancelBtn && cancelModal) {
+          cancelBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            openCancelHoldModal();
           });
         }
+        if (cancelModalDismiss) {
+          cancelModalDismiss.addEventListener('click', function () { closeCancelHoldModal(); });
+        }
+        if (cancelModalOverlay) {
+          cancelModalOverlay.addEventListener('click', function () { closeCancelHoldModal(); });
+        }
+        if (cancelModalConfirm) {
+          cancelModalConfirm.addEventListener('click', function () {
+            closeCancelHoldModal();
+            runCancelHoldRequest();
+          });
+        }
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && cancelModal && cancelModal.classList.contains('is-open')) {
+            closeCancelHoldModal();
+          }
+        });
 
         // Breadcrumb để phát hiện F5 refresh:
         // Mỗi lần pageshow (load bình thường), đặt flag trong sessionStorage.
@@ -430,3 +593,19 @@ block main
     .btn-submit-proof { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
     .btn-submit-proof:hover:not(:disabled) { background: #1d4ed8; }
     .btn-submit-proof:disabled { background: #93c5fd; cursor: not-allowed; }
+    .pending-passenger-list { margin-top: 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px 12px; }
+    .pending-passenger-list__title { font-size: 12.5px; font-weight: 600; color: #0369a1; margin-bottom: 8px; display: flex; align-items: center; }
+    .pending-passenger-list__rows { display: flex; flex-direction: column; gap: 5px; }
+    .pending-passenger-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 5px 8px; border-radius: 6px; font-size: 12.5px; background: #fff; border: 1px solid #e0f2fe; }
+    .pending-passenger-row--adult { border-left: 3px solid #6366f1; }
+    .pending-passenger-row--child { border-left: 3px solid #f59e0b; }
+    .pending-passenger-row--baby { border-left: 3px solid #ec4899; }
+    .pending-passenger-badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+    .pending-passenger-badge--adult { background: #e0e7ff; color: #4338ca; }
+    .pending-passenger-badge--child { background: #fef3c7; color: #92400e; }
+    .pending-passenger-badge--baby { background: #fce7f3; color: #9d174d; }
+    .pending-passenger-name { font-weight: 600; color: #0f172a; flex: 1; min-width: 80px; }
+    .pending-passenger-age { color: #64748b; font-size: 12px; white-space: nowrap; }
+    .pending-passenger-gender { color: #334155; font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+    .pending-passenger-guardian { font-size: 11.5px; color: #64748b; display: flex; align-items: center; flex-basis: 100%; }
+    .pending-passenger-guardian strong { color: #0369a1; font-weight: 600; }

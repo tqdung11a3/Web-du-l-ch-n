@@ -9,19 +9,24 @@ const slugify = require("slugify");
  * GET: Xem danh sách danh mục (Company Admin - Read Only)
  */
 module.exports.view = async (req, res) => {
+  const keyword =
+    typeof req.query.keyword === "string" ? req.query.keyword.trim() : "";
+  const statusFilter =
+    typeof req.query.status === "string" ? req.query.status.trim() : "";
+
   const find = {
     deleted: false,
   };
 
   // Lọc theo Trạng thái
-  if (req.query.status) {
-    find.status = req.query.status;
+  if (statusFilter) {
+    find.status = statusFilter;
   }
 
   // Tìm kiếm
-  if (req.query.keyword) {
-    const keyword = slugify(req.query.keyword);
-    const keywordRegex = new RegExp(keyword, "i");
+  if (keyword) {
+    const keywordSlug = slugify(keyword);
+    const keywordRegex = new RegExp(keywordSlug, "i");
     find.slug = keywordRegex;
   }
 
@@ -65,6 +70,8 @@ module.exports.view = async (req, res) => {
     pageTitle: "Xem danh mục",
     categoryList: categoryList,
     pagination: pagination,
+    keyword,
+    statusFilter,
   });
 };
 

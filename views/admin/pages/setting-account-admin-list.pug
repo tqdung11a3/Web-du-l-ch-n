@@ -60,6 +60,7 @@ block main
             th Email
             th Số điện thoại
             th Nhóm quyền
+            th Phạm vi menu
             th Chức vụ
             th Trạng thái
             th Hành động
@@ -74,6 +75,7 @@ block main
               td #{item.email}
               td #{item.phone}
               td #{item.roleName}
+              td #{item.tabAccessScopeLabel}
               td #{item.positionCompany}
               td
                 if (item.status == "initial")

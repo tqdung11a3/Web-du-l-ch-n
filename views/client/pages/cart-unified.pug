@@ -25,14 +25,15 @@ block main
             .inner-wrap
               .inner-tour-list(cart-list)
               .inner-list-price
-                .inner-item
-                  .inner-label Tạm tính:
-                  .inner-price
-                    span(cart-sub-total) 0
-                    span đ
-                .inner-item
-                  .inner-label Giảm:
-                  .inner-price -0đ
+                //- Tạm ẩn: Tạm tính & Giảm — chỉ hiện Thanh toán
+                //- .inner-item
+                //-   .inner-label Tạm tính:
+                //-   .inner-price
+                //-     span(cart-sub-total) 0
+                //-     span đ
+                //- .inner-item
+                //-   .inner-label Giảm:
+                //-   .inner-price -0đ
                 .inner-item
                   .inner-label Thanh toán:
                   .inner-price-hl
@@ -247,16 +248,15 @@ block main
                     h3 Chi tiết đơn hàng
                     
                     .summary-rows
-                      .summary-row
-                        span Tạm tính:
-                        - const subtotalStr = Number(hotelSubtotal || 0).toLocaleString('vi-VN');
-                        span= subtotalStr + ' ' + (hotelCurrency || 'VND')
-                      
+                      //- Tạm ẩn: chỉ tạm tính (tour: tạm tính + giảm)
+                      //- .summary-row
+                      //-   span Tạm tính:
+                      //-   - const subtotalStr = Number(hotelSubtotal || 0).toLocaleString('vi-VN');
+                      //-   span= subtotalStr + ' ' + (hotelCurrency || 'VND')
                       .summary-row
                         span Thuế VAT (#{hotelTaxPercent}%):
                         - const taxStr = Number(hotelTax || 0).toLocaleString('vi-VN');
                         span= taxStr + ' ' + (hotelCurrency || 'VND')
-                      
                       .summary-row
                         span Phí dịch vụ (#{hotelFeePercent}%):
                         - const feeStr = Number(hotelFee || 0).toLocaleString('vi-VN');
@@ -347,9 +347,10 @@ block main
                       i.fa-solid.fa-check
                       |  Tiến hành đặt phòng
 
-                    a.btn-continue-shopping(href="/hotel/search")
-                      i.fa-solid.fa-arrow-left
-                      |  Tiếp tục tìm phòng
+                    //- Tạm ẩn — bật lại khi cần
+                    //- a.btn-continue-shopping(href="/hotel/search")
+                    //-   i.fa-solid.fa-arrow-left
+                    //-   |  Tiếp tục tìm phòng
 
               if hotelPolicies
                 .policies-section

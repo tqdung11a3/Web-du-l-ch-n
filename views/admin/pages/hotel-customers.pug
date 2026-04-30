@@ -231,7 +231,7 @@ block main
                     </div>
                     <div class="detail-row">
                       <i class="fa-solid fa-money-bill"></i>
-                      <span>Tổng tiền: ${b.totalAmount}K</span>
+                      <span>Tổng tiền: ${typeof b.orderPaid !== 'undefined' && b.orderPaid === false ? 'Chưa thanh toán tour' : (b.totalAmount + 'K')}</span>
                     </div>
                     <div class="detail-row">
                       <span class="status-badge badge-${si.color}">${si.text}</span>

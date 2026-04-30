@@ -1,0 +1,126 @@
+extends ../../layouts/default.pug
+
+block main
+
+  .box-head
+    a.button.button-outline(
+      href=`/${pathAdmin}/super-admin/company`
+      style="margin-bottom:12px;display:inline-flex;align-items:center;gap:8px;"
+    )
+      i.fa-solid.fa-arrow-left
+      |  Danh sách công ty
+    h1.box-title(style="margin-top:0")= pageTitle
+
+  .section-4
+    .inner-wrap(style="display:grid;grid-template-columns:160px 1fr;gap:18px;align-items:center;")
+      .inner-item(style="text-align:center;")
+        if company.logo
+          img(src=company.logo alt=company.name style="width:140px;height:140px;object-fit:contain;border:1px solid #e5e7eb;border-radius:8px;background:#fff;")
+        else
+          i.fa-solid.fa-building(style="font-size:72px;color:#cbd5e1;")
+      .inner-item
+        h2(style="margin:0 0 8px;font-size:20px;")= company.name
+        if company.tradeName
+          div(style="color:#64748b;margin-bottom:6px;") Tên giao dịch: #{company.tradeName}
+        .company-meta(style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;font-size:14px;")
+          div
+            strong Email: 
+            span= company.email || '-'
+          div
+            strong Hotline: 
+            span= company.hotline || '-'
+          div
+            strong Mã số thuế: 
+            span= company.taxCode || '-'
+          div
+            strong Giấy phép: 
+            span= company.licenseNo || '-'
+          div
+            strong Trụ sở: 
+            span= company.headquarters || '-'
+          div
+            strong Địa chỉ: 
+            span= company.address || '-'
+          div
+            strong Website: 
+            if company.website
+              a(href=company.website target="_blank")= company.website
+            else
+              span -
+          div
+            strong Trạng thái: 
+            if company.status === 'active'
+              span.badge.badge-green Đang hoạt động
+            else
+              span.badge.badge-red Tạm dừng
+
+  .section-6(style="margin-top:16px;")
+    h3(style="margin:0 0 12px;font-size:16px;") Thống kê nhanh
+    .inner-stats(style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;")
+      .inner-card(style="background:#eff6ff;padding:14px;border-radius:8px;")
+        div(style="font-size:12px;color:#1d4ed8;") Tour
+        div(style="font-size:22px;font-weight:700;color:#1e3a8a;")= stats.totalTours || 0
+        div(style="font-size:12px;color:#64748b;") Đang bán: #{stats.activeTours || 0}
+      .inner-card(style="background:#f0fdf4;padding:14px;border-radius:8px;")
+        div(style="font-size:12px;color:#15803d;") Khách sạn
+        div(style="font-size:22px;font-weight:700;color:#14532d;")= stats.totalHotels || 0
+        div(style="font-size:12px;color:#64748b;") Đang bán: #{stats.activeHotels || 0}
+      .inner-card(style="background:#fef3c7;padding:14px;border-radius:8px;")
+        div(style="font-size:12px;color:#b45309;") Admin
+        div(style="font-size:22px;font-weight:700;color:#78350f;")= admins.length || 0
+      .inner-card(style="background:#faf5ff;padding:14px;border-radius:8px;")
+        div(style="font-size:12px;color:#7e22ce;") Ngày tạo
+        div(style="font-size:14px;font-weight:600;color:#581c87;margin-top:6px;")
+          if company.createdAt
+            = new Date(company.createdAt).toLocaleDateString('vi-VN')
+          else
+            | -
+
+  .section-6(style="margin-top:16px;")
+    h3(style="margin:0 0 12px;font-size:16px;") Danh sách Admin của công ty
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Họ tên
+            th Email
+            th Điện thoại
+            th Vị trí
+            th Trạng thái
+            th Ngày tạo
+        tbody
+          if admins && admins.length
+            each ad, idx in admins
+              tr
+                td= idx + 1
+                td= ad.fullName
+                td= ad.email
+                td= ad.phone || '-'
+                td= ad.positionCompany || '-'
+                td
+                  if ad.status === 'active'
+                    span.badge.badge-green Hoạt động
+                  else if ad.status === 'pending'
+                    span.badge.badge-orange Chờ duyệt
+                  else
+                    span.badge.badge-red= ad.status || '-'
+                td
+                  if ad.createdAt
+                    = new Date(ad.createdAt).toLocaleDateString('vi-VN')
+                  else
+                    | -
+          else
+            tr
+              td(colspan="7" style="text-align:center;padding:24px;color:#94a3b8;") Công ty chưa có admin nào
+
+  .section-6(style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;")
+    a.button.button-primary(href=`/${pathAdmin}/super-admin/tours/company/${company._id}`)
+      i.fa-solid.fa-plane
+      |  Xem Tours của công ty
+    a.button.button-primary(href=`/${pathAdmin}/super-admin/hotels/company/${company._id}`)
+      i.fa-solid.fa-hotel
+      |  Xem Hotels của công ty
+    a.button.button-primary(href=`/${pathAdmin}/super-admin/orders/company/${company._id}`)
+      i.fa-solid.fa-shopping-cart
+      |  Xem đơn hàng của công ty

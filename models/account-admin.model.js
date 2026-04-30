@@ -35,6 +35,16 @@ const schema = new mongoose.Schema(
     },
     deletedBy: String,
     deletedAt: Date,
+
+    /**
+     * Phạm vi tab Tour / Khách sạn — do company admin cấu hình tại Cài đặt → Tài khoản quản trị.
+     * inherit: áp dụng tour-access/hotel-access trên Role (tương thích dữ liệu cũ).
+     */
+    tabAccessScope: {
+      type: String,
+      enum: ["inherit", "full", "tour_only", "hotel_only"],
+      default: "inherit",
+    },
   },
   {
     timestamps: true, // Tự động sinh ra trường createdAt và updatedAt

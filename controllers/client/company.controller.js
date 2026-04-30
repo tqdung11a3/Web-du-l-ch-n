@@ -260,14 +260,16 @@ module.exports.listCompanies = async (req, res) => {
       })
     );
 
-    const [totalTours, totalCustomers] = await Promise.all([
+    const [totalTours, totalHotels, totalCustomers] = await Promise.all([
       Tour.countDocuments({ deleted: false, status: "active" }),
+      Hotel.countDocuments({ deleted: false, status: "active" }),
       Order.countDocuments({ deleted: { $ne: true }, paymentStatus: "paid" }),
     ]);
 
     const summary = {
       totalCompanies: companyList.length,
       totalTours,
+      totalHotels,
       totalCustomers,
     };
 

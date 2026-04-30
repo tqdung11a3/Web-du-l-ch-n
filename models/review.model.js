@@ -18,6 +18,10 @@ const ReviewSchema = new mongoose.Schema(
     userName: { type: String, required: true, trim: true }, // snapshot tên tại thời điểm viết
     rating: { type: Number, min: 1, max: 5, required: true },
     content: { type: String, trim: true, default: "" },
+    hiddenBySuperAdmin: { type: Boolean, default: false },
+    hiddenReason: { type: String, default: "" },
+    hiddenBy: { type: String, default: "" },
+    hiddenAt: { type: Date },
     deleted: { type: Boolean, default: false },
   },
   { timestamps: true }

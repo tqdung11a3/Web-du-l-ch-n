@@ -44,7 +44,7 @@ block main
                 td.text-center= customer.orderCount || 0
                 td
                   strong(style="color: #27ae60;")= (customer.totalSpent || 0).toLocaleString('vi-VN') + ' đ'
-                td= new Date(customer.createdAt || Date.now()).toLocaleDateString('vi-VN')
+                td= customer.registrationDateDisplay || '—'
                 td
                   .inner-buttons
                     a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/customers/${customer._id}`, title="Xem chi tiết")

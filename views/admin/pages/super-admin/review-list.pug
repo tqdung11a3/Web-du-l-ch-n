@@ -1,0 +1,137 @@
+extends ../../layouts/default.pug
+
+block main
+
+  h1.box-title= pageTitle
+
+  //- Tabs
+  .review-tabs(style="display:flex;gap:8px;margin-bottom:12px;border-bottom:1px solid #e5e7eb;")
+    a(
+      href=`/${pathAdmin}/super-admin/reviews?tab=tour`
+      class=(tab==='tour' ? 'active' : '')
+      style=`padding:10px 16px;border-bottom:2px solid ${tab==='tour'?'var(--color-primary)':'transparent'};font-weight:600;color:${tab==='tour'?'var(--color-primary)':'#64748b'};text-decoration:none;`
+    ) Đánh giá Tour
+    a(
+      href=`/${pathAdmin}/super-admin/reviews?tab=hotel`
+      class=(tab==='hotel' ? 'active' : '')
+      style=`padding:10px 16px;border-bottom:2px solid ${tab==='hotel'?'var(--color-primary)':'transparent'};font-weight:600;color:${tab==='hotel'?'var(--color-primary)':'#64748b'};text-decoration:none;`
+    ) Đánh giá Khách sạn
+
+  .section-4
+    form.inner-wrap(method="GET" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;")
+      input(type="hidden" name="tab" value=tab)
+      .inner-item
+        input(
+          type="text" name="keyword" placeholder="Tên khách / nội dung..."
+          value=keyword
+          style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;font-size:14px;min-width:220px;"
+        )
+      .inner-item
+        select(name="companyId" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;font-size:14px;")
+          option(value="" selected=!companyFilter) Tất cả công ty
+          each co in companies
+            option(value=co._id selected=companyFilter===String(co._id))= co.name
+      .inner-item
+        select(name="hidden" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;font-size:14px;")
+          option(value="" selected=!hiddenFilter) Tất cả
+          option(value="no" selected=hiddenFilter==='no') Đang hiển thị
+          option(value="only" selected=hiddenFilter==='only') Đã ẩn
+      .inner-item
+        select(name="rating" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;font-size:14px;")
+          option(value="" selected=!ratingFilter) Mọi rating
+          if tab==='tour'
+            - for (let i=1;i<=5;i++)
+              option(value=i selected=ratingFilter==String(i))= i + ' sao'
+          else
+            - for (let i of [9,8,7,6,5,4,3])
+              option(value=i selected=ratingFilter==String(i)) ≥ #{i}
+      .inner-item
+        button(type="submit" style="height:38px;padding:0 18px;background:var(--color-primary);color:#fff;border:0;border-radius:4px;font-weight:600;cursor:pointer;") Lọc
+        a(href=`/${pathAdmin}/super-admin/reviews?tab=${tab}` style="margin-left:8px;color:#64748b;") Xóa lọc
+
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            if tab==='tour'
+              th Tour
+            else
+              th Khách sạn
+            th Công ty
+            th Khách
+            th Rating
+            th Nội dung
+            th Trạng thái
+            th Ngày tạo
+            th(class="inner-center") Hành động
+        tbody
+          if items && items.length
+            each it, idx in items
+              tr
+                td= (pagination.skip || 0) + idx + 1
+                td(style="max-width:180px;")= tab==='tour' ? it.tourTitle : it.hotelName
+                td(style="max-width:140px;")= it.companyName || '-'
+                td= it.userName
+                td
+                  if tab==='tour'
+                    span.badge.badge-yellow= it.rating + ' / 5'
+                  else
+                    span.badge.badge-yellow= it.rating + ' / 10'
+                td(style="max-width:240px;font-size:13px;white-space:normal;")= it.content || '-'
+                td
+                  if it.hiddenBySuperAdmin
+                    span.badge.badge-red Đã ẩn
+                    if it.hiddenReason
+                      div(style="font-size:11px;color:#64748b;margin-top:4px;")= it.hiddenReason
+                  else
+                    span.badge.badge-green Đang hiển thị
+                td(style="font-size:12px;")= it.createdAtFormat
+                td(class="inner-center")
+                  .inner-buttons
+                    button(
+                      type="button" class="inner-edit"
+                      title=it.hiddenBySuperAdmin ? 'Bỏ ẩn' : 'Ẩn'
+                      onclick=`toggleHidden('${tab}', '${it._id}', ${it.hiddenBySuperAdmin ? 'false' : 'true'})`
+                    )
+                      if it.hiddenBySuperAdmin
+                        i.fa-solid.fa-eye
+                      else
+                        i.fa-solid.fa-eye-slash
+                    button(
+                      type="button" class="inner-delete" title="Xoá"
+                      onclick=`removeReview('${tab}','${it._id}')`
+                    )
+                      i.fa-regular.fa-trash-can
+          else
+            tr
+              td(colspan="9" class="inner-center" style="padding:24px;color:#94a3b8;") Không có đánh giá
+
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label Hiển thị #{pagination.skip + 1} - #{Math.min(pagination.skip + pagination.limitItems, pagination.totalRecord)} của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}
+
+  script.
+    function toggleHidden(tab, id, hidden) {
+      let reason = '';
+      if (hidden === true || hidden === 'true') {
+        reason = prompt('Lý do ẩn đánh giá (có thể bỏ trống):', '') || '';
+      }
+      fetch(`/${window.location.pathname.split('/')[1]}/super-admin/reviews/toggle-hidden`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tab, id, hidden: !!hidden && hidden !== 'false', reason })
+      })
+      .then(r => r.json())
+      .then(d => { alert(d.message); if (d.code === 'success') location.reload(); });
+    }
+    function removeReview(tab, id) {
+      if (!confirm('Xoá đánh giá này?')) return;
+      fetch(`/${window.location.pathname.split('/')[1]}/super-admin/reviews/${tab}/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(d => { alert(d.message); if (d.code === 'success') location.reload(); });
+    }

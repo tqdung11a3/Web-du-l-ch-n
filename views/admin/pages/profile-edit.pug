@@ -18,10 +18,16 @@ block main
         input(type="text" id="phone" name="phone" value=account.phone)
       .inner-group
         label(for="positionCompany" class="inner-label") Chức vụ
-        input(type="text" id="positionCompany" readonly value=account.positionCompany)
+        input(type="text" id="positionCompany" name="positionCompany" value=account.positionCompany)
       .inner-group
         label(for="role" class="inner-label") Nhóm quyền
-        input(type="text" id="role" readonly value=account.roleName)
+        select#role(name="role")
+          option(value="" selected=!account.role) -- Chọn nhóm quyền --
+          each item in (roleList || [])
+            option(
+              value=item._id
+              selected=(String(account.role || '') === String(item._id))
+            )= item.name
       .inner-group.inner-two-col
         label(for="avatar" class="inner-label") Ảnh đại diện
         .inner-upload-image(image-default=account.avatar)

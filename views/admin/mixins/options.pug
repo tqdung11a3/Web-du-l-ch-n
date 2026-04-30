@@ -7,3 +7,13 @@ mixin options(list, level = 0, currentId = "")
       ) #{prefix} #{item.name}
     if (item.children && item.children.length > 0)
       +options(item.children, level + 1, currentId)
+
+//- selectedIds: mảng id (string) đã chọn — dùng cho select multiple Section 4
+mixin optionsMulti(list, selectedIds, level = 0)
+  - var _sel = Array.isArray(selectedIds) ? selectedIds.map(String) : []
+  each item in list
+    - const prefix = "--".repeat(level);
+    - const sid = String(item.id)
+    option(value=sid selected=_sel.includes(sid)) #{prefix} #{item.name}
+    if (item.children && item.children.length > 0)
+      +optionsMulti(item.children, selectedIds, level + 1)

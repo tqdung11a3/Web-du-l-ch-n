@@ -727,15 +727,30 @@ function showDateRequiredMessage() {
           submitBtn.disabled = false;
           submitBtn.innerHTML = originalBtnText;
         }
-        
-        if (typeof Notyf !== 'undefined') {
+
+        const msg = String(data.message || 'Có lỗi xảy ra');
+        const lineCount = msg ? msg.split('\n').length : 1;
+
+        if (typeof notify !== 'undefined' && notify && typeof notify.open === 'function') {
+          if (lineCount > 1) {
+            notify.open({
+              type: 'error',
+              message: msg,
+              duration: Math.min(15000, 4000 + lineCount * 2000),
+            });
+          } else {
+            notify.error(msg);
+          }
+        } else if (typeof Notyf !== 'undefined') {
           const notyf = new Notyf({
-            duration: 3000,
-            position: { x: 'right', y: 'top' }
+            duration: lineCount > 1 ? Math.min(15000, 4000 + lineCount * 2000) : 3000,
+            position: { x: 'right', y: 'top' },
+            dismissible: true,
+            ripple: false,
           });
-          notyf.error(data.message || 'Có lỗi xảy ra');
+          notyf.error(msg);
         } else {
-          alert(data.message || 'Có lỗi xảy ra');
+          alert(msg);
         }
         return;
       }

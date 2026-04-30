@@ -1,6 +1,5 @@
 extends ../layouts/default.pug
 include ../mixins/product.pug
-include ../mixins/section-5.pug
 include ../mixins/blog.pug
 include ../mixins/company-card.pug
 
@@ -160,34 +159,36 @@ block main
   //-                   )
   //-         .swiper-pagination
   // End Section 3
-  // Section 4
-  if(categorySection4)
-    .section-4
-      .container
-        h2.box-title(
-          data-aos-duration="800" 
-          data-aos="fade-up"
-          ) #{categorySection4.name}
-        if (tourListSection4.length > 0)
-          .inner-wrap(
-            data-aos-delay="150" 
-            data-aos-duration="800" 
-            data-aos="fade-up"
+  // Section 4 — mỗi danh mục cấu hình một block
+  if sections4Blocks && sections4Blocks.length
+    each block in sections4Blocks
+      if block.category
+        .section-4
+          .container
+            h2.box-title(
+              data-aos-duration="800"
+              data-aos="fade-up"
+            ) #{block.category.name}
+            if (block.tours && block.tours.length > 0)
+              .inner-wrap(
+                data-aos-delay="150"
+                data-aos-duration="800"
+                data-aos="fade-up"
+              )
+                each item in block.tours
+                  +product-item(item)
+            else
+              div.no-data(
+                data-aos-delay="150"
+                data-aos-duration="800"
+                data-aos="fade-up"
+              ) Không có dữ liệu.
+            .inner-button(
+              data-aos-delay="300"
+              data-aos-duration="800"
+              data-aos="fade-up"
             )
-              each item in tourListSection4
-                +product-item(item)
-        else
-          div.no-data(
-            data-aos-delay="150" 
-            data-aos-duration="800" 
-            data-aos="fade-up"
-          ) Không có dữ liệu.
-        .inner-button(
-          data-aos-delay="300" 
-          data-aos-duration="800" 
-          data-aos="fade-up"
-          )
-          a.button-outline(href=`/category/${categorySection4.slug}`) Xem tất cả
+              a.button-outline(href=`/category/${block.category.slug}`) Xem tất cả
   // End Section 4
   // Section Hotels
   if hotelListHome && hotelListHome.length > 0
@@ -277,12 +278,6 @@ block main
         )
           a.button-outline(href="/hotel/search") Xem tất cả khách sạn
   // End Section Hotels
-  // Section 5
-  +section-5("/assets/images/banner-4.png")
-  // End Section 5
-  // Section 7
-  +section-5("/assets/images/banner-5.png")
-  // End Section 7
   // Section 8
   .section-8
     .container
@@ -349,6 +344,9 @@ block main
           .stat-item
             .stat-number #{stats.totalTours || 0}
             .stat-label Tour du lịch
+          .stat-item
+            .stat-number #{stats.totalHotels || 0}
+            .stat-label Khách sạn
           .stat-item
             .stat-number #{stats.totalPartners || 0}
             .stat-label Đối tác

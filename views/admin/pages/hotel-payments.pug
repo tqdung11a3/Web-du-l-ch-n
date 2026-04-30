@@ -2,7 +2,9 @@
 extends ../layouts/default.pug
 
 block main
-  - const activeTab = paymentsData.paymentTab || 'hotel'
+  //- Tạm ẩn tab tour: luôn hiển thị tab khách sạn (kể cả khi query paymentTab=tour)
+  - var _reqTab = paymentsData.paymentTab || 'hotel'
+  - const activeTab = _reqTab === 'tour' ? 'hotel' : _reqTab
 
   .payments-page
     //- Hotel Selector
@@ -20,10 +22,12 @@ block main
         i.fa-solid.fa-hotel
         |  Đặt phòng khách sạn
         span.payments-tab-count  (#{paymentsData.hotelInvoices ? paymentsData.hotelInvoices.length : 0})
-      button.payments-tab-btn(type="button" data-tab="tour" class=(activeTab === 'tour' ? 'active' : ''))
-        i.fa-solid.fa-map-location-dot
-        |  Đặt tour liên kết
-        span.payments-tab-count  (#{paymentsData.tourInvoices ? paymentsData.tourInvoices.length : 0})
+      //- Tạm comment tab Đặt tour liên kết
+      if false
+        button.payments-tab-btn(type="button" data-tab="tour" class=(activeTab === 'tour' ? 'active' : ''))
+          i.fa-solid.fa-map-location-dot
+          |  Đặt tour liên kết
+          span.payments-tab-count  (#{paymentsData.tourInvoices ? paymentsData.tourInvoices.length : 0})
 
     //- ── Tab: Đặt phòng khách sạn ──
     .payments-tab-panel(data-panel="hotel" style=(activeTab === 'hotel' ? '' : 'display:none'))
@@ -72,54 +76,55 @@ block main
                 td(colspan="8" style="text-align:center;padding:40px;")
                   .empty-message Không có hóa đơn nào
 
-    //- ── Tab: Đặt tour liên kết ──
-    .payments-tab-panel(data-panel="tour" style=(activeTab === 'tour' ? '' : 'display:none'))
-      //- Summary Cards
-      .summary-cards
-        .summary-card
-          .card-label Tổng doanh thu đã thu
-          .card-value= paymentsData.tourSummary ? paymentsData.tourSummary.totalRevenue.toLocaleString('vi-VN') + 'K' : '0K'
-        .summary-card.orange
-          .card-label Chờ thanh toán
-          .card-value.orange-value= paymentsData.tourSummary ? paymentsData.tourSummary.pendingPayments.toLocaleString('vi-VN') + 'K' : '0K'
-        .summary-card.red
-          .card-label Hóa đơn chưa thanh toán
-          .card-value.red-value= paymentsData.tourSummary ? paymentsData.tourSummary.unpaidInvoices : 0
+    //- ── Tab: Đặt tour liên kết (tạm comment) ──
+    if false
+      .payments-tab-panel(data-panel="tour" style=(activeTab === 'tour' ? '' : 'display:none'))
+        //- Summary Cards
+        .summary-cards
+          .summary-card
+            .card-label Tổng doanh thu đã thu
+            .card-value= paymentsData.tourSummary ? paymentsData.tourSummary.totalRevenue.toLocaleString('vi-VN') + 'K' : '0K'
+          .summary-card.orange
+            .card-label Chờ thanh toán
+            .card-value.orange-value= paymentsData.tourSummary ? paymentsData.tourSummary.pendingPayments.toLocaleString('vi-VN') + 'K' : '0K'
+          .summary-card.red
+            .card-label Hóa đơn chưa thanh toán
+            .card-value.red-value= paymentsData.tourSummary ? paymentsData.tourSummary.unpaidInvoices : 0
 
-      .invoices-table-wrapper
-        table.invoices-table
-          thead
-            tr
-              th Booking
-              th Khách
-              th Tour
-              th Khởi hành
-              th Số phòng
-              th Ngày phát hành
-              th Tổng tiền
-              th Đã thanh toán
-              th Trạng thái
-          tbody
-            if paymentsData.tourInvoices && paymentsData.tourInvoices.length > 0
-              each invoice in paymentsData.tourInvoices
-                tr
-                  td= invoice.bookingCode
-                  td= invoice.customerName
-                  td= invoice.tourName || '—'
-                  td= invoice.tourDeparture || '—'
-                  td= invoice.roomCount + ' phòng'
-                  td= invoice.issueDate
-                  td
-                    .amount= invoice.totalAmount + 'K'
-                  td
-                    .paid-amount= invoice.paidAmount + 'K'
-                  td
-                    - const tBadge = 'badge-' + invoice.statusColor
-                    .status-badge(class=tBadge)= invoice.statusText
-            else
+        .invoices-table-wrapper
+          table.invoices-table
+            thead
               tr
-                td(colspan="9" style="text-align:center;padding:40px;")
-                  .empty-message Không có hóa đơn nào
+                th Booking
+                th Khách
+                th Tour
+                th Khởi hành
+                th Số phòng
+                th Ngày phát hành
+                th Tổng tiền
+                th Đã thanh toán
+                th Trạng thái
+            tbody
+              if paymentsData.tourInvoices && paymentsData.tourInvoices.length > 0
+                each invoice in paymentsData.tourInvoices
+                  tr
+                    td= invoice.bookingCode
+                    td= invoice.customerName
+                    td= invoice.tourName || '—'
+                    td= invoice.tourDeparture || '—'
+                    td= invoice.roomCount + ' phòng'
+                    td= invoice.issueDate
+                    td
+                      .amount= invoice.totalAmount + 'K'
+                    td
+                      .paid-amount= invoice.paidAmount + 'K'
+                    td
+                      - const tBadge = 'badge-' + invoice.statusColor
+                      .status-badge(class=tBadge)= invoice.statusText
+              else
+                tr
+                  td(colspan="9" style="text-align:center;padding:40px;")
+                    .empty-message Không có hóa đơn nào
 
   script.
     document.querySelectorAll('.payments-tab-btn').forEach(function(btn) {

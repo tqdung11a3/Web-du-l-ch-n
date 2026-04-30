@@ -74,7 +74,6 @@ block main
     .sa-revenue-section { margin-top: 32px; }
     .sa-revenue-section__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
     .sa-revenue-section__title { font-size: 18px; font-weight: 700; color: #1e293b; margin: 0; }
-    .sa-revenue-section__hint { font-size: 13px; color: #64748b; max-width: 720px; line-height: 1.45; }
     /* Mỗi biểu đồ một hàng full width — dễ đọc hơn so với nhiều cột */
     .sa-company-chart-grid { display: flex; flex-direction: column; gap: 24px; }
     .sa-company-chart-card {
@@ -98,8 +97,6 @@ block main
       h2.sa-revenue-section__title
         i.fa-solid.fa-route(style="margin-right:8px;color:#2563eb")
         | Doanh thu theo tour
-      p.sa-revenue-section__hint
-        | Chỉ tính đơn tour đã thanh toán (paymentStatus = paid); không yêu cầu trạng thái đơn «done». Theo ngày tạo đơn.
 
     if tourRevenueByCompany && tourRevenueByCompany.length
       .table-1(style="margin-bottom: 20px;")
@@ -147,8 +144,6 @@ block main
       h2.sa-revenue-section__title
         i.fa-solid.fa-hotel(style="margin-right:8px;color:#0d9488")
         | Doanh thu theo từng khách sạn
-      p.sa-revenue-section__hint
-        | Mỗi khách sạn một biểu đồ. Chỉ tính booking đã thanh toán và không hủy.
 
     if companiesWithHotelCharts && companiesWithHotelCharts.length
       each block in companiesWithHotelCharts

@@ -7,7 +7,6 @@ const moment = require("moment");
 
 const Company = require("../../models/company.model");
 const Review = require("../../models/review.model");
-const AmadeusActivity = require("../../models/amadeus-activity.model");
 
 // ========= HELPER: gắn ratingAvg + ratingCount =========
 async function attachRatings(tours) {
@@ -315,7 +314,27 @@ module.exports.detail = async (req, res) => {
   try {
     const TourSegment = require("../../models/tour-segment.model");
     const Hotel = require("../../models/hotel.model");
+    const Order = require("../../models/order.model");
     const HotelBooking = require("../../models/hotel-booking.model");
+
+    // Tự heal trạng thái segment dựa vào link request mới nhất-per-hotel:
+    // dữ liệu cũ từng bị đánh dấu "rejected" trước khi helper recompute được
+    // áp có thể không được cập nhật sang "confirmed" dù vòng mới đã được
+    // công ty chủ KS duyệt. Gọi helper cho mọi segment của tour trước khi
+    // query để đảm bảo filter status dưới đây phản ánh đúng thực tế.
+    try {
+      const {
+        _recomputeTourSegmentStatus,
+      } = require("../../controllers/admin/hotel-link-request.controller");
+      const staleSegs = await TourSegment.find({ tourId: tourDetail._id })
+        .select("_id")
+        .lean();
+      await Promise.all(
+        staleSegs.map((s) => _recomputeTourSegmentStatus(s._id))
+      );
+    } catch (healErr) {
+      console.error("tour.detail heal tourSegment status error:", healErr);
+    }
 
     const tourSegs = await TourSegment.find({
       tourId: tourDetail._id,
@@ -414,24 +433,116 @@ module.exports.detail = async (req, res) => {
               if (!isHotelApprovedForSeg(ts._id, hotel)) continue;
               if (!hotelEntry.roomAllocations || hotelEntry.roomAllocations.length === 0) continue;
 
-              const clientTourBookings = await HotelBooking.find({
-                tourSegmentId: ts._id,
-                "hotel.hotelId": hotelEntry.hotelId,
-                status: { $nin: ["cancelled", "checked_out"] },
-                checkIn: { $lt: checkOut },
-                checkOut: { $gt: checkIn },
-                note: /\[Tour Booking\]/,
+              // Đếm phòng đã được khách khác giữ chỗ / thanh toán theo
+              // Order — không dùng HotelBooking [Tour Booking] vì các bản ghi
+              // này có TTL 15 phút và không được cập nhật khi đơn paid, dẫn
+              // đến sau 15 phút phòng "trống ảo" trong khi đơn vẫn còn hiệu lực.
+              const conflictOrders = await Order.find({
+                deleted: { $ne: true },
+                status: { $ne: "cancel" },
+                $or: [
+                  {
+                    "items.roomSelections.tourSegmentId": String(ts._id),
+                    "items.roomSelections.hotelId": String(hotelEntry.hotelId),
+                  },
+                  {
+                    "items.sharedRoomRequest.tourSegmentId": String(ts._id),
+                    "items.sharedRoomRequest.hotelAllocations.hotelId": String(
+                      hotelEntry.hotelId
+                    ),
+                  },
+                ],
               })
-                .select("roomTypeId rooms")
+                .select("paymentStatus isTemporaryHold holdExpiresAt items")
                 .lean();
+
+              const _now = new Date();
+              const _segFromStr = seg.fromDate
+                ? moment(seg.fromDate).format("YYYY-MM-DD")
+                : "";
+              const _segToStr = seg.toDate
+                ? moment(seg.toDate).format("YYYY-MM-DD")
+                : "";
+              const bookedByRoomType = {};
+              for (const ord of conflictOrders) {
+                const isPaid = ord.paymentStatus === "paid";
+                const isActiveHold =
+                  ord.isTemporaryHold &&
+                  (!ord.holdExpiresAt ||
+                    new Date(ord.holdExpiresAt) > _now);
+                if (!isPaid && !isActiveHold) continue;
+
+                for (const it of ord.items || []) {
+                  for (const rs of it.roomSelections || []) {
+                    if (
+                      String(rs.tourSegmentId) !== String(ts._id) ||
+                      String(rs.hotelId) !== String(hotelEntry.hotelId)
+                    ) {
+                      continue;
+                    }
+                    const rsFrom = rs.fromDate
+                      ? String(rs.fromDate).slice(0, 10)
+                      : "";
+                    const rsTo = rs.toDate
+                      ? String(rs.toDate).slice(0, 10)
+                      : "";
+                    if (rsFrom !== _segFromStr || rsTo !== _segToStr) continue;
+                    const rtKey = String(rs.roomTypeId);
+                    bookedByRoomType[rtKey] =
+                      (bookedByRoomType[rtKey] || 0) +
+                      Number(rs.selectedRooms || 0);
+                  }
+                }
+              }
+
+              // Đếm phòng vật lý đã giữ cho khách "ở ghép": dùng
+              // tourSeg.assignments làm nguồn sự thật (nhiều đơn shared có thể
+              // dùng chung 1 phòng vật lý — cross-order). Cần lọc theo segment
+              // hiện tại bằng cách map qua HotelBooking (TH) tương ứng để lấy
+              // checkIn/checkOut + roomTypeId, rồi dedupe holdBookingId.
+              const _segAssignsShared = (ts.assignments || []).filter(
+                (a) =>
+                  String(a.hotelId) === String(hotelEntry.hotelId) &&
+                  a.holdBookingId &&
+                  a.accommodationMode === "shared"
+              );
+              if (_segAssignsShared.length > 0) {
+                const _holdIds = [
+                  ...new Set(_segAssignsShared.map((a) => String(a.holdBookingId))),
+                ];
+                const _holdRows = await HotelBooking.find({
+                  _id: { $in: _holdIds },
+                  status: { $ne: "cancelled" },
+                  "hotel.hotelId": String(hotelEntry.hotelId),
+                })
+                  .select("_id roomTypeId checkIn checkOut")
+                  .lean();
+                const _holdMap = {};
+                for (const hb of _holdRows) {
+                  const ci = hb.checkIn ? moment(hb.checkIn).format("YYYY-MM-DD") : "";
+                  const co = hb.checkOut ? moment(hb.checkOut).format("YYYY-MM-DD") : "";
+                  if (ci !== _segFromStr || co !== _segToStr) continue;
+                  _holdMap[String(hb._id)] = String(hb.roomTypeId || "");
+                }
+                const _holdsPerRt = {};
+                for (const a of _segAssignsShared) {
+                  const rtId = _holdMap[String(a.holdBookingId)];
+                  if (!rtId) continue;
+                  if (!_holdsPerRt[rtId]) _holdsPerRt[rtId] = new Set();
+                  _holdsPerRt[rtId].add(String(a.holdBookingId));
+                }
+                for (const rtId of Object.keys(_holdsPerRt)) {
+                  bookedByRoomType[rtId] =
+                    (bookedByRoomType[rtId] || 0) + _holdsPerRt[rtId].size;
+                }
+              }
 
               const roomTypes = [];
               for (const ra of hotelEntry.roomAllocations) {
                 if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
 
-                const clientBookedCount = clientTourBookings
-                  .filter((b) => String(b.roomTypeId) === String(ra.roomTypeId))
-                  .reduce((s, b) => s + (b.rooms || 1), 0);
+                const clientBookedCount =
+                  bookedByRoomType[String(ra.roomTypeId)] || 0;
 
                 const availableForClient = Math.max(0, ra.assignedRooms - clientBookedCount);
 
@@ -503,25 +614,10 @@ module.exports.detail = async (req, res) => {
   }
   const tourRoomSegments = Object.values(_segMap);
 
-  // ⬇️ PHẦN: Lấy hoạt động gợi ý từ DB đã sync Amadeus
-  let activities = [];
-
-  if (tourDetail.cityList && tourDetail.cityList.length > 0) {
-    const cityNames = tourDetail.cityList.map((c) => c.name);
-
-    activities = await AmadeusActivity.find({
-      cityName: { $in: cityNames },
-    })
-      .sort({ rating: -1, lastSyncedAt: -1 })
-      .limit(6)
-      .lean();
-  }
-
   res.render("client/pages/tour-detail", {
     pageTitle: tourDetail.name,
     breadcrumb: breadcrumb,
     tourDetail: tourDetail,
-    activities: activities,
     tourHotels: tourHotels,
     tourRoomOptions: tourRoomOptions,
     tourRoomSegments: tourRoomSegments,

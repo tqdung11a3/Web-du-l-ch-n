@@ -1,0 +1,38 @@
+extends ../../layouts/super-admin.pug
+
+block main
+
+  h1.box-title Thông tin cá nhân
+
+  .section-8
+    form#profile-edit-form.profile-edit-form--super-admin(
+      data-profile-patch-url=`/${pathAdmin}/super-admin/profile/edit`
+    )
+      .inner-group
+        label(for="fullName" class="inner-label") Họ tên
+        input(type="text" id="fullName" name="fullName" value=account.fullName)
+      .inner-group
+        label(for="email" class="inner-label") Email
+        input(type="email" id="email" name="email" value=account.email)
+      .inner-group
+        label(for="phone" class="inner-label") Số điện thoại
+        input(type="text" id="phone" name="phone" value=account.phone)
+      .inner-group
+        label(class="inner-label") Chức vụ
+        input(type="text" value="Super Admin" readonly tabindex="-1" aria-readonly="true")
+      .inner-group
+        label(class="inner-label") Nhóm quyền
+        input(type="text" value="Super Admin" readonly tabindex="-1" aria-readonly="true")
+      .inner-group.inner-two-col
+        label(for="avatar" class="inner-label") Ảnh đại diện
+        .inner-upload-image(image-default=account.avatar)
+          input(
+            type="file"
+            id="avatar"
+            name="avatar"
+            filepond-image
+          )
+      .inner-button.inner-two-col
+        button(type="submit") Cập nhật
+    .inner-back
+      a(href=`/${pathAdmin}/super-admin/profile/change-password`) Đổi mật khẩu

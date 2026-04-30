@@ -5,6 +5,7 @@ const Tour = require("../../models/tour.model");
 const City = require("../../models/city.model");
 const TourSegment  = require("../../models/tour-segment.model");
 const HotelBooking = require("../../models/hotel-booking.model");
+const Hotel        = require("../../models/hotel.model");
 const {
   pathAdmin,
   paymentMethodList,
@@ -12,6 +13,7 @@ const {
   statusList,
 } = require("../../config/variable.config");
 const moment = require("moment");
+const auditLogHelper = require("../../helpers/audit-log.helper");
 
 // Chuẩn hoá rules như phía client/cart.controller.js
 function normalizeRules(rawRules) {
@@ -382,10 +384,30 @@ module.exports.editPatch = async (req, res) => {
     const filter = { _id: id, deleted: false };
     if (companyId) filter["items.companyId"] = companyId;
 
-    // Đọc đơn hàng trước khi cập nhật để lấy dữ liệu cho việc khôi phục ghế/phòng
-    const orderBefore = allow.status === "cancel"
-      ? await Order.findOne({ ...filter, status: { $ne: "cancel" } }).lean()
-      : null;
+    // Đọc đơn hàng đầy đủ trước khi cập nhật
+    // (cho audit + khôi phục/trừ ghế/phòng khi đổi trạng thái)
+    const orderSnapshot = await Order.findOne(filter)
+      .select("code status paymentStatus paymentMethod note")
+      .lean();
+
+    // Đọc đầy đủ items cho 2 trường hợp:
+    //   A) cancel (lần đầu) → cần items để restore ghế
+    //   B) bỏ cancel (từ cancel → trạng thái khác) → cần items để trừ ghế lại
+    const isGoingToCancel =
+      allow.status === "cancel" &&
+      orderSnapshot &&
+      orderSnapshot.status !== "cancel";
+
+    const isLeavingCancel =
+      allow.status &&
+      allow.status !== "cancel" &&
+      orderSnapshot &&
+      orderSnapshot.status === "cancel";
+
+    const orderBefore =
+      (isGoingToCancel || isLeavingCancel)
+        ? await Order.findOne({ _id: id, deleted: false }).lean()
+        : null;
 
     const result = await Order.updateOne(filter, {
       $set: { ...allow, updatedBy: req.account.id, updatedAt: new Date() },
@@ -398,8 +420,35 @@ module.exports.editPatch = async (req, res) => {
       });
     }
 
+    if (orderSnapshot) {
+      const isCancel = allow.status === "cancel";
+      const beforeAudit = {
+        status: orderSnapshot.status,
+        paymentStatus: orderSnapshot.paymentStatus,
+        paymentMethod: orderSnapshot.paymentMethod,
+        note: orderSnapshot.note,
+      };
+      const afterAudit = {
+        status: allow.status ?? orderSnapshot.status,
+        paymentStatus: allow.paymentStatus ?? orderSnapshot.paymentStatus,
+        paymentMethod: allow.paymentMethod ?? orderSnapshot.paymentMethod,
+        note: "note" in allow ? allow.note : orderSnapshot.note,
+      };
+      auditLogHelper.log(req, {
+        action: isCancel ? "order.cancel" : "order.update",
+        resourceType: "Order",
+        resourceId: id,
+        resourceLabel: orderSnapshot.code || "",
+        before: beforeAudit,
+        after: afterAudit,
+        summary: isCancel
+          ? `Hủy đơn hàng "${orderSnapshot.code || ""}"`
+          : `Cập nhật đơn hàng "${orderSnapshot.code || ""}"`,
+      });
+    }
+
     // Khi hủy đơn tour → khôi phục ghế và giải phóng phòng khách sạn
-    if (allow.status === "cancel" && orderBefore) {
+    if (isGoingToCancel && orderBefore) {
       try {
         await restoreSeatsForOrder(orderBefore);
       } catch (err) {
@@ -409,6 +458,28 @@ module.exports.editPatch = async (req, res) => {
         await releaseHotelHoldsForOrder(id);
       } catch (err) {
         console.error("[editPatch] releaseHotelHoldsForOrder error:", err);
+      }
+      // Xoá HotelBooking hold đã tạo khi khách đặt (cả private lẫn shared)
+      try {
+        if (orderBefore.code) {
+          await HotelBooking.deleteMany({ orderCode: orderBefore.code });
+        }
+      } catch (err) {
+        console.error("[editPatch] deleteHotelBookings error:", err);
+      }
+    }
+
+    // Khi bỏ hủy (cancel → trạng thái khác) → trừ lại ghế + tái tạo HotelBooking hold
+    if (isLeavingCancel && orderBefore) {
+      try {
+        await deductSeatsForOrder(orderBefore);
+      } catch (err) {
+        console.error("[editPatch] deductSeatsForOrder error:", err);
+      }
+      try {
+        await recreateHotelHoldsForOrder(orderBefore);
+      } catch (err) {
+        console.error("[editPatch] recreateHotelHoldsForOrder error:", err);
       }
     }
 
@@ -466,12 +537,274 @@ async function restoreSeatsForOrder(order) {
 }
 
 /**
+ * Trừ ghế cho các tour item trong đơn hàng (đối xứng với restoreSeatsForOrder).
+ * Dùng khi admin "bỏ hủy" đơn (cancel → trạng thái khác).
+ */
+async function deductSeatsForOrder(order) {
+  for (const item of order.items || []) {
+    if (!item.tourId) continue;
+
+    const seatsToDeduct =
+      Number(item.quantityAdult    || 0) +
+      Number(item.quantityChildren || 0) +
+      (item.babySeat ? Number(item.quantityBaby || 0) : 0);
+
+    if (seatsToDeduct <= 0) continue;
+
+    await Tour.updateOne(
+      { _id: item.tourId },
+      { $inc: { seatsRemaining: -seatsToDeduct } }
+    );
+
+    const depDisplay = item.departureDateDisplay
+      || (item.departureDate ? moment(item.departureDate).format("DD/MM/YYYY") : "");
+    if (depDisplay) {
+      const depMoment = moment(depDisplay, "DD/MM/YYYY");
+      if (depMoment.isValid()) {
+        await Tour.updateOne(
+          { _id: item.tourId },
+          { $inc: { "departures.$[dep].seatsRemaining": -seatsToDeduct } },
+          {
+            arrayFilters: [{
+              "dep.departureDate": {
+                $gte: depMoment.clone().startOf("day").toDate(),
+                $lte: depMoment.clone().endOf("day").toDate(),
+              },
+            }],
+          }
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Tái tạo HotelBooking hold cho đơn hàng khi admin "bỏ hủy".
+ * Tạo lại HotelBooking [Tour Booking] cho cả mode private (roomSelections)
+ * lẫn mode shared (sharedRoomRequest.hotelAllocations.roomAssignments).
+ */
+async function recreateHotelHoldsForOrder(order) {
+  if (!order || !Array.isArray(order.items)) return;
+
+  // Hold 15 phút từ thời điểm khôi phục (giống flow tạo đơn mới)
+  const holdExpiresAt = moment().add(15, "minutes").toDate();
+  const { generateRandomNumber } = require("../../helpers/generate.helper");
+
+  for (const item of order.items || []) {
+    // Mode private: tạo lại từ roomSelections
+    if (item.accommodationMode !== "shared") {
+      for (const sel of item.roomSelections || []) {
+        for (let i = 0; i < (sel.selectedRooms || 1); i++) {
+          await new HotelBooking({
+            code: "HB" + generateRandomNumber(10),
+            guest: {
+              fullName: (order.fullName || "").trim(),
+              phone:    (order.phone    || "").trim(),
+              email:    (order.email    || "").trim(),
+            },
+            checkIn:       new Date(sel.fromDate),
+            checkOut:      new Date(sel.toDate),
+            adults:        sel.baseOccupancy || 2,
+            children:      0,
+            rooms:         1,
+            roomTypeId:    sel.roomTypeId,
+            hotel: {
+              hotelId: sel.hotelId,
+              name:    sel.hotelName,
+            },
+            status:        "pending",
+            paymentStatus: "unpaid",
+            paymentMethod: order.paymentMethod || "money",
+            note:          `[Tour Booking] Đặt phòng qua tour - Đơn ${order.code}`,
+            tourSegmentId: sel.tourSegmentId,
+            isTemporaryHold: true,
+            holdExpiresAt,
+            orderCode:     order.code,
+          }).save();
+        }
+      }
+      continue;
+    }
+
+    // Mode shared: rebind TH (Tour Hold) + push lại TourSegment.assignments
+    // (giống flow tạo đơn mới ở controllers/client/order.controller.js).
+    const _segCacheById = {};
+    const _hotelDocCache = {};
+    const pendingSegPushes = {};
+
+    const _getSegmentCache = async (segId) => {
+      const k = String(segId);
+      if (_segCacheById[k]) return _segCacheById[k];
+      const doc = await TourSegment.findById(k).select("assignments").lean();
+      const used = new Set(
+        (doc?.assignments || [])
+          .map((a) => (a.holdBookingId ? String(a.holdBookingId) : ""))
+          .filter(Boolean)
+      );
+      _segCacheById[k] = { usedHoldIds: used };
+      return _segCacheById[k];
+    };
+    const _getHotelDoc = async (hotelId) => {
+      const k = String(hotelId);
+      if (_hotelDocCache[k]) return _hotelDocCache[k];
+      const doc = await Hotel.findById(k).select("rooms name").lean();
+      _hotelDocCache[k] = doc || null;
+      return doc || null;
+    };
+
+    for (const r of item.sharedRoomRequest || []) {
+      const segCache = await _getSegmentCache(r.tourSegmentId);
+      for (const alloc of r.hotelAllocations || []) {
+        const hotelDoc = await _getHotelDoc(alloc.hotelId);
+        for (const ra of alloc.roomAssignments || []) {
+          const noteTxt = `[Tour Booking - Ở ghép] Đặt phòng qua tour - Đơn ${order.code}${
+            Array.isArray(ra.atomLabels) && ra.atomLabels.length
+              ? " | " + ra.atomLabels.join(" || ")
+              : ""
+          }`;
+          const guestFullName =
+            (order.fullName || "").trim() || "Khách tour";
+
+          // Reuse TH (cross-order share) hay chiếm TH mới?
+          let pickedTh = null;
+          if (ra._reuseThId) {
+            const reuse = await HotelBooking.findById(ra._reuseThId)
+              .select("_id roomId roomTypeId hotel guest note")
+              .lean();
+            if (reuse) {
+              pickedTh = reuse;
+              const appendStr = `|| Đơn ${order.code}: ${
+                Array.isArray(ra.atomLabels) && ra.atomLabels.length
+                  ? ra.atomLabels.join(" || ")
+                  : guestFullName
+              }`;
+              await HotelBooking.findByIdAndUpdate(reuse._id, {
+                $set: { note: (reuse.note || "") + " " + appendStr },
+              });
+            }
+          }
+
+          if (!pickedTh) {
+            const candidates = await HotelBooking.find({
+              tourSegmentId: String(r.tourSegmentId),
+              "hotel.hotelId": alloc.hotelId,
+              roomTypeId: ra.roomTypeId,
+              roomId: { $ne: null },
+              checkIn: new Date(r.fromDate),
+              checkOut: new Date(r.toDate),
+              status: { $nin: ["cancelled", "checked_out"] },
+              "guest.fullName": "[Tour Hold]",
+              $or: [
+                { orderCode: { $in: [null, ""] } },
+                { orderCode: { $exists: false } },
+              ],
+            })
+              .select("_id roomId roomTypeId hotel")
+              .lean();
+
+            for (const cand of candidates) {
+              const cid = String(cand._id);
+              if (segCache.usedHoldIds.has(cid)) continue;
+              pickedTh = cand;
+              segCache.usedHoldIds.add(cid);
+              break;
+            }
+
+            if (pickedTh) {
+              await HotelBooking.findByIdAndUpdate(pickedTh._id, {
+                $set: {
+                  "guest.fullName": guestFullName,
+                  "guest.phone": (order.phone || "").trim(),
+                  "guest.email": (order.email || "").trim(),
+                  orderCode: order.code,
+                  note: noteTxt,
+                  paymentStatus: "unpaid",
+                  paymentMethod: order.paymentMethod || "money",
+                },
+              });
+            }
+          }
+
+          if (pickedTh) {
+            let roomNumber = "";
+            if (hotelDoc && Array.isArray(hotelDoc.rooms)) {
+              const rDoc = hotelDoc.rooms.find(
+                (rr) => String(rr._id) === String(pickedTh.roomId)
+              );
+              if (rDoc) roomNumber = rDoc.roomNumber || "";
+            }
+            const segKey = String(r.tourSegmentId);
+            if (!pendingSegPushes[segKey]) pendingSegPushes[segKey] = [];
+            pendingSegPushes[segKey].push({
+              orderId: order._id,
+              orderCode: order.code,
+              guestName: guestFullName,
+              phone: (order.phone || "").trim(),
+              numPeople:
+                Number(ra.usedCapacity) || Number(ra.baseOccupancy) || 2,
+              hotelId: new mongoose.Types.ObjectId(alloc.hotelId),
+              hotelName: alloc.hotelName || hotelDoc?.name || "",
+              roomId: pickedTh.roomId,
+              roomNumber,
+              roomTypeName: ra.roomTypeName || "",
+              holdBookingId: pickedTh._id,
+              accommodationMode: "shared",
+              gender: ra.gender || null,
+              atomLabels: Array.isArray(ra.atomLabels) ? ra.atomLabels : [],
+            });
+          } else {
+            await new HotelBooking({
+              code: "HB" + generateRandomNumber(10),
+              guest: {
+                fullName: guestFullName,
+                phone: (order.phone || "").trim(),
+                email: (order.email || "").trim(),
+              },
+              checkIn: new Date(r.fromDate),
+              checkOut: new Date(r.toDate),
+              adults: ra.baseOccupancy || 2,
+              children: 0,
+              rooms: 1,
+              roomTypeId: ra.roomTypeId,
+              hotel: {
+                hotelId: alloc.hotelId,
+                name: alloc.hotelName,
+              },
+              status: "pending",
+              paymentStatus: "unpaid",
+              paymentMethod: order.paymentMethod || "money",
+              note: noteTxt,
+              tourSegmentId: r.tourSegmentId,
+              isTemporaryHold: true,
+              holdExpiresAt,
+              orderCode: order.code,
+            }).save();
+          }
+        }
+      }
+    }
+
+    for (const segId of Object.keys(pendingSegPushes)) {
+      const arr = pendingSegPushes[segId];
+      if (!arr.length) continue;
+      await TourSegment.updateOne(
+        { _id: segId },
+        { $push: { assignments: { $each: arr } } }
+      );
+    }
+  }
+}
+
+/**
  * Giải phóng các phòng khách sạn đã được phân công cho một đơn hàng tour.
  * - Xoá entry trong TourSegment.assignments
  * - Reset HotelBooking về trạng thái "[Tour Hold]" (chưa gán khách)
  */
 async function releaseHotelHoldsForOrder(orderId) {
-  // Tìm tất cả TourSegment có assignment cho đơn này
+  // Tìm tất cả TourSegment có assignment cho đơn này. Lưu ý: 1 TH có thể
+  // được nhiều đơn (shared cross-order) cùng share — khi release đơn này
+  // chỉ pull entries của đơn ra, và CHỈ reset TH về [Tour Hold] nếu sau
+  // khi pull không còn đơn khác nào tham chiếu.
   const segments = await TourSegment.find({
     "assignments.orderId": orderId,
   }).select("_id tourId departureDate endDate assignments").lean();
@@ -479,22 +812,39 @@ async function releaseHotelHoldsForOrder(orderId) {
   if (!segments.length) return;
 
   for (const seg of segments) {
-    // Lấy các holdBookingId cần reset
+    // Lấy các holdBookingId thuộc đơn này
     const toRelease = (seg.assignments || []).filter(
       (a) => String(a.orderId) === String(orderId)
     );
-    const holdBookingIds = toRelease
+    const holdBookingIdsAll = toRelease
       .map((a) => a.holdBookingId)
       .filter(Boolean);
 
-    // Xoá assignment khỏi TourSegment
+    // Phân loại: TH chỉ thuộc đơn này (cần reset) vs TH share với đơn khác
+    // (chỉ rebuild note, giữ nguyên guest/orderCode của đơn còn lại).
+    const holdToReset = [];
+    const holdToKeep = []; // [{thId, remainingEntries[]}]
+    for (const thId of holdBookingIdsAll) {
+      const remaining = (seg.assignments || []).filter(
+        (a) =>
+          String(a.holdBookingId || "") === String(thId) &&
+          String(a.orderId) !== String(orderId)
+      );
+      if (remaining.length === 0) {
+        holdToReset.push(thId);
+      } else {
+        holdToKeep.push({ thId, remaining });
+      }
+    }
+
+    // Xoá assignment khỏi TourSegment (cho đơn này)
     await TourSegment.updateOne(
       { _id: seg._id },
       { $pull: { assignments: { orderId: new mongoose.Types.ObjectId(orderId) } } }
     );
 
-    // Reset các HotelBooking về placeholder Tour Hold
-    if (holdBookingIds.length) {
+    // Reset TH không còn đơn nào dùng
+    if (holdToReset.length) {
       const tourDoc = await Tour.findById(seg.tourId).select("name").lean();
       const tourName   = tourDoc?.name || "Tour";
       const depDateFmt = moment(seg.departureDate).format("DD/MM/YYYY");
@@ -502,16 +852,47 @@ async function releaseHotelHoldsForOrder(orderId) {
       const resetNote  = `[Tour Hold] ${tourName} | ${depDateFmt} – ${endDateFmt}`;
 
       await HotelBooking.updateMany(
-        { _id: { $in: holdBookingIds } },
+        { _id: { $in: holdToReset } },
         {
           $set: {
             "guest.fullName": "[Tour Hold]",
             "guest.phone":    "",
+            "guest.email":    "",
             note:             resetNote,
             status:           "confirmed",
+            isTemporaryHold:  false,
+          },
+          $unset: {
+            orderCode:     "",
+            holdExpiresAt: "",
+            userId:        "",
           },
         }
       );
+    }
+
+    // Rebuild note cho TH còn share — guest/orderCode giữ theo đơn còn lại
+    // đầu tiên (sort theo orderCode để stable).
+    for (const { thId, remaining } of holdToKeep) {
+      const sorted = [...remaining].sort((a, b) =>
+        String(a.orderCode || "").localeCompare(String(b.orderCode || ""))
+      );
+      const primary = sorted[0];
+      const noteParts = sorted.map((entry) => {
+        const labels = Array.isArray(entry.atomLabels) && entry.atomLabels.length
+          ? entry.atomLabels.join(" || ")
+          : entry.guestName || "";
+        return `Đơn ${entry.orderCode || "?"}: ${labels}`;
+      });
+      const newNote = `[Tour Booking - Ở ghép] Share phòng | ${noteParts.join(" || ")}`;
+      await HotelBooking.findByIdAndUpdate(thId, {
+        $set: {
+          "guest.fullName": primary.guestName || "Khách tour",
+          "guest.phone": primary.phone || "",
+          orderCode: primary.orderCode || "",
+          note: newNote,
+        },
+      });
     }
   }
 }
@@ -537,7 +918,7 @@ module.exports.deletePatch = async (req, res) => {
       });
     }
 
-    // Soft delete
+    // Soft delete đơn
     await Order.updateOne(
       { _id: id },
       {
@@ -548,6 +929,36 @@ module.exports.deletePatch = async (req, res) => {
         },
       }
     );
+
+    // ── Dọn dữ liệu phụ thuộc của đơn vừa xoá ──
+    // Nếu không xoá đồng thời, các bản ghi sau vẫn "trôi nổi" trong hệ thống
+    // và làm sai lệch các trang quản trị (ví dụ /admin/hotel/booking/tour-holds
+    // vẫn hiện khách của đơn đã bị xoá; số phòng còn trống ở /company/.../tour
+    // bị tính nhầm; tour-assignments giữ entry rỗng tham chiếu Order đã xoá).
+    try {
+      // 1) Trả lại ghế cho tour (cả seatsRemaining tổng và seatsRemaining
+      //    cho đúng departure date).
+      await restoreSeatsForOrder(order);
+
+      // 2) Reset các TH (Tour Hold) đang được gán cho đơn này về placeholder
+      //    + xóa entry assignments — phải làm BƯỚC NÀY trước bước 3 để
+      //    deleteMany ở bước 3 không xóa nhầm các TH đang giữ quota tour.
+      await releaseHotelHoldsForOrder(order._id);
+
+      // 3) Xoá các HotelBooking giữ chỗ tour của đơn này (link qua orderCode)
+      //    để chúng không còn xuất hiện ở trang "Giữ phòng Tour".
+      //    Sau bước 2, TH đã bị clear orderCode → chỉ HotelBooking khách-tự-tạo
+      //    (HB...) còn orderCode và sẽ bị xóa.
+      if (order.code) {
+        await HotelBooking.deleteMany({ orderCode: order.code });
+      }
+    } catch (cleanupErr) {
+      // Không chặn flow xoá đơn — chỉ log để admin truy vết.
+      console.error(
+        "admin order deletePatch cleanup error:",
+        cleanupErr
+      );
+    }
 
     return res.json({
       code: "success",

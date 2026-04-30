@@ -92,30 +92,6 @@ block main
                         .inner-title #{item.title}
                         .inner-content !{item.description}
 
-                // Hoạt động gợi ý tại điểm đến (data đã sync từ Amadeus)
-                if activities && activities.length
-                  .box-tour-activities
-                    .inner-title-main Hoạt động gợi ý tại điểm đến
-                    .inner-activities-list
-                      each act in activities
-                        .activity-item
-                          if act.pictureUrl
-                            .activity-thumb
-                              img(src=act.pictureUrl alt=act.name)
-                          .activity-body
-                            .activity-title #{act.name}
-                            if act.shortDescription
-                              p.activity-desc= act.shortDescription
-                            .activity-meta
-                              if act.priceAmount
-                                span Giá tham khảo:
-                                span.activity-price #{act.priceAmount} #{act.priceCurrency}
-                              if act.bookingLink
-                                a.activity-link(
-                                  href=act.bookingLink
-                                  target="_blank"
-                                ) Xem chi tiết
-
               // Tab: Bao gồm
               .tour-tab-panel(data-tab="includes")
                 // Giá tour bao gồm
@@ -164,14 +140,14 @@ block main
                   if loggedIn
                     form#review-form(class="review-form", action="", method="post")
                       .rating-input
-                        span.label Chọn số sao:
+                        span.label Đánh giá:
                         ul.star-input(aria-label="chọn số sao")
                           each i in [1,2,3,4,5]
                             li(data-value=i)
                               i.fa-solid.fa-star
                         input(type="hidden" name="rating" value="5")
                       .content-input
-                        textarea(name="content" rows="4" placeholder="Chia sẻ cảm nhận của bạn (tuỳ chọn, tối đa 2000 ký tự)")
+                        textarea(name="content" rows="4" placeholder="Chia sẻ cảm nhận của bạn")
                       button(type="submit").button-primary Gửi đánh giá
                   else
                     .login-hint
@@ -359,7 +335,39 @@ block main
             //- Chọn phòng khách sạn (bắt buộc nếu tour có liên kết khách sạn)
             if tourRoomSegments && tourRoomSegments.length > 0
               - const _segmentsJson = JSON.stringify(tourRoomSegments)
-              .inner-room-selection(data-room-segments=_segmentsJson data-required="1")
+
+              //- Chọn hình thức lưu trú: ở riêng (cộng full giá phòng) hoặc ở ghép (khai số nam/nữ).
+              .accommodation-mode-picker(data-required="1")
+                .accommodation-mode-picker__title Hình thức lưu trú
+                .accommodation-mode-picker__hint
+                  i.fa-solid.fa-circle-info
+                  span  Chọn cách bạn muốn ở khi tham gia tour. Hình thức "Ở ghép" sẽ được hệ thống xếp tự động ghép cùng giới với các đoàn khác.
+                .accommodation-mode-picker__options
+                  label.accommodation-mode-option.is-selected
+                    input(
+                      type="radio"
+                      name="accommodationMode"
+                      value="private"
+                      checked
+                    )
+                    .accommodation-mode-option__body
+                      .accommodation-mode-option__title
+                        i.fa-solid.fa-bed
+                        span  Ở riêng
+                      .accommodation-mode-option__desc Bạn chọn loại phòng cụ thể, được sử dụng riêng cả phòng. Toàn bộ tiền phòng được cộng vào tổng tour.
+                  label.accommodation-mode-option
+                    input(
+                      type="radio"
+                      name="accommodationMode"
+                      value="shared"
+                    )
+                    .accommodation-mode-option__body
+                      .accommodation-mode-option__title
+                        i.fa-solid.fa-people-group
+                        span  Ở ghép
+                      .accommodation-mode-option__desc Khai số nam/nữ; hệ thống tự ghép cùng giới với các đoàn khác. Không tính thêm phụ phí phòng vào tổng tour.
+
+              .inner-room-selection(data-room-segments=_segmentsJson data-required="1" data-mode="private")
                 .inner-room-selection__header
                   .inner-label Chọn phòng khách sạn
                 each seg in tourRoomSegments
@@ -404,6 +412,8 @@ block main
                             .room-type-row__info
                               .room-type-row__name= rt.roomTypeName
                               .room-type-row__meta #{rt.baseOccupancy} người/phòng · còn #{rt.availableRooms} phòng
+                              if Number(rt.pricePerNight) > 0
+                                .room-type-row__price #{Number(rt.pricePerNight).toLocaleString('vi-VN')}đ/đêm
                             .room-type-row__input
                               input.room-qty-input(
                                 type="number"
@@ -413,7 +423,81 @@ block main
                                 placeholder="0"
                               )
                               span.room-type-row__input-unit phòng
-                .room-selection-required-warning(style="display:none") ⚠ Vui lòng chọn ít nhất một loại phòng khách sạn.
+                .room-selection-required-warning(style="display:none") Vui lòng chọn đủ phòng ở từng khung thời gian.
+
+              //- Vùng "Thông tin hành khách" — dùng chung cho cả 2 mode (private/shared).
+              //- JS render rows theo quantityAdult / Children / Baby.
+              //- 1 đơn = 1 list cho cả tour.
+              .shared-passenger-list(data-required="1" style="display:none")
+                .shared-passenger-list__header
+                  .inner-label Thông tin hành khách
+                  .shared-passenger-list__hint
+                    i.fa-solid.fa-circle-info
+                    span  Khai đầy đủ họ tên, tuổi, giới tính cho mỗi người. Trẻ em / em bé phải chọn người lớn đi cùng phòng.
+                .shared-passenger-list__rows
+                  //- Rows được render bằng JS dựa trên số người lớn / trẻ em / em bé.
+                .shared-passenger-list__warning(style="display:none") Vui lòng khai đầy đủ thông tin hành khách trước khi đặt tour.
+
+              //- Mode "Ở riêng" — phân bổ từng hành khách vào từng phòng vật lý.
+              //- JS render khi mode=private và đã chọn ≥ 1 phòng.
+              .private-room-assignment(data-required="1" style="display:none")
+                .private-room-assignment__header
+                  .inner-label Phân bổ hành khách vào phòng
+                  .private-room-assignment__hint
+                    i.fa-solid.fa-circle-info
+                    span  Mỗi người lớn và trẻ em phải được gán vào đúng 1 phòng trong cùng khung. Em bé có thể bỏ trống. Trẻ em / em bé phải ở cùng phòng với người lớn đã chọn.
+                .private-room-assignment__segments
+                  //- JS render skeleton per segment / hotel / physical room.
+                .private-room-assignment__warning(style="display:none") Vui lòng phân bổ đầy đủ hành khách vào phòng.
+
+              //- Tóm tắt số nam/nữ theo từng khung — auto-derive từ passengers.
+              //- Mỗi khung có thể có nhiều khách sạn; hệ thống sẽ ưu tiên khách
+              //- sạn đầu, tự fallback / kết hợp các khách sạn còn lại nếu cần.
+              .inner-shared-room-selection(data-room-segments=_segmentsJson data-required="1" style="display:none")
+                .inner-shared-room-selection__header
+                  .inner-label Tóm tắt phân bổ phòng theo khung
+                  .inner-shared-room-selection__hint
+                    i.fa-solid.fa-circle-info
+                    span  Hệ thống ưu tiên xếp đoàn vào khách sạn đầu tiên; nếu hết chỗ sẽ tự kết hợp các khách sạn khác trong cùng khung.
+                each seg in tourRoomSegments
+                  - var _segTourSegmentId = (seg.hotels && seg.hotels[0]) ? seg.hotels[0].tourSegmentId : ''
+                  .shared-room-segment(
+                    data-from-date=seg.fromDate
+                    data-to-date=seg.toDate
+                    data-tour-segment-id=_segTourSegmentId
+                  )
+                    .shared-room-segment__header
+                      i.fa-solid.fa-calendar-days(style="margin-right:6px;color:#6366f1")
+                      span.shared-room-segment__label= seg.segmentLabel
+                    .shared-room-hotel-block
+                      .shared-room-hotel-block__name
+                        i.fa-solid.fa-hotel(style="margin-right:6px;color:#6366f1")
+                        span Phân bổ tự động theo thứ tự ưu tiên
+                      if seg.hotels && seg.hotels.length > 0
+                        .shared-room-hotel-block__candidates
+                          each hotel, hIdx in seg.hotels
+                            .shared-room-hotel-block__candidate(
+                              data-hotel-id=hotel.hotelId
+                              data-hotel-name=hotel.hotelName
+                            )
+                              span.shared-room-hotel-block__candidate-rank #{hIdx + 1}.
+                              span.shared-room-hotel-block__candidate-name= hotel.hotelName
+                              if hIdx === 0
+                                span.shared-room-hotel-block__candidate-tag Ưu tiên 1
+                      .shared-room-hotel-block__inputs
+                        .shared-gender-display
+                          span.shared-gender-display__label Số nam (người lớn)
+                          span.shared-gender-display__value.shared-male-display 0
+                          input.shared-male-input(type="hidden" value="0")
+                        .shared-gender-display
+                          span.shared-gender-display__label Số nữ (người lớn)
+                          span.shared-gender-display__value.shared-female-display 0
+                          input.shared-female-input(type="hidden" value="0")
+                      .shared-room-hotel-block__hint
+                        span Đoàn này có 
+                        strong.shared-room-hotel-block__expected 1
+                        span  người lớn. Hệ thống tự xếp vào các khách sạn ở trên.
+                .shared-room-required-warning(style="display:none") Tổng số nam + nữ ở danh sách hành khách chưa khớp số người lớn đoàn.
 
             //- Khối cảnh báo phòng dư – hiển thị ngay trên Tổng cộng
             .room-selection-global-extra-warning(style="display:none")

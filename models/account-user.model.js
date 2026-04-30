@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 
-const AccountUser = mongoose.model(
-  "AccountUser",
+const accountUserSchema = new mongoose.Schema(
   {
     fullName: String,
     email: String,
@@ -14,7 +13,10 @@ const AccountUser = mongoose.model(
     address: String,
     toursCount: { type: Number, default: 0 },
   },
-  "accounts-user"
+  {
+    collection: "accounts-user",
+    timestamps: true,
+  }
 );
 
-module.exports = AccountUser;
+module.exports = mongoose.model("AccountUser", accountUserSchema);

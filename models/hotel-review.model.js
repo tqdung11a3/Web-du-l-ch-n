@@ -31,6 +31,10 @@ const HotelReviewSchema = new mongoose.Schema(
     // Nội dung nhận xét
     content: { type: String, trim: true, default: "" },
 
+    hiddenBySuperAdmin: { type: Boolean, default: false },
+    hiddenReason: { type: String, default: "" },
+    hiddenBy: { type: String, default: "" },
+    hiddenAt: { type: Date },
     deleted: { type: Boolean, default: false },
   },
   { timestamps: true }

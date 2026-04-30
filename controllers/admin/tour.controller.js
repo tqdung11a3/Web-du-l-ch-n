@@ -14,6 +14,141 @@ const {
   canPublishTour,
   canPublishToursBulk,
 } = require("../../helpers/tour-publishable.helper");
+const auditLogHelper = require("../../helpers/audit-log.helper");
+
+/**
+ * Audit snapshot cho Tour: bao phủ mọi field trên form /admin/tour/edit.
+ * - Dùng nhãn tiếng Việt cho dễ đọc.
+ * - Giải nghĩa ObjectId (category, departureCity, locations.city) → tên thật.
+ * - Gom các mảng (highlights, includes, schedules, departures, locations…) thành chuỗi.
+ * - Bỏ `slug` và các audit field (createdBy/updatedBy/images base64 v.v.).
+ */
+async function buildTourAuditSnapshot(doc) {
+  if (!doc) return {};
+  const raw = doc.toObject ? doc.toObject() : doc;
+  const out = {};
+
+  const fmtDate = (d) => (d instanceof Date ? moment(d).format("DD/MM/YYYY") : d);
+
+  // Scalar có nhãn tiếng Việt
+  const scalarMap = [
+    ["name", "tên tour"],
+    ["status", "trạng thái"],
+    ["position", "vị trí"],
+    ["time", "thời gian"],
+    ["vehicle", "phương tiện"],
+    ["duration", "thời lượng"],
+    ["information", "thông tin tour"],
+    ["avatar", "ảnh đại diện"],
+    ["babyPricingMode", "cách tính giá em bé"],
+    ["priceAdult", "giá cũ — người lớn"],
+    ["priceChildren", "giá cũ — trẻ em"],
+    ["priceBaby", "giá cũ — em bé"],
+    ["priceNewAdult", "giá mới — người lớn"],
+    ["priceNewChildren", "giá mới — trẻ em"],
+    ["priceNewBaby", "giá mới — em bé"],
+    ["discountPercent", "% giảm giá"],
+    ["discountFrom", "KM từ ngày"],
+    ["discountTo", "KM đến ngày"],
+  ];
+  for (const [k, label] of scalarMap) {
+    const v = raw[k];
+    if (v !== undefined && v !== null && v !== "") {
+      out[label] = v instanceof Date ? fmtDate(v) : v;
+    }
+  }
+
+  // category → tên
+  if (raw.category) {
+    try {
+      const cat = await Category.findById(raw.category).select("name").lean();
+      out["danh mục"] = (cat && cat.name) ? cat.name : String(raw.category);
+    } catch { out["danh mục"] = String(raw.category); }
+  }
+
+  // departureCity → tên
+  if (raw.departureCity) {
+    try {
+      const city = await City.findById(raw.departureCity).select("name").lean();
+      out["điểm khởi hành"] = (city && city.name) ? city.name : String(raw.departureCity);
+    } catch { out["điểm khởi hành"] = String(raw.departureCity); }
+  }
+
+  // Mảng chuỗi đơn giản
+  if (Array.isArray(raw.tags) && raw.tags.length) {
+    out["tags"] = raw.tags.join(", ");
+  }
+  if (Array.isArray(raw.highlights) && raw.highlights.length) {
+    out["điểm nổi bật"] = raw.highlights.join(" | ");
+  }
+  if (Array.isArray(raw.includes) && raw.includes.length) {
+    out["bao gồm"] = raw.includes.join(" | ");
+  }
+  if (Array.isArray(raw.excludes) && raw.excludes.length) {
+    out["không bao gồm"] = raw.excludes.join(" | ");
+  }
+  if (Array.isArray(raw.images) && raw.images.length) {
+    out["danh sách ảnh"] = `${raw.images.length} ảnh`;
+  }
+
+  // Lịch trình
+  if (Array.isArray(raw.schedules) && raw.schedules.length) {
+    out["lịch trình"] = raw.schedules
+      .map((s, i) => `${i + 1}. ${s.title || "(chưa có tiêu đề)"}`)
+      .join(" | ");
+  }
+
+  // Ngày khởi hành
+  if (Array.isArray(raw.departures) && raw.departures.length) {
+    out["ngày khởi hành"] = raw.departures
+      .map((d) => {
+        const from = d.departureDate ? moment(d.departureDate).format("DD/MM/YYYY") : "?";
+        const to = d.endDate ? moment(d.endDate).format("DD/MM/YYYY") : "?";
+        const total = d.seatsTotal ?? "?";
+        const remain = d.seatsRemaining ?? "?";
+        return `${from} → ${to} (ghế: ${remain}/${total})`;
+      })
+      .join(" | ");
+  }
+
+  // Địa điểm trong tour (giải nghĩa city ObjectId → tên)
+  if (Array.isArray(raw.locations) && raw.locations.length) {
+    const cityIds = raw.locations.map((l) => l && l.city).filter(Boolean);
+    let cityMap = {};
+    try {
+      const cities = await City.find({ _id: { $in: cityIds } })
+        .select("_id name")
+        .lean();
+      cityMap = Object.fromEntries(cities.map((c) => [String(c._id), c.name]));
+    } catch {}
+    out["địa điểm"] = raw.locations
+      .map((l) => {
+        const name = cityMap[String(l.city)] || String(l.city || "");
+        const spots =
+          Array.isArray(l.spots) && l.spots.length
+            ? ` [${l.spots.join(", ")}]`
+            : "";
+        return `${name}${spots}`;
+      })
+      .filter(Boolean)
+      .join(" | ");
+  }
+
+  // Quy tắc bậc giá em bé
+  if (Array.isArray(raw.babyPricingRules) && raw.babyPricingRules.length) {
+    out["quy tắc giá em bé"] = raw.babyPricingRules
+      .map((r) => {
+        const from = r.fromIndex ?? "?";
+        const to = r.toIndex ?? "?";
+        const pct = r.percent ?? r.percentage ?? "?";
+        const ref = r.referencePrice || r.reference || "";
+        return `bé ${from}-${to}: ${pct}%${ref ? ` (${ref})` : ""}`;
+      })
+      .join(" | ");
+  }
+
+  return out;
+}
 
 function escapeRegex(str = "") {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1032,6 +1167,17 @@ module.exports.createPost = async (req, res) => {
     const newRecord = new Tour(req.body);
     await newRecord.save();
 
+    buildTourAuditSnapshot(newRecord).then((afterSnap) => {
+      auditLogHelper.log(req, {
+        action: "tour.create",
+        resourceType: "Tour",
+        resourceId: newRecord._id,
+        resourceLabel: newRecord.name || "",
+        after: afterSnap,
+        summary: `Tạo tour "${newRecord.name || ""}"`,
+      });
+    }).catch(() => {});
+
     return res.json({ code: "success", message: "Tạo tour thành công!" });
   } catch (error) {
     console.error("tour.createPost error:", error);
@@ -1267,6 +1413,9 @@ module.exports.edit = async (req, res) => {
       isInternationalTour,
       pathAdmin,
       publishCheck,
+      tourScheduleReadOnly: !!(
+        req.overrideContext && req.overrideContext.isSuperAdminOverride
+      ),
     });
   } catch (error) {
     console.error("tour.edit error:", error);
@@ -1336,10 +1485,17 @@ module.exports.editPatch = async (req, res) => {
     // locations: JSON từ client -> chuẩn hoá
     req.body.locations = parseLocationsPayload(req.body.locations);
 
-    req.body.schedules = req.body.schedules
-      ? JSON.parse(req.body.schedules)
-      : [];
-    
+    if (req.overrideContext && req.overrideContext.isSuperAdminOverride) {
+      const ex = existed.toObject ? existed.toObject() : {};
+      req.body.schedules = Array.isArray(ex.schedules)
+        ? JSON.parse(JSON.stringify(ex.schedules))
+        : [];
+    } else {
+      req.body.schedules = req.body.schedules
+        ? JSON.parse(req.body.schedules)
+        : [];
+    }
+
     // Xử lý departures: mảng cặp { departureDate, endDate, seatsTotal, seatsRemaining }
     if (req.body.departures) {
       try {
@@ -1523,6 +1679,25 @@ module.exports.editPatch = async (req, res) => {
       { $set: req.body }
     );
 
+    const afterDoc = await Tour.findById(id).lean();
+    const [beforeSnap, afterSnap] = await Promise.all([
+      buildTourAuditSnapshot(existed),
+      buildTourAuditSnapshot(afterDoc || {}),
+    ]);
+    const isStatusChange =
+      beforeSnap.status !== afterSnap.status && afterSnap.status !== undefined;
+    auditLogHelper.log(req, {
+      action: isStatusChange ? "tour.change-status" : "tour.update",
+      resourceType: "Tour",
+      resourceId: id,
+      resourceLabel: (afterDoc && afterDoc.name) || existed.name || "",
+      before: beforeSnap,
+      after: afterSnap,
+      summary: isStatusChange
+        ? `Đổi trạng thái tour "${afterDoc?.name || existed.name || ""}" từ "${beforeSnap.status || "-"}" sang "${afterSnap.status || "-"}"`
+        : `Cập nhật tour "${afterDoc?.name || existed.name || ""}"`,
+    });
+
     return res.json({ code: "success", message: "Cập nhật thành công!" });
   } catch (error) {
     console.error("tour.editPatch error:", error);
@@ -1554,6 +1729,7 @@ module.exports.deletePatch = async (req, res) => {
       },
     };
 
+    const tourBefore = await Tour.findOne(filter).select("name status").lean();
     const result = await Tour.updateOne(filter, update);
 
     // 3) Kết quả
@@ -1571,6 +1747,14 @@ module.exports.deletePatch = async (req, res) => {
         message: "Tour đã được xóa trước đó.",
       });
     }
+
+    auditLogHelper.log(req, {
+      action: "tour.delete",
+      resourceType: "Tour",
+      resourceId: id,
+      resourceLabel: (tourBefore && tourBefore.name) || "",
+      summary: `Xóa tour "${(tourBefore && tourBefore.name) || ""}"`,
+    });
 
     return res.json({ code: "success", message: "Xóa tour thành công!" });
   } catch (error) {

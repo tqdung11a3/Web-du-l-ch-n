@@ -51,7 +51,7 @@
 .empty-cart .btn-primary {
   display: inline-block;
   padding: 14px 32px;
-  background: #0071c2;
+  background: #2d3e90;
   color: #fff;
   text-decoration: none;
   border-radius: 8px;
@@ -60,9 +60,9 @@
 }
 
 .empty-cart .btn-primary:hover {
-  background: #005999;
+  background: #24366f;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 113, 194, 0.3);
+  box-shadow: 0 4px 12px rgba(45, 62, 144, 0.35);
 }
 
 /* Cart Grid */
@@ -346,6 +346,18 @@
   margin-top: 16px;
   font-size: 18px;
   color: #1a1a1a;
+}
+
+.hotel-cart-cta-wrap {
+  text-align: center;
+  margin-top: 4px;
+}
+
+.hotel-cart-cta-wrap .btn-checkout {
+  width: auto;
+  min-width: 280px;
+  margin-bottom: 0;
+  display: inline-flex;
 }
 
 .btn-checkout {

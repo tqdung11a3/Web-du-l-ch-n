@@ -1,9 +1,79 @@
 @import url("https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@100..900&display=swap");
 
+/* Notyf: toast dài / nhiều dòng — override mặc định (max-width 300px,
+   overflow hidden, ripple 400px) vì dễ cắt chữ và tạo khối trắng / mép tròn lạ. */
+.notyf {
+  padding: 14px 16px 22px;
+  box-sizing: border-box;
+}
+
+.notyf__toast {
+  max-width: min(520px, calc(100vw - 32px)) !important;
+  width: auto !important;
+  overflow: visible !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Màu mặc định của Notyf (types.error / types.success). Bắt buộc khai báo ở đây
+   vì khi ripple bị tắt hoặc ẩn, nền phải nằm trên chính .notyf__toast. */
+.notyf__toast--error {
+  background-color: #ed3d3d !important;
+  color: #fff !important;
+}
+
+.notyf__toast--success {
+  background-color: #3dc763 !important;
+  color: #fff !important;
+}
+
+.notyf__toast--error .notyf__message,
+.notyf__toast--success .notyf__message {
+  color: #fff !important;
+}
+
+/* Ripple: ẩn vì đã ripple:false trong notify.js; giữ rule phòng CDN/khác tạo ripple */
+.notyf__ripple {
+  display: none !important;
+}
+
+.notyf__wrapper {
+  align-items: flex-start !important;
+  position: relative;
+  z-index: 1;
+  gap: 10px;
+}
+
+.notyf__icon {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.notyf__message {
+  white-space: pre-line;
+  line-height: 1.45;
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.notyf__dismiss {
+  z-index: 2;
+}
+
+@media only screen and (max-width: 480px) {
+  .notyf__toast {
+    max-width: none !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+  }
+}
+
 :root {
-  --color-primary: #4502c7;
-  --brand: #1a56db; /* xanh dương đậm (nút/tiêu đề) */
-  --brand-2: #163fa2; /* hover */
+  --color-primary: #2d3e90;
+  --brand: #2d3e90; /* màu chính (nút/tiêu đề) */
+  --brand-2: #24366f; /* hover */
   --muted: #6b7280; /* xám chữ phụ */
   --line: #e5e7eb; /* viền nhạt */
   --bg: #f8fafc; /* nền khối */
@@ -22,8 +92,10 @@ body {
   background-color: #f7f7f7;
 }
 
+/* Không dùng màu visited mặc định của trình duyệt (xanh / tím) — đồng bộ với style cha */
 a {
   text-decoration: none;
+  color: inherit;
 }
 
 input,
@@ -520,7 +592,7 @@ button {
 /* Section 1 */
 .section-1 {
   padding: 106px 0 108px 0;
-  background-image: url("../images/background-2.jpg");
+  background-image: url("../images/background-sky.jpg");
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center;
@@ -1329,10 +1401,10 @@ button {
 /* ── Room selection in tour detail ────────────────────── */
 .inner-room-selection {
   margin-bottom: 16px;
-  border: 1px solid #fca5a5;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 14px;
-  background: #fff8f8;
+  background: #f8fafc;
 }
 
 .inner-room-selection__header {
@@ -1352,7 +1424,8 @@ button {
   font-weight: 400;
 }
 
-.room-selection-required-warning {
+.room-selection-required-warning,
+.shared-room-required-warning {
   margin-top: 8px;
   padding: 8px 12px;
   border-radius: 6px;
@@ -1361,6 +1434,588 @@ button {
   color: #991b1b;
   font-size: 12px;
   line-height: 1.4;
+}
+
+/* ── Hình thức lưu trú: Ở riêng / Ở ghép ─────────────── */
+.accommodation-mode-picker {
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.accommodation-mode-picker__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
+.accommodation-mode-picker__hint {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.accommodation-mode-picker__hint i {
+  margin-top: 2px;
+  color: #0ea5e9;
+}
+
+.accommodation-mode-picker__options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .accommodation-mode-picker__options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.accommodation-mode-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.accommodation-mode-option:hover {
+  border-color: #0071c2;
+  background: #f0f9ff;
+}
+
+.accommodation-mode-option.is-selected {
+  border-color: #0071c2;
+  background: #e0f2fe;
+  box-shadow: 0 0 0 3px rgba(0, 113, 194, 0.1);
+}
+
+.accommodation-mode-option input[type="radio"] {
+  margin-top: 4px;
+  accent-color: #0071c2;
+}
+
+.accommodation-mode-option__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.accommodation-mode-option__title i {
+  color: #0071c2;
+}
+
+.accommodation-mode-option__desc {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+/* ── Khai báo giới tính cho mode "Ở ghép" ────────────── */
+.inner-shared-room-selection {
+  margin-bottom: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.inner-shared-room-selection__header {
+  margin-bottom: 12px;
+}
+
+.inner-shared-room-selection__header .inner-label {
+  margin-bottom: 4px;
+}
+
+.inner-shared-room-selection__hint {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.inner-shared-room-selection__hint i {
+  margin-top: 2px;
+  color: #0ea5e9;
+}
+
+.shared-room-segment {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.shared-room-segment__header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.shared-room-hotel-block {
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 10px;
+  margin-top: 6px;
+}
+
+.shared-room-hotel-block:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.shared-room-hotel-block__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.shared-room-hotel-block__inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.shared-gender-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shared-gender-input__label {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.shared-gender-input input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.shared-gender-input input:focus {
+  border-color: #0071c2;
+}
+
+.shared-room-hotel-block__hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.shared-room-hotel-block__hint.is-mismatch {
+  color: #b91c1c;
+}
+
+.shared-room-hotel-block__expected {
+  color: #0071c2;
+  font-weight: 600;
+}
+
+/* Danh sách hotel ứng viên (multi-hotel pooling) — hiển thị thứ tự ưu tiên */
+.shared-room-hotel-block__candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 12px 0;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.shared-room-hotel-block__candidate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.shared-room-hotel-block__candidate-rank {
+  font-weight: 600;
+  color: #6366f1;
+  min-width: 18px;
+}
+
+.shared-room-hotel-block__candidate-name {
+  flex: 1;
+}
+
+.shared-room-hotel-block__candidate-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Display readonly cho phần tóm tắt nam/nữ derive từ passenger list */
+.shared-gender-display {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.shared-gender-display__label {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.shared-gender-display__value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* ===== Passenger list (danh sách hành khách chi tiết, ở ghép) ===== */
+.shared-passenger-list {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+.shared-passenger-list__header {
+  margin-bottom: 12px;
+}
+
+.shared-passenger-list__hint {
+  font-size: 12px;
+  color: #475569;
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.shared-passenger-list__hint i {
+  margin-top: 2px;
+  color: #0ea5e9;
+}
+
+.shared-passenger-list__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shared-passenger-list__warning {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: pre-line;
+}
+
+.passenger-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 8px;
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.passenger-row.is-invalid {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+.passenger-row__index {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: center;
+  margin-top: 6px;
+}
+
+.passenger-row .passenger-name,
+.passenger-row .passenger-age {
+  grid-column: 2;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+
+.passenger-row .passenger-name:focus,
+.passenger-row .passenger-age:focus {
+  border-color: #0071c2;
+}
+
+.passenger-row .passenger-name::placeholder {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.passenger-type-badge {
+  grid-column: 2;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.passenger-type-badge.is-adult {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.passenger-type-badge.is-child {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.passenger-type-badge.is-baby {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.passenger-gender {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.passenger-gender label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.passenger-guardian {
+  grid-column: 2;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #ffffff;
+  outline: none;
+}
+
+.passenger-guardian:focus {
+  border-color: #0071c2;
+}
+
+.passenger-row .passenger-na {
+  grid-column: 2;
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .passenger-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 7px;
+  }
+}
+
+/* ===== Private room assignment (gán hành khách vào phòng "ở riêng") ===== */
+/* Màu đồng bộ với .inner-room-selection + --color-primary (không dùng tông vàng) */
+.private-room-assignment {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 12px 0;
+  border-left: 3px solid var(--color-primary);
+}
+
+.private-room-assignment__header {
+  margin-bottom: 12px;
+}
+
+.private-room-assignment__hint {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.private-room-assignment__hint i {
+  margin-top: 2px;
+  color: var(--color-primary);
+}
+
+.private-room-assignment__segments {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.private-room-assignment__warning {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+.private-assign-segment {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.private-assign-segment__header {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.private-assign-segment__rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.private-assign-room {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.private-assign-room__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.private-assign-room__title {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.private-assign-room__hotel {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.private-assign-room__usage {
+  font-size: 12px;
+  color: var(--color-primary);
+  background: #eef1f8;
+  border: 1px solid #c5cde6;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.private-assign-room__usage.is-overflow {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+
+.private-assign-room__passengers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 10px;
+}
+
+.private-assign-passenger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.private-assign-passenger.is-checked {
+  border-color: #0071c2;
+  background: #e0f2fe;
+}
+
+.private-assign-passenger.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.private-assign-passenger input[type="checkbox"] {
+  accent-color: #0071c2;
+  cursor: pointer;
+}
+
+.private-assign-passenger.is-disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
+.private-assign-passenger__type {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: 4px;
 }
 
 /* ── Time segment group ──────────────────────────────── */
@@ -1518,6 +2173,19 @@ button {
   margin-top: 2px;
 }
 
+.room-type-row__price {
+  margin-top: 6px;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0b5ed7;
+  background: #e8f1ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 2px 10px;
+  line-height: 1.4;
+}
+
 .room-type-row__input {
   display: flex;
   align-items: center;
@@ -1550,16 +2218,17 @@ button {
 .room-selection-global-extra-warning {
   margin-bottom: 10px;
   padding: 10px 14px;
-  border-radius: 8px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .room-selection-global-extra-warning strong {
-  color: #b45309;
+  color: var(--color-primary);
+  font-weight: 700;
 }
 
 .box-tour-detail .inner-actions {
@@ -1647,7 +2316,8 @@ button {
   overflow: hidden;
 }
 
-.product-item .inner-content .inner-title a {
+.product-item .inner-content .inner-title a,
+.product-item .inner-content .inner-title a:visited {
   color: #25282b;
 }
 
@@ -2126,31 +2796,9 @@ button {
 }
 /* End Button Outline */
 
-/* Section 5 */
-.section-5 {
-  padding-bottom: 60px;
-}
-
-.section-5 .inner-image {
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.section-5 .inner-image img {
-  width: 100%;
-  height: auto;
-}
-
-@media (max-width: 575.98px) {
-  .section-5 {
-    padding-bottom: 45px;
-  }
-}
-/* End Section 5 */
-
 /* Section 8 */
 .section-8 {
-  padding-bottom: 60px;
+  padding: 60px 0;
 }
 
 .section-8 .inner-wrap {
@@ -2167,7 +2815,7 @@ button {
 
 @media (max-width: 575.98px) {
   .section-8 {
-    padding-bottom: 45px;
+    padding: 45px 0;
   }
 
   .section-8 .inner-wrap {
@@ -2195,14 +2843,14 @@ button {
 
 /* Section 10 - Stats */
 .section-10-stats {
-  background-color: #0b63ff;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #4a5fb0 100%);
   padding: 50px 0;
   color: #ffffff;
 }
 
 .section-10-stats .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 40px;
   text-align: center;
 }
@@ -3416,37 +4064,53 @@ button {
 }
 
 .box-tour-detail .inner-group .inner-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: max-content minmax(72px, 88px) minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 8px;
+  align-items: center;
 }
 
 .box-tour-detail .inner-group .inner-item {
-  display: flex;
-  gap: 16px;
+  display: contents;
+}
+
+.box-tour-detail .inner-group .inner-list > .inner-seat-option {
+  grid-column: 1 / -1;
+  margin-top: 2px;
 }
 
 .box-tour-detail .inner-group .inner-item-label {
-  width: 100px;
+  white-space: nowrap;
   font-weight: 400;
   font-size: 14px;
   color: #5d5e60;
 }
 
+.box-tour-detail .inner-group .inner-item-input {
+  justify-self: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .box-tour-detail .inner-group .inner-item-input input {
   width: 45px;
+  max-width: 100%;
   border: 0;
   font-size: 14px;
   font-weight: 500;
   color: #898b8d;
+  text-align: center;
 }
 
 .box-tour-detail .inner-group .inner-item-price {
-  flex: 1;
   text-align: right;
+  justify-self: stretch;
   font-weight: 400;
   font-size: 16px;
   color: #898b8d;
+  font-variant-numeric: tabular-nums;
 }
 
 .box-tour-detail .inner-group .inner-item-price .inner-hl {
@@ -3539,7 +4203,10 @@ button {
 }
 
 .inner-age-tag {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
   background: #e8f0fe;
   color: #1a66cc;
   border-radius: 20px;
@@ -3576,7 +4243,7 @@ button {
   gap: 6px;
 }
 
-.inner-room-selections > .inner-label::before {
+.inner-room-selections > .inner-label:not(:has(i))::before {
   content: "🏨";
   font-size: 14px;
 }
@@ -3639,6 +4306,15 @@ button {
   white-space: nowrap;
 }
 
+.pending-tour-rooms__note,
+.inner-room-selections__note {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #64748b;
+  font-style: italic;
+}
+
 .inner-room-extra-cost {
   margin-top: 6px;
   padding: 5px 10px;
@@ -3647,6 +4323,182 @@ button {
   border-radius: 6px;
   font-size: 12.5px;
   color: #92400e;
+}
+
+/* ── Room assignments hiển thị trong cart / order pages (private mode) ── */
+.inner-room-assignments {
+  width: 100%;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inner-room-assign-row {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid var(--color-primary);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.inner-room-assign-row__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.inner-room-assign-row__title i {
+  color: var(--color-primary) !important;
+}
+
+.inner-room-assign-row__pax {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.inner-room-assign-pax {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.inner-room-assign-pax--adult {
+  border-left: 3px solid #6366f1;
+}
+
+.inner-room-assign-pax--child {
+  border-left: 3px solid #f59e0b;
+}
+
+.inner-room-assign-pax--baby {
+  border-left: 3px solid #ec4899;
+}
+
+.inner-room-assign-pax__meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.inner-room-assign-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* ── Cart passenger list (giỏ hàng - ở ghép) ── */
+.cart-passenger-list {
+  margin-top: 10px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.cart-passenger-list__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0369a1;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.cart-passenger-list__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cart-passenger-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  background: #ffffff;
+  border: 1px solid #e0f2fe;
+}
+
+.cart-passenger-row--adult {
+  border-left: 3px solid #6366f1;
+}
+
+.cart-passenger-row--child {
+  border-left: 3px solid #f59e0b;
+}
+
+.cart-passenger-row--baby {
+  border-left: 3px solid #ec4899;
+}
+
+.cart-passenger-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.cart-passenger-badge--adult {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.cart-passenger-badge--child {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.cart-passenger-badge--baby {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.cart-passenger-name {
+  font-weight: 600;
+  color: #0f172a;
+  flex: 1;
+  min-width: 80px;
+}
+
+.cart-passenger-age {
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cart-passenger-gender {
+  color: #334155;
+  font-size: 12px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cart-passenger-guardian {
+  font-size: 11.5px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-basis: 100%;
+  padding-left: 2px;
+}
+
+.cart-passenger-guardian strong {
+  color: #0369a1;
+  font-weight: 600;
 }
 /* ── End phòng khách sạn trong giỏ hàng ── */
 
@@ -4438,18 +5290,23 @@ button {
 }
 
 .section-11 .inner-tour-item .inner-quantity .inner-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 26px;
 }
 
 .section-11 .inner-tour-item .inner-quantity .inner-item {
-  display: flex;
+  /* Một grid / hàng nhưng cột 1 cố định để mọi hàng có cùng bề ngang → dấu : và số lượng thẳng cột */
+  display: grid;
+  grid-template-columns: 9.25rem 2.75rem minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
+  column-gap: 12px;
 }
 
 .section-11 .inner-tour-item .inner-quantity .inner-item-label {
-  width: 100px;
+  justify-self: end;
+  text-align: right;
+  white-space: nowrap;
   font-weight: 400;
   font-size: 14px;
   color: #5d5e60;
@@ -4463,9 +5320,13 @@ button {
   color: #898b8d;
 }
 
+.section-11 .inner-tour-item .inner-quantity .inner-item-input {
+  justify-self: center;
+}
+
 .section-11 .inner-tour-item .inner-quantity .inner-item-input .cart-qty-fixed {
-  display: inline-block;
-  width: 45px;
+  display: block;
+  width: 100%;
   font-weight: 600;
   font-size: 14px;
   color: #374151;
@@ -4473,11 +5334,12 @@ button {
 }
 
 .section-11 .inner-tour-item .inner-quantity .inner-item-price {
-  flex: 1;
+  justify-self: end;
   text-align: right;
   font-weight: 400;
   font-size: 16px;
   color: #898b8d;
+  font-variant-numeric: tabular-nums;
 }
 
 .section-11 .inner-tour-item .inner-quantity .inner-item-price .inner-hl {
@@ -4871,9 +5733,25 @@ button {
   gap: 8px;
 }
 .company-card__foot {
-  padding: 10px 14px 14px;
-  font-size: 12px;
-  color: #888;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 0px;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: #444;
+  text-align: left;
+}
+.company-card__foot .meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.company-card__foot .meta-item i {
+  flex-shrink: 0;
+  width: 1.1em;
+  text-align: center;
+  color: #444;
 }
 
 /* Company List Page */
@@ -4899,7 +5777,7 @@ button {
 
 .company-hero__stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 24px;
 }
 
@@ -5997,7 +6875,7 @@ button {
 /* Content */
 .account-content .page-title {
   font-size: 28px;
-  margin: 0 0 16px 0;
+  margin: 30px 0 16px 0;
 }
 .panel {
   background: #fff;
@@ -6362,22 +7240,23 @@ button {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .box-reviews .content-input textarea:focus {
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.14);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(45, 62, 144, 0.14);
 }
 .box-reviews .button-primary {
   margin-top: 10px;
   padding: 10px 14px;
-  background: linear-gradient(90deg, #7c3aed, #6d28d9);
+  background: var(--color-primary);
   border: none;
   color: #fff;
   font-weight: 600;
   border-radius: 10px;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.22);
+  box-shadow: 0 4px 10px rgba(45, 62, 144, 0.22);
 }
 .box-reviews .button-primary:hover {
-  filter: brightness(1.05);
+  background: var(--brand-2);
+  filter: none;
 }
 
 /* ======= review items ======= */
@@ -7632,7 +8511,7 @@ body {
 }
 
 .detail-phone a {
-  color: #1a56db;
+  color: #2d3e90;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.2s;
@@ -7809,7 +8688,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 12px 24px;
-  background: #1a56db;
+  background: #2d3e90;
   color: #fff;
   text-decoration: none;
   border-radius: 8px;
@@ -10175,7 +11054,7 @@ body {
 }
 
 .compare-room-price {
-  color: #1a56db;
+  color: #2d3e90;
   font-size: 18px;
   font-weight: 700;
 }
@@ -10246,7 +11125,7 @@ body {
 }
 
 .compare-section-header td {
-  background: #1a56db;
+  background: #2d3e90;
   color: white;
   padding: 16px !important;
   font-weight: 700;
@@ -10410,7 +11289,7 @@ body {
 .room-card__price-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1a56db;
+  color: #2d3e90;
   line-height: 1.2;
 }
 
@@ -10438,7 +11317,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #1a56db;
+  color: #2d3e90;
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
@@ -10458,7 +11337,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 12px 24px;
-  background: #1a56db;
+  background: #2d3e90;
   color: #fff;
   border-radius: 8px;
   font-size: 14px;
@@ -10574,6 +11453,11 @@ body {
   line-height: 1.3;
 }
 
+.hotel-card-search__title a,
+.hotel-card-search__title a:visited {
+  color: #111827;
+}
+
 .hotel-card-search__address {
   margin: 0;
   font-size: 14px;
@@ -10591,7 +11475,7 @@ body {
 .hotel-card-search__company {
   margin: 0;
   font-size: 14px;
-  color: #1a56db;
+  color: #2d3e90;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -10599,7 +11483,7 @@ body {
 }
 
 .hotel-card-search__company i {
-  color: #1a56db;
+  color: #2d3e90;
   font-size: 14px;
 }
 
@@ -10615,7 +11499,7 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: #1a56db;
+  background: #2d3e90;
   color: #fff;
   border-radius: 6px;
   font-size: 14px;
@@ -12002,7 +12886,7 @@ body {
 .hotel-card-search__price-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1a56db;
+  color: #2d3e90;
   line-height: 1.2;
 }
 
@@ -12031,7 +12915,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 12px 24px;
-  background: #1a56db;
+  background: #2d3e90;
   color: #fff;
   border-radius: 8px;
   font-size: 14px;
@@ -12054,8 +12938,8 @@ body {
   justify-content: center;
   padding: 10px 20px;
   background: #fff;
-  color: #1a56db;
-  border: 2px solid #1a56db;
+  color: #2d3e90;
+  border: 2px solid #2d3e90;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
@@ -12071,7 +12955,7 @@ body {
 }
 
 .hotel-compare-btn.is-comparing {
-  background: #1a56db;
+  background: #2d3e90;
   color: #fff;
 }
 
@@ -12306,7 +13190,7 @@ body {
 
 .room-detail-info-item i {
   font-size: 20px;
-  color: #1a56db;
+  color: #2d3e90;
   margin-top: 2px;
   flex-shrink: 0;
 }
@@ -12344,7 +13228,7 @@ body {
 
 .occupancy-item i {
   font-size: 18px;
-  color: #1a56db;
+  color: #2d3e90;
   width: 24px;
   flex-shrink: 0;
 }
@@ -12364,12 +13248,12 @@ body {
 .occupancy-item.occupancy-fee {
   margin-top: 8px;
   padding-top: 16px;
-  border-top: 2px solid #1a56db;
+  border-top: 2px solid #2d3e90;
   border-bottom: none;
 }
 
 .occupancy-item .fee-value {
-  color: #1a56db;
+  color: #2d3e90;
   font-size: 16px;
 }
 
@@ -12469,104 +13353,103 @@ body {
   font-weight: 600;
 }
 
-/* ==== COUNTDOWN TIMER - ĐƠN TẠM / GIỮ CHỖ ==== */
+/* ==== COUNTDOWN GIỮ CHỖ (order-pending tour, hotel-booking-pending) ==== */
 .hold-warning {
-  background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%);
-  border: 2px solid #ffc107;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid var(--color-primary);
   border-radius: 12px;
-  padding: 24px;
+  padding: 22px 24px;
   margin: 24px 0;
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.15);
+  box-shadow: 0 2px 14px rgba(45, 62, 144, 0.08);
 }
 
 .hold-warning .warning-icon {
-  font-size: 32px;
-  color: #ff9800;
+  font-size: 28px;
+  color: var(--color-primary);
   flex-shrink: 0;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  line-height: 1.2;
 }
 
 .hold-warning .warning-content {
   flex: 1;
+  text-align: left;
 }
 
 .hold-warning .warning-title {
   font-size: 18px;
   font-weight: 700;
-  color: #f57c00;
+  color: #1e293b;
   margin: 0 0 8px 0;
 }
 
 .hold-warning .warning-message {
   font-size: 15px;
-  color: #5d4037;
+  color: #475569;
   margin: 0 0 12px 0;
 }
 
 .countdown-timer {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   background: #fff;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 32px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 28px;
   font-weight: 700;
-  color: #d32f2f;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: var(--color-primary);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
   margin: 8px 0;
-  font-family: 'Courier New', monospace;
+  font-family: ui-monospace, "Cascadia Code", "Courier New", monospace;
 }
 
 .countdown-minutes,
 .countdown-seconds {
-  min-width: 50px;
+  min-width: 52px;
   text-align: center;
 }
 
 .countdown-separator {
-  color: #d32f2f;
-  animation: blink 1s infinite;
+  color: #94a3b8;
+  animation: hold-countdown-blink 1s infinite;
 }
 
-@keyframes blink {
+@keyframes hold-countdown-blink {
   0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
+  50%, 100% { opacity: 0.35; }
 }
 
 .hold-warning .warning-note {
   font-size: 13px;
-  color: #6d4c41;
+  color: #64748b;
   margin: 12px 0 0 0;
   font-style: italic;
+  font-weight: 400;
 }
 
 @media (max-width: 768px) {
   .hold-warning {
     flex-direction: column;
-    padding: 16px;
+    padding: 16px 18px;
   }
-  
+
   .hold-warning .warning-icon {
     font-size: 24px;
   }
-  
+
   .countdown-timer {
-    font-size: 24px;
-    padding: 8px 16px;
+    font-size: 22px;
+    padding: 10px 16px;
   }
-  
+
   .countdown-minutes,
   .countdown-seconds {
-    min-width: 40px;
+    min-width: 44px;
   }
 }
 
@@ -12633,7 +13516,7 @@ body {
 .hotel-booking-pending-page {
   min-height: 70vh;
   padding: 40px 0;
-  background: linear-gradient(135deg, #fef9e7 0%, #fcf3cf 100%);
+  background: #f8f9ff;
 }
 
 .pending-content {
@@ -12647,114 +13530,29 @@ body {
 }
 
 .pending-icon {
-  font-size: 80px;
-  color: #f39c12;
-  margin-bottom: 20px;
-  animation: pulse-pending 2s infinite;
-}
-
-@keyframes pulse-pending {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
+  font-size: 72px;
+  color: var(--color-primary);
+  margin-bottom: 16px;
+  line-height: 1;
+  opacity: 0.95;
 }
 
 .pending-title {
   font-size: 32px;
   font-weight: 700;
-  color: #d68910;
+  color: var(--color-primary);
   margin-bottom: 12px;
+  letter-spacing: -0.02em;
 }
 
 .pending-message {
   font-size: 18px;
-  color: #7d6608;
+  color: #475569;
   margin-bottom: 30px;
+  line-height: 1.55;
 }
 
-/* KHỐI CẢNH BÁO GIỮ CHỖ */
-.hold-warning {
-  background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
-  border: 3px solid #f39c12;
-  border-radius: 12px;
-  padding: 24px;
-  margin: 30px 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
-  box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
-}
-
-.warning-icon {
-  font-size: 48px;
-  color: #e67e22;
-  flex-shrink: 0;
-}
-
-.warning-content {
-  flex: 1;
-  text-align: left;
-}
-
-.warning-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #d68910;
-  margin-bottom: 8px;
-}
-
-.warning-message {
-  font-size: 16px;
-  color: #7d6608;
-  margin-bottom: 16px;
-}
-
-.warning-note {
-  font-size: 14px;
-  color: #c0392b;
-  font-weight: 600;
-  margin-top: 12px;
-}
-
-/* COUNTDOWN TIMER */
-.countdown-timer {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: white;
-  padding: 16px 24px;
-  border-radius: 8px;
-  font-size: 48px;
-  font-weight: 700;
-  color: #e67e22;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  font-family: 'Courier New', monospace;
-}
-
-.countdown-minutes,
-.countdown-seconds {
-  min-width: 60px;
-  text-align: center;
-}
-
-.countdown-separator {
-  color: #d68910;
-  animation: blink-separator 1s infinite;
-}
-
-@keyframes blink-separator {
-  0%, 49% {
-    opacity: 1;
-  }
-  50%, 100% {
-    opacity: 0.3;
-  }
-}
+/* (Khối giữ chỗ + countdown: đã gộp ở mục «COUNTDOWN GIỮ CHỖ» phía trên) */
 
 /* THÔNG TIN ĐẶT PHÒNG */
 .booking-info {
@@ -12876,17 +13674,18 @@ body {
     text-align: center;
   }
 
-  .warning-content {
+  .hold-warning .warning-content {
     text-align: center;
   }
 
   .countdown-timer {
-    font-size: 36px;
+    font-size: 24px;
+    padding: 10px 16px;
   }
 
   .countdown-minutes,
   .countdown-seconds {
-    min-width: 48px;
+    min-width: 44px;
   }
 
   .info-row {
@@ -13004,10 +13803,20 @@ body {
 .pending-tour-rooms__item,
 .inner-room-selections__item {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  padding: 4px 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px 0 10px;
   border-bottom: 1px solid #f1f5f9;
+}
+
+.pending-tour-rooms__meta-row,
+.inner-room-selections__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  width: 100%;
 }
 
 .pending-tour-rooms__item:last-child,
@@ -13113,6 +13922,91 @@ body {
 }
 .hotel-avail-warning span {
   opacity: .85;
+}
+
+/* Modal xác nhận hủy đơn (order-pending) */
+.cancel-hold-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+.cancel-hold-modal.is-open {
+  display: flex;
+}
+.cancel-hold-modal__overlay {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.55);
+  cursor: pointer;
+}
+.cancel-hold-modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px 24px 20px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  text-align: left;
+}
+.cancel-hold-modal__dialog h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.cancel-hold-modal__lead {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #475569;
+}
+.cancel-hold-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.cancel-hold-modal__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.cancel-hold-modal__btn--muted {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+.cancel-hold-modal__btn--muted:hover {
+  background: #e2e8f0;
+}
+.cancel-hold-modal__btn--danger {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+.cancel-hold-modal__btn--danger:hover {
+  background: #dc2626;
+  border-color: #dc2626;
 }
 
 .btn-cancel-hold {

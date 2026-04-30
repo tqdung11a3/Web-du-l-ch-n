@@ -79,6 +79,19 @@
                     && booking.bookingId
                     && (effectiveStatus === 'checked_out' || effectiveStatus === 'cancelled');
 
+                  const coOccupants = Array.isArray(booking.coOccupants) ? booking.coOccupants : [];
+                  const isMultiSharedTour = isTourHold && tourAssigned && coOccupants.length > 1;
+                  const statusLabelMap = {
+                    confirmed: 'Chờ nhận phòng',
+                    checked_in: 'Đã nhận phòng',
+                    checked_out: 'Đã trả phòng',
+                  };
+                  const statusClassMap = {
+                    confirmed: 'bip-status--waiting',
+                    checked_in: 'bip-status--checkedin',
+                    checked_out: 'bip-status--checkedout',
+                  };
+
                   return `
                     <div class="booking-detail-card${isTourHold ? ' booking-detail-card--tour' : ''}${canDelete ? ' booking-detail-card--finished' : ''}">
                       <div class="booking-detail-header">
@@ -89,20 +102,43 @@
                         ${canDelete ? `<button class="btn-delete-room-booking" data-booking-id="${booking.bookingId}" data-booking-code="${booking.code}" title="Xóa booking này"><i class="fa-regular fa-trash-can"></i> Xóa</button>` : ''}
                       </div>
                       <div class="booking-detail-body">
-                        <div class="detail-row">
-                          <i class="fa-solid fa-user"></i>
-                          <span><strong>${isTourHold ? 'Khách tour:' : 'Khách hàng:'}</strong> ${
-                            isTourHold && !tourAssigned
-                              ? '<em style="color:#9ca3af">Chưa phân công</em>'
-                              : booking.customerName
-                          }</span>
-                        </div>
-                        ${booking.customerPhone && tourAssigned ? `
+                        ${isMultiSharedTour ? `
                           <div class="detail-row">
-                            <i class="fa-solid fa-phone"></i>
-                            <span><strong>SĐT:</strong> ${booking.customerPhone}</span>
+                            <i class="fa-solid fa-users"></i>
+                            <span><strong>Khách ở ghép:</strong></span>
                           </div>
-                        ` : ''}
+                          <div style="margin-left:24px;margin-top:6px;display:flex;flex-direction:column;gap:6px;">
+                            ${coOccupants.map(co => {
+                              const st = co.guestStatus || 'confirmed';
+                              const stLabel = statusLabelMap[st] || st;
+                              const stCls = statusClassMap[st] || '';
+                              return `<div style="padding:6px 8px;background:#f8fafc;border-radius:6px;border-left:2px solid #6366f1;">
+                                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                  <i class="fa-solid fa-user" style="font-size:11px;opacity:.7"></i>
+                                  <strong>${escHtml(co.guestName || '—')}</strong>
+                                  ${co.orderCode ? `<span class="bip-code">#${escHtml(co.orderCode)}</span>` : ''}
+                                </div>
+                                ${co.phone ? `<div style="font-size:12px;color:#64748b;margin-top:2px"><i class="fa-solid fa-phone" style="font-size:10px;margin-right:4px;opacity:.7"></i>${escHtml(co.phone)}</div>` : ''}
+                                <div class="${stCls}" style="font-size:12px;margin-top:2px"><i class="fa-solid fa-clock" style="font-size:10px;margin-right:4px;opacity:.7"></i>${stLabel}</div>
+                              </div>`;
+                            }).join('')}
+                          </div>
+                        ` : `
+                          <div class="detail-row">
+                            <i class="fa-solid fa-user"></i>
+                            <span><strong>${isTourHold ? 'Khách tour:' : 'Khách hàng:'}</strong> ${
+                              isTourHold && !tourAssigned
+                                ? '<em style="color:#9ca3af">Chưa phân công</em>'
+                                : booking.customerName
+                            }</span>
+                          </div>
+                          ${booking.customerPhone && tourAssigned ? `
+                            <div class="detail-row">
+                              <i class="fa-solid fa-phone"></i>
+                              <span><strong>SĐT:</strong> ${booking.customerPhone}</span>
+                            </div>
+                          ` : ''}
+                        `}
                         <div class="detail-row">
                           <i class="fa-solid fa-calendar-check"></i>
                           <span><strong>Check-in:</strong> ${booking.checkIn}</span>
@@ -148,6 +184,34 @@
                             `).join('')}
                           </div>
                         ` : ''}
+                        ${(() => {
+                          if (!isTourHold || !Array.isArray(booking.roomPassengers) || booking.roomPassengers.length === 0) return '';
+                          const typeMap = { adult: 'Người lớn', child: 'Trẻ em', baby: 'Em bé' };
+                          const clsMap  = { adult: 'rm-pax--adult', child: 'rm-pax--child', baby: 'rm-pax--baby' };
+                          const title = booking.accommodationMode === 'shared'
+                            ? 'Khách ở ghép (phòng này)'
+                            : 'Khách của phòng này';
+                          return `
+                            <div class="rm-pax-block">
+                              <div class="rm-pax-title">
+                                <i class="fa-solid fa-users" style="margin-right:5px;color:#6366f1"></i>${title}
+                              </div>
+                              <div class="rm-pax-list">
+                                ${booking.roomPassengers.map(p => {
+                                  let meta = '';
+                                  if (p.age !== undefined && p.age !== '' && p.age !== null) meta += ' · ' + p.age + 't';
+                                  if (p.gender === 'male')   meta += ' · Nam';
+                                  if (p.gender === 'female') meta += ' · Nữ';
+                                  return `<div class="rm-pax-row">
+                                    <span class="rm-pax-badge ${clsMap[p.type] || ''}">${typeMap[p.type] || p.type}</span>
+                                    <span class="rm-pax-name">${escHtml(p.name || '—')}</span>
+                                    ${meta ? `<span class="rm-pax-meta">${meta}</span>` : ''}
+                                  </div>`;
+                                }).join('')}
+                              </div>
+                            </div>
+                          `;
+                        })()}
                       </div>
                     </div>
                   `;

@@ -27,6 +27,13 @@ mixin company-card(c)
           .meta-item
             i.fa-solid.fa-location-dot
             span= c.address
-      if typeof c.toursCount !== 'undefined'
+      if typeof c.toursCount !== 'undefined' || (c.hotelsCount && c.hotelsCount > 0)
         .company-card__foot
-          span #{c.toursCount} tour hiện có
+          if typeof c.toursCount !== 'undefined'
+            .meta-item
+              i.fa-solid.fa-route(aria-hidden="true")
+              span #{c.toursCount} tour hiện có
+          if c.hotelsCount > 0
+            .meta-item
+              i.fa-solid.fa-hotel(aria-hidden="true")
+              span #{c.hotelsCount} khách sạn hiện có

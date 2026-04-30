@@ -1,0 +1,145 @@
+extends ../../layouts/default.pug
+
+block main
+
+  h1.box-title= pageTitle
+
+  .section-4
+    form.inner-wrap(method="GET" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;")
+      .inner-item
+        select(name="actorRole" style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;font-size:13px;min-width:170px;")
+          option(value="" selected=!filters.actorRole) Mọi vai trò
+          each role in knownRoles
+            - var _rl = roleLabelsVi && roleLabelsVi[role] ? roleLabelsVi[role] : role
+            option(value=role selected=filters.actorRole===role)= _rl
+
+      .inner-item
+        select(name="action" style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;font-size:13px;min-width:280px;")
+          option(value="" selected=!filters.action) Mọi hành động
+          each a in knownActions
+            - var _al = actionLabelsVi && actionLabelsVi[a] ? actionLabelsVi[a] : a
+            option(value=a selected=filters.action===a)= _al
+
+      .inner-item
+        select(name="resourceType" style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;font-size:13px;min-width:220px;")
+          option(value="" selected=!filters.resourceType) Mọi loại dữ liệu
+          each r in knownResources
+            - var _rl2 = resourceLabelsVi && resourceLabelsVi[r] ? resourceLabelsVi[r] : r
+            option(value=r selected=filters.resourceType===r)= _rl2
+
+      .inner-item
+        select(name="actorCompanyId" style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;font-size:13px;")
+          option(value="" selected=!filters.actorCompanyId) Công ty (actor) – tất cả
+          each co in allCompanies
+            option(value=co._id selected=filters.actorCompanyId===String(co._id))= co.name
+
+      .inner-item
+        select(name="asCompanyId" style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;font-size:13px;")
+          option(value="" selected=!filters.asCompanyId) Thay mặt công ty – tất cả
+          each co in allCompanies
+            option(value=co._id selected=filters.asCompanyId===String(co._id))= co.name
+
+      .inner-item
+        input(type="text" name="keyword" placeholder="Tên người / resource / email" value=filters.keyword style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;font-size:13px;min-width:220px;")
+
+      .inner-item
+        input(type="date" name="startDate" value=filters.startDate style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;")
+        span.mx-2 -
+        input(type="date" name="endDate" value=filters.endDate style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;")
+
+      .inner-item
+        button(type="submit" style="height:38px;padding:0 18px;background:var(--color-primary);color:#fff;border:0;border-radius:4px;font-weight:600;") Lọc
+        a(href=`/${pathAdmin}/super-admin/audit` style="margin-left:8px;color:#64748b;") Xóa lọc
+
+  .section-6.audit-log-section
+    .table-2
+      table
+        thead
+          tr
+            th(style="width:40px;") STT
+            th(style="width:160px;") Thời gian
+            th Người thực hiện
+            th(style="width:280px;") Hành động
+            th Đối tượng
+            th.audit-log-th-diff Thay đổi (trước → sau)
+        tbody
+          if items && items.length
+            each it, idx in items
+              tr
+                td= (pagination.skip || 0) + idx + 1
+                td(style="font-size:12px;white-space:nowrap;")= it.createdAtFormat
+                td(style="font-size:13px;max-width:240px;")
+                  div(style="font-weight:600;color:#0f172a;")= it.actorName || '(không rõ)'
+                  div(style="margin-top:2px;")
+                    if it.actorRole === 'super_admin'
+                      span.badge.badge-blue(style="font-size:10px;") Super Admin
+                    else if it.actorRole === 'company_admin'
+                      span.badge.badge-green(style="font-size:10px;") Company Admin
+                    else if it.actorRole === 'customer'
+                      if it.actorId
+                        span.badge.badge-yellow(style="font-size:10px;") Khách hàng
+                      else
+                        span.badge.badge-yellow(style="font-size:10px;") Khách vãng lai
+                    else if it.actorRole === 'system'
+                      span.badge.badge-gray(style="font-size:10px;") Hệ thống
+                  if it.actorCompanyName && it.actorRole !== 'super_admin'
+                    div(style="font-size:11px;color:#64748b;margin-top:2px;")
+                      i.fa-solid.fa-building(style="margin-right:4px;")
+                      = it.actorCompanyName
+                  if it.actorEmail
+                    div(style="font-size:11px;color:#94a3b8;margin-top:2px;")= it.actorEmail
+                  if it.asCompanyName && it.actorRole !== 'customer'
+                    div(style="font-size:11px;color:#b45309;margin-top:2px;")
+                      i.fa-solid.fa-user-shield(style="margin-right:4px;")
+                      | thay mặt: #{it.asCompanyName}
+                td(style="font-size:13px;")
+                  span.badge.badge-gray(title=it.action)= it.actionLabelVi || it.action
+                  if it.summary || it._autoSummary
+                    div(style="font-size:12px;color:#475569;margin-top:4px;line-height:1.35;")= it.summary || it._autoSummary
+                td(style="font-size:13px;max-width:260px;")
+                  div= it.resourceTypeLabelVi || it.resourceType || '-'
+                  if it.resourceLabel
+                    div(style="font-size:12px;color:#334155;margin-top:2px;font-weight:500;overflow-wrap:anywhere;")= it.resourceLabel
+                  if it.resourceId
+                    div(style="font-size:11px;color:#94a3b8;margin-top:2px;overflow-wrap:anywhere;")= it.resourceId
+                td.audit-log-td-diff
+                  - var _hasAfter = it.after && Object.keys(it.after || {}).length
+                  - var _hasBefore = it.before && Object.keys(it.before || {}).length
+                  if _hasAfter || _hasBefore
+                    - var _keys = Array.from(new Set([...(Object.keys(it.before || {})), ...(Object.keys(it.after || {}))]))
+                    .audit-log-diff-cell
+                      each k in _keys
+                        - var _b = (it.before || {})[k]
+                        - var _a = (it.after  || {})[k]
+                        - var _bStr = (_b === undefined || _b === null) ? '—' : (typeof _b === 'object' ? JSON.stringify(_b) : String(_b))
+                        - var _aStr = (_a === undefined || _a === null) ? '—' : (typeof _a === 'object' ? JSON.stringify(_a) : String(_a))
+                        .audit-log-diff-row
+                          .audit-log-diff-key= k
+                          .audit-log-diff-values
+                            span.audit-log-diff-before= _bStr
+                            span.audit-log-diff-arrow  → 
+                            span.audit-log-diff-after= _aStr
+                  else if it.metadataHuman && it.metadataHuman.length
+                    .audit-log-meta-human(style="font-size:12px;line-height:1.5;color:#334155;max-width:420px;")
+                      each row in it.metadataHuman
+                        div(style="margin-bottom:6px;")
+                          strong(style="color:#64748b;font-weight:600;display:inline;")= row.label + ':'
+                          |  
+                          span(style="overflow-wrap:anywhere;")= row.value
+                  else
+                    span(style="color:#94a3b8;") —
+          else
+            tr
+              td(colspan="6" style="padding:24px;color:#94a3b8;text-align:center;") Chưa có nhật ký
+
+  if pagination && pagination.totalRecord > 0
+    .section-7(style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px;")
+      span.inner-label
+        | Hiển thị #{pagination.skip + 1} – #{Math.min(pagination.skip + pagination.limitItems, pagination.totalRecord)} / #{pagination.totalRecord}
+        |  (#{pagination.limitItems} dòng mỗi trang)
+      if pagination.totalPage > 1
+        label(style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#475569;")
+          span Trang
+          select(class="inner-pagination" box-pagination style="min-width:120px;height:36px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;")
+            - for (let i = 1; i <= pagination.totalPage; i++)
+              option(value=i selected=(i === pagination.currentPage)) #{i} / #{pagination.totalPage}

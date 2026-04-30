@@ -1,0 +1,86 @@
+extends ../../layouts/default.pug
+
+block main
+
+  .box-head(style="display:flex;justify-content:space-between;align-items:center;")
+    h1.box-title= pageTitle
+    a.button.button-primary(href=`/${pathAdmin}/super-admin/notifications/broadcast`)
+      i.fa-solid.fa-bullhorn
+      |  Gửi thông báo mới
+
+  .section-4
+    form.inner-wrap(method="GET" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;")
+      .inner-item
+        input(
+          type="text" name="keyword" placeholder="Tiêu đề / nội dung..." value=keyword
+          style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;font-size:14px;min-width:220px;"
+        )
+      .inner-item
+        select(name="companyId" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+          option(value="" selected=!companyFilter) Tất cả công ty
+          each co in allCompanies
+            option(value=co._id selected=companyFilter===String(co._id))= co.name
+      .inner-item
+        select(name="type" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+          option(value="" selected=!typeFilter) Tất cả loại
+          option(value="order" selected=typeFilter==='order') Đơn hàng
+          option(value="hotel_booking" selected=typeFilter==='hotel_booking') Đặt phòng
+          option(value="review" selected=typeFilter==='review') Đánh giá
+          option(value="other" selected=typeFilter==='other') Khác
+      .inner-item
+        button(type="submit" style="height:38px;padding:0 18px;background:var(--color-primary);color:#fff;border:0;border-radius:4px;font-weight:600;") Lọc
+        a(href=`/${pathAdmin}/super-admin/notifications` style="margin-left:8px;color:#64748b;") Xóa lọc
+
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Công ty
+            th Loại
+            th Tiêu đề
+            th Nội dung
+            th Đã đọc
+            th Thời gian
+            th(class="inner-center") Hành động
+        tbody
+          if items && items.length
+            each it, idx in items
+              tr
+                td= (pagination.skip || 0) + idx + 1
+                td= it.companyName
+                td
+                  span.badge.badge-blue= it.type
+                td(style="max-width:200px;")= it.title
+                td(style="max-width:280px;font-size:13px;white-space:normal;")= it.content
+                td
+                  if it.isRead
+                    span.badge.badge-green Đã đọc
+                  else
+                    span.badge.badge-orange Chưa đọc
+                td(style="font-size:12px;")= it.createdAtFormat
+                td(class="inner-center")
+                  button(
+                    type="button" class="inner-delete" title="Xoá"
+                    onclick=`removeNotification('${it._id}')`
+                  )
+                    i.fa-regular.fa-trash-can
+          else
+            tr
+              td(colspan="8" class="inner-center" style="padding:24px;color:#94a3b8;") Chưa có thông báo
+
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label Hiển thị #{pagination.skip + 1} - #{Math.min(pagination.skip + pagination.limitItems, pagination.totalRecord)} của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}
+
+  script.
+    function removeNotification(id) {
+      if (!confirm('Xoá thông báo này?')) return;
+      fetch(`/${window.location.pathname.split('/')[1]}/super-admin/notifications/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(d => { alert(d.message); if (d.code === 'success') location.reload(); });
+    }

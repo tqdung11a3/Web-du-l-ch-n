@@ -366,6 +366,7 @@ module.exports.tourOrderDetail = async (req, res) => {
     }
 
     const orderListBackUrl = `/${pathAdmin}/super-admin/orders/company/${companyId}/tours`;
+    const superAdminOverrideEditUrl = `/${pathAdmin}/super-admin/as-company/${companyId}/orders/${orderId}`;
 
     return res.render("admin/pages/order-edit", {
       pageTitle: vm.pageTitle,
@@ -375,6 +376,7 @@ module.exports.tourOrderDetail = async (req, res) => {
       statusList,
       readOnly: true,
       orderListBackUrl,
+      superAdminOverrideEditUrl,
     });
   } catch (error) {
     console.error("Super Admin - Tour order detail error:", error);

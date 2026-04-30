@@ -40,7 +40,7 @@ block main
         strong= selectedDeparture.endDate ? moment(selectedDeparture.endDate).format('DD/MM/YYYY') : '—'
       .th-config-header__item
         span.th-config-label Tổng ngày
-        - const totalDays = selectedDeparture.endDate ? moment(selectedDeparture.endDate).diff(moment(selectedDeparture.departureDate), 'days') : 0
+        - const totalDays = selectedDeparture.endDate ? (moment(selectedDeparture.endDate).diff(moment(selectedDeparture.departureDate), 'days') + 1) : 0
         strong= totalDays + ' ngày'
       .th-config-header__item
         span.th-config-label Trạng thái
@@ -49,6 +49,12 @@ block main
             span.badge.badge--green Đã xác nhận
           else if existingSegment.status === 'pending_approval'
             span.badge.badge--orange Chờ duyệt KS khác
+          else if existingSegment.status === 'rejected'
+            if existingSegment.rejectedByCompanyName
+              span.badge.badge--red(title=existingSegment.rejectedResponseNote || ('Bị ' + existingSegment.rejectedByCompanyName + ' từ chối liên kết'))
+                |  Đã bị #{existingSegment.rejectedByCompanyName} từ chối
+            else
+              span.badge.badge--red Đã bị từ chối
           else
             span.badge.badge--yellow Bản nháp
         else

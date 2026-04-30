@@ -1,0 +1,95 @@
+extends ../../layouts/default.pug
+
+block main
+
+  - function fmt(n) { return (n || 0).toLocaleString('vi-VN') + ' đ' }
+
+  .box-head(style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;")
+    h1.box-title= pageTitle
+    a.button.button-outline(
+      href=`/${pathAdmin}/super-admin/finance?startDate=${startDate}&endDate=${endDate}&companyId=${companyFilter}&type=${typeFilter}&export=csv`
+    )
+      i.fa-solid.fa-file-csv
+      |  Xuất CSV
+
+  .section-4
+    form.inner-wrap(method="GET" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;")
+      .inner-item
+        label(style="font-size:12px;color:#64748b;display:block;") Từ
+        input(type="date" name="startDate" value=startDate style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;")
+      .inner-item
+        label(style="font-size:12px;color:#64748b;display:block;") Đến
+        input(type="date" name="endDate" value=endDate style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;")
+      .inner-item
+        label(style="font-size:12px;color:#64748b;display:block;") Loại
+        select(name="type" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+          option(value="all" selected=typeFilter==='all') Tất cả
+          option(value="tour" selected=typeFilter==='tour') Tour
+          option(value="hotel" selected=typeFilter==='hotel') Khách sạn
+      .inner-item
+        label(style="font-size:12px;color:#64748b;display:block;") Công ty
+        select(name="companyId" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+          option(value="" selected=!companyFilter) Tất cả công ty
+          each co in allCompanies
+            option(value=co._id selected=companyFilter===String(co._id))= co.name
+      .inner-item(style="align-self:flex-end;")
+        button(type="submit" style="height:38px;padding:0 18px;background:var(--color-primary);color:#fff;border:0;border-radius:4px;font-weight:600;") Lọc
+        a(href=`/${pathAdmin}/super-admin/finance` style="margin-left:8px;color:#64748b;") Xóa lọc
+
+  //- KPI totals
+  .section-6(style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px;")
+    .inner-card(style="background:#eff6ff;padding:16px;border-radius:8px;")
+      div(style="color:#1d4ed8;font-size:12px;") Tổng doanh thu
+      div(style="font-size:22px;font-weight:700;color:#1e3a8a;")= fmt(totals.totalRevenue)
+    .inner-card(style="background:#f0fdf4;padding:16px;border-radius:8px;")
+      div(style="color:#15803d;font-size:12px;") Doanh thu Tour
+      div(style="font-size:22px;font-weight:700;color:#14532d;")= fmt(totals.tourRevenue)
+      div(style="font-size:12px;color:#64748b;") #{totals.tourOrderCount} đơn
+    .inner-card(style="background:#fff7ed;padding:16px;border-radius:8px;")
+      div(style="color:#c2410c;font-size:12px;") Doanh thu Khách sạn
+      div(style="font-size:22px;font-weight:700;color:#7c2d12;")= fmt(totals.hotelRevenue)
+      div(style="font-size:12px;color:#64748b;") #{totals.hotelBookingCount} booking
+    .inner-card(style="background:#faf5ff;padding:16px;border-radius:8px;")
+      div(style="color:#7e22ce;font-size:12px;") Số công ty có DT
+      div(style="font-size:22px;font-weight:700;color:#581c87;")= rows.length
+
+  .section-6
+    h3(style="margin:0 0 10px;font-size:16px;") Doanh thu theo công ty
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Công ty
+            th(class="inner-center") DT Tour
+            th(class="inner-center") Đơn Tour
+            th(class="inner-center") DT Khách sạn
+            th(class="inner-center") Booking
+            th(class="inner-center") Tổng DT
+            th(class="inner-center") Hành động
+        tbody
+          if rows && rows.length
+            each r, idx in rows
+              tr
+                td= idx + 1
+                td
+                  div(style="display:flex;align-items:center;gap:10px;")
+                    if r.companyLogo
+                      img(src=r.companyLogo alt=r.companyName style="width:28px;height:28px;border-radius:4px;object-fit:contain;border:1px solid #e5e7eb;")
+                    else
+                      i.fa-solid.fa-building(style="color:#cbd5e1;font-size:22px;")
+                    span= r.companyName
+                td(class="inner-center")= fmt(r.tourRevenue)
+                td(class="inner-center")= r.tourOrderCount
+                td(class="inner-center")= fmt(r.hotelRevenue)
+                td(class="inner-center")= r.hotelBookingCount
+                td(class="inner-center" style="font-weight:700;")= fmt(r.totalRevenue)
+                td(class="inner-center")
+                  a.inner-btn.inner-btn-view(
+                    href=`/${pathAdmin}/super-admin/orders/company/${r.companyId}`
+                    title="Xem đơn hàng"
+                  )
+                    i.fa-solid.fa-eye
+          else
+            tr
+              td(colspan="8" class="inner-center" style="padding:24px;color:#94a3b8;") Không có dữ liệu trong khoảng thời gian đã chọn

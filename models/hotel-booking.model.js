@@ -98,6 +98,14 @@ const schema = new Schema(
       ref: "TourSegment",
       default: null,
     },
+
+    // Khi booking này được tạo do khách đặt tour (mỗi roomSelections → 1 HotelBooking),
+    // lưu mã đơn tour gốc (Order.code) để có thể trả lại phòng khi khách hủy đơn.
+    orderCode: {
+      type: String,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -121,7 +129,6 @@ schema.index(
 
 // Index để tìm booking theo userId và code
 schema.index({ userId: 1 });
-schema.index({ code: 1 });
 
 const HotelBooking = mongoose.model("HotelBooking", schema);
 module.exports = HotelBooking;

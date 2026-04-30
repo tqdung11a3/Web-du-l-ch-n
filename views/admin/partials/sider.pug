@@ -1,6 +1,4 @@
-.sider-overlay
-nav.sider
-  //- Menu Tour du lịch
+mixin menuTour()
   ul.inner-menu.menu-tour
     li
       a(href=`/${pathAdmin}/dashboard`) <i class="fa-solid fa-gauge-high"></i> Tổng quan
@@ -13,16 +11,14 @@ nav.sider
     li
       a(href=`/${pathAdmin}/user/list`) <i class="fa-solid fa-user"></i> Quản lý người dùng
     li
-      a(href=`/${pathAdmin}/contact/list`) <i class="fa-solid fa-user-group"></i> Thông tin liên hệ
-    li
       a(href=`/${pathAdmin}/company/info`) <i class="fa-solid fa-building"></i> Công ty của tôi
     li
       a(href=`/${pathAdmin}/tour-hotel/list`) <i class="fa-solid fa-link"></i> Liên kết Tour – Khách sạn
     li
       a(href=`/${pathAdmin}/tour-hotel/link-requests`) <i class="fa-solid fa-paper-plane"></i> Yêu cầu đã gửi
-  
-  //- Menu Khách sạn
-  ul.inner-menu.menu-hotel(style="display: none;")
+
+mixin menuHotel(startHidden)
+  ul.inner-menu.menu-hotel(style=startHidden ? "display: none;" : "")
     li
       a(href=`/${pathAdmin}/hotel/dashboard`) <i class="fa-solid fa-chart-line"></i> Dashboard
     li
@@ -43,7 +39,17 @@ nav.sider
       a(href=`/${pathAdmin}/hotel/payments`) <i class="fa-solid fa-money-bill-wave"></i> Thanh toán
     li
       a(href=`/${pathAdmin}/hotel/reviews`) <i class="fa-solid fa-star"></i> Bình luận và đánh giá
-  
+
+.sider-overlay
+nav.sider
+  if isHotelOnlyAdmin
+    +menuHotel(false)
+  else if isTourOnlyAdmin
+    +menuTour()
+  else
+    +menuTour()
+    +menuHotel(true)
+
   hr
   //- Menu chung (luôn hiển thị)
   ul.inner-menu.menu-common

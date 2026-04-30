@@ -1,0 +1,82 @@
+extends ../../layouts/default.pug
+
+block main
+
+  .box-head
+    a.button.button-outline(
+      href=`/${pathAdmin}/super-admin/notifications`
+      style="margin-bottom:12px;display:inline-flex;align-items:center;gap:8px;"
+    )
+      i.fa-solid.fa-arrow-left
+      |  Danh sách thông báo
+    h1.box-title(style="margin-top:0")= pageTitle
+
+  .section-6
+    form#broadcast-form(style="max-width:760px;display:grid;gap:14px;")
+      .form-group
+        label(style="font-weight:600;") Tiêu đề
+        input(name="title" required style="width:100%;height:40px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+      .form-group
+        label(style="font-weight:600;") Nội dung
+        textarea(name="content" required rows="5" style="width:100%;padding:10px;border:1px solid #d5d5d5;border-radius:4px;")
+      .form-group(style="display:grid;grid-template-columns:1fr 1fr;gap:14px;")
+        div
+          label(style="font-weight:600;") Loại
+          select(name="type" style="width:100%;height:40px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;")
+            option(value="other") Khác
+            option(value="order") Đơn hàng
+            option(value="hotel_booking") Đặt phòng
+            option(value="review") Đánh giá
+        div
+          label(style="font-weight:600;") Link (tuỳ chọn)
+          input(name="link" placeholder="/admin/...." style="width:100%;height:40px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+      .form-group
+        label(style="font-weight:600;display:block;margin-bottom:6px;") Đối tượng nhận
+        div
+          label(style="margin-right:16px;")
+            input(type="radio" name="target" value="all" checked)
+            |  Tất cả công ty
+          label
+            input(type="radio" name="target" value="selected")
+            |  Chọn công ty cụ thể
+      .form-group#company-picker(style="display:none;")
+        label(style="font-weight:600;") Chọn công ty
+        select(name="companyIds" multiple size="10" style="width:100%;padding:8px;border:1px solid #d5d5d5;border-radius:4px;")
+          each co in allCompanies
+            option(value=co._id)= co.name
+      .form-group
+        button(type="submit" style="height:42px;padding:0 24px;background:var(--color-primary);color:#fff;border:0;border-radius:4px;font-weight:600;cursor:pointer;")
+          i.fa-solid.fa-paper-plane
+          |  Gửi thông báo
+
+  script.
+    const form = document.getElementById('broadcast-form');
+    const picker = document.getElementById('company-picker');
+    form.addEventListener('change', (e) => {
+      if (e.target.name === 'target') {
+        picker.style.display = e.target.value === 'selected' ? '' : 'none';
+      }
+    });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const companyIds = fd.getAll('companyIds');
+      const payload = {
+        title: fd.get('title'),
+        content: fd.get('content'),
+        type: fd.get('type'),
+        link: fd.get('link'),
+        target: fd.get('target'),
+        companyIds,
+      };
+      fetch(`/${window.location.pathname.split('/')[1]}/super-admin/notifications/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      .then(r => r.json())
+      .then(d => {
+        alert(d.message);
+        if (d.code === 'success') location.href = `/${window.location.pathname.split('/')[1]}/super-admin/notifications`;
+      });
+    });

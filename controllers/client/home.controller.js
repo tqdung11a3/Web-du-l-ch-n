@@ -10,6 +10,9 @@ const News = require("../../models/news.model"); // Thêm model News
 const Hotel = require("../../models/hotel.model");
 const moment = require("moment");
 const categoryHelper = require("../../helpers/category.helper");
+const {
+  normalizeSection4CategoryIds,
+} = require("../../helpers/website-setting-section4.helper");
 
 // Helper: gắn ratingAvg + ratingCount vào mảng tours
 async function attachRatings(tours) {
@@ -75,6 +78,83 @@ async function attachDepartureCities(tours) {
   });
 
   return tours;
+}
+
+/** Một block Section 4: danh mục gốc (active) + tối đa 8 tour */
+async function buildHomeSection4Block(categoryRootId) {
+  const root = String(categoryRootId || "");
+  if (!root || !mongoose.Types.ObjectId.isValid(root)) return null;
+
+  const categorySection4 = await Category.findOne({
+    _id: root,
+    deleted: false,
+    status: "active",
+  }).lean();
+  if (!categorySection4) return null;
+
+  const categoryChildSection4 = await categoryHelper.getCategoryChild(root);
+  const categoryChildIdSection4 = categoryChildSection4.map((item) => item.id);
+
+  let tourListSection4 = await Tour.find({
+    category: { $in: [root, ...categoryChildIdSection4] },
+    deleted: false,
+    status: "active",
+  })
+    .sort({ position: "asc" })
+    .limit(8)
+    .lean();
+
+  tourListSection4.forEach((item) => {
+    const oldP = Number(item.priceAdult || 0);
+    const newP = Number(item.priceNewAdult || 0);
+    item.discount = oldP > 0 ? Math.floor(((oldP - newP) / oldP) * 100) : 0;
+
+    if (item.departureDate) {
+      item.departureDateFormat = moment(item.departureDate).format(
+        "DD/MM/YYYY"
+      );
+    }
+    item.seatsRemaining = Number(item.seatsRemaining) || 0;
+
+    item.departuresWithSeats =
+      Array.isArray(item.departures) && item.departures.length > 0
+        ? item.departures
+            .filter((d) => d && d.departureDate)
+            .map((d) => ({
+              dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
+              seatsTotal: d.seatsTotal ?? 0,
+              seatsRemaining: d.seatsRemaining ?? 0,
+            }))
+        : [];
+  });
+
+  const validCompanyObjectIds = Array.from(
+    new Set(
+      tourListSection4
+        .map((t) => (t && t.companyId ? String(t.companyId) : ""))
+        .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+    )
+  ).map((id) => new mongoose.Types.ObjectId(id));
+
+  if (validCompanyObjectIds.length) {
+    const companies = await Company.find({
+      _id: { $in: validCompanyObjectIds },
+    })
+      .select("name slug logo hotline address")
+      .lean();
+
+    const companyMap = new Map(companies.map((c) => [String(c._id), c]));
+
+    tourListSection4.forEach((item) => {
+      const c = companyMap.get(String(item.companyId));
+      if (c) item.company = c;
+    });
+  }
+
+  await attachRatings(tourListSection4);
+  await attachDepartureCities(tourListSection4);
+
+  return { category: categorySection4, tours: tourListSection4 };
 }
 
 module.exports.home = async (req, res) => {
@@ -169,79 +249,11 @@ module.exports.home = async (req, res) => {
   await attachRatings(tourListSection2);
   await attachDepartureCities(tourListSection2);
 
-  // ====== SECTION 4 ======
-  const categoryIdSection4 = req.settingWebsiteInfo.categoryIdSection4;
-
-  const categorySection4 = await Category.findOne({
-    _id: categoryIdSection4,
-    deleted: false,
-    status: "active",
-  }).lean();
-
-  const categoryChildSection4 = await categoryHelper.getCategoryChild(
-    categoryIdSection4
-  );
-  const categoryChildIdSection4 = categoryChildSection4.map((item) => item.id);
-
-  let tourListSection4 = await Tour.find({
-    category: { $in: [categoryIdSection4, ...categoryChildIdSection4] },
-    deleted: false,
-    status: "active",
-  })
-    .sort({ position: "asc" })
-    .limit(8)
-    .lean();
-
-  tourListSection4.forEach((item) => {
-    const oldP = Number(item.priceAdult || 0);
-    const newP = Number(item.priceNewAdult || 0);
-    item.discount = oldP > 0 ? Math.floor(((oldP - newP) / oldP) * 100) : 0;
-
-    if (item.departureDate) {
-      item.departureDateFormat = moment(item.departureDate).format(
-        "DD/MM/YYYY"
-      );
-    }
-    item.seatsRemaining = Number(item.seatsRemaining) || 0;
-
-    item.departuresWithSeats =
-      Array.isArray(item.departures) && item.departures.length > 0
-        ? item.departures
-            .filter((d) => d && d.departureDate)
-            .map((d) => ({
-              dateFormatted: moment(d.departureDate).format("DD/MM/YYYY"),
-              seatsTotal: d.seatsTotal ?? 0,
-              seatsRemaining: d.seatsRemaining ?? 0,
-            }))
-        : [];
-  });
-
-  const validCompanyObjectIds = Array.from(
-    new Set(
-      tourListSection4
-        .map((t) => (t && t.companyId ? String(t.companyId) : ""))
-        .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
-    )
-  ).map((id) => new mongoose.Types.ObjectId(id));
-
-  if (validCompanyObjectIds.length) {
-    const companies = await Company.find({
-      _id: { $in: validCompanyObjectIds },
-    })
-      .select("name slug logo hotline address")
-      .lean();
-
-    const companyMap = new Map(companies.map((c) => [String(c._id), c]));
-
-    tourListSection4.forEach((item) => {
-      const c = companyMap.get(String(item.companyId));
-      if (c) item.company = c;
-    });
-  }
-
-  // GẮN RATING + ĐIỂM KHỞI HÀNH cho SECTION 4
-  await attachRatings(tourListSection4);
-  await attachDepartureCities(tourListSection4);
+  // ====== SECTION 4 (nhiều danh mục, theo cấu hình website) ======
+  const section4Ids = normalizeSection4CategoryIds(req.settingWebsiteInfo);
+  const sections4Blocks = (
+    await Promise.all(section4Ids.map((id) => buildHomeSection4Block(id)))
+  ).filter(Boolean);
 
   // ====== SECTION 8: TIN TỨC MỚI ======
   // Lấy 5 tin tức mới nhất (1 tin nổi bật lớn + 4 tin thường)
@@ -301,8 +313,9 @@ module.exports.home = async (req, res) => {
     .select("name slug logo hotline email website address description overview createdAt")
     .lean();
 
-  // Đếm số lượng tour đang active cho từng công ty
+  // Đếm số lượng tour / khách sạn đang active cho từng công ty
   let tourCountsByCompany = {};
+  let hotelCountsByCompany = {};
   if (partnerCompanies.length) {
     const companyIds = partnerCompanies.map((c) => c._id);
 
@@ -325,15 +338,36 @@ module.exports.home = async (req, res) => {
     tourCountsByCompany = Object.fromEntries(
       tourCounts.map((t) => [String(t._id), t.count])
     );
+
+    const hotelCounts = await Hotel.aggregate([
+      {
+        $match: {
+          deleted: false,
+          status: "active",
+          companyId: { $in: companyIds },
+        },
+      },
+      {
+        $group: {
+          _id: "$companyId",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    hotelCountsByCompany = Object.fromEntries(
+      hotelCounts.map((h) => [String(h._id), h.count])
+    );
   }
 
-  // Dùng overview làm mô tả ngắn + gắn tourCounts
+  // Dùng overview làm mô tả ngắn + gắn tourCounts / hotelsCount
   partnerCompanies = partnerCompanies.map((c) => {
     const idStr = String(c._id);
     return {
       ...c,
       description: c.overview || c.description || "",
       toursCount: tourCountsByCompany[idStr] || 0,
+      hotelsCount: hotelCountsByCompany[idStr] || 0,
     };
   });
 
@@ -387,34 +421,36 @@ module.exports.home = async (req, res) => {
   });
 
   // ====== SECTION 10: THỐNG KÊ NGẮN ======
-  const [totalTours, totalPartners, totalCustomers, ratingAgg] = await Promise.all([
-    Tour.countDocuments({ deleted: { $ne: true }, status: "active" }),
-    Company.countDocuments({ deleted: { $ne: true }, status: "active" }),
-    Order.countDocuments({ deleted: { $ne: true }, paymentStatus: "paid" }),
-    Review.aggregate([
-      { $match: { deleted: false } },
-      {
-        $group: {
-          _id: null,
-          avg: { $avg: "$rating" },
+  const [totalTours, totalHotels, totalPartners, totalCustomers, ratingAgg] =
+    await Promise.all([
+      Tour.countDocuments({ deleted: { $ne: true }, status: "active" }),
+      Hotel.countDocuments({ deleted: false, status: "active" }),
+      Company.countDocuments({ deleted: { $ne: true }, status: "active" }),
+      Order.countDocuments({ deleted: { $ne: true }, paymentStatus: "paid" }),
+      Review.aggregate([
+        { $match: { deleted: false } },
+        {
+          $group: {
+            _id: null,
+            avg: { $avg: "$rating" },
+          },
         },
-      },
-    ]),
-  ]);
+      ]),
+    ]);
 
   const avgRating = ratingAgg && ratingAgg[0] ? ratingAgg[0].avg : 0;
 
   res.render("client/pages/home", {
     pageTitle: "Trang chủ",
     tourListSection2,
-    tourListSection4,
-    categorySection4,
+    sections4Blocks,
     hotelListHome,
     featuredNews,
     regularNews,
     partnerCompanies,
     stats: {
       totalTours,
+      totalHotels,
       totalPartners,
       totalCustomers,
       avgRating,

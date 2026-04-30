@@ -1,0 +1,147 @@
+extends ../../layouts/default.pug
+
+block main
+
+  .box-head
+    a.button.button-outline(
+      href=`/${pathAdmin}/super-admin/hotel-link-requests`
+      style="margin-bottom:12px;display:inline-flex;align-items:center;gap:8px;"
+    )
+      i.fa-solid.fa-arrow-left
+      |  Danh sách yêu cầu
+    h1.box-title(style="margin-top:0")= pageTitle
+
+  .section-6(style="display:grid;grid-template-columns:1fr 1fr;gap:16px;")
+    .card(style="background:#f8fafc;padding:16px;border-radius:8px;")
+      h3(style="margin:0 0 12px;font-size:15px;") Thông tin yêu cầu
+      div
+        strong Trạng thái: 
+        case doc.status
+          when 'pending'
+            span.badge.badge-orange Chờ duyệt
+          when 'approved'
+            span.badge.badge-green Đã duyệt
+          when 'partially_approved'
+            span.badge.badge-blue Duyệt một phần
+          when 'rejected'
+            span.badge.badge-red Từ chối
+          when 'cancelled'
+            span.badge.badge-red Đã huỷ
+          default
+            span= doc.status
+      div
+        strong Công ty gửi: 
+        span= doc.fromCompanyName
+      div
+        strong Công ty nhận: 
+        span= doc.toCompanyName
+      div
+        strong Ngày tạo: 
+        span= doc.createdAtDisplay
+      if doc.note
+        div
+          strong Ghi chú gửi: 
+          span= doc.note
+      if doc.responseNote
+        div
+          strong Phản hồi/ghi chú: 
+          span(style="white-space:pre-wrap;")= doc.responseNote
+
+    .card(style="background:#f8fafc;padding:16px;border-radius:8px;")
+      h3(style="margin:0 0 12px;font-size:15px;") Tour & Khách sạn
+      div
+        strong Tour: 
+        span= doc.tourName || '-'
+      if tour && tour.code
+        div
+          strong Mã tour: 
+          span= tour.code
+      div
+        strong Khách sạn: 
+        span= doc.hotelName || '-'
+      if hotel && hotel.address
+        div(style="font-size:12px;color:#64748b;")= hotel.address
+      div
+        strong Ngày khởi hành: 
+        span= doc.departureDateDisplay
+      div
+        strong Ngày kết thúc: 
+        span= doc.endDateDisplay
+
+  .section-6(style="margin-top:16px;")
+    h3(style="margin:0 0 8px;font-size:15px;") Các loại phòng yêu cầu
+    .table-2
+      table
+        thead
+          tr
+            th Loại phòng
+            th Từ ngày
+            th Đến ngày
+            th Y/c phòng
+            th Đã duyệt
+            th Số người / phòng
+        tbody
+          - var approvedMap = {};
+          each ar in doc.approvedRooms || []
+            - approvedMap[String(ar.roomTypeId)] = ar.approvedRooms || 0;
+          if doc.requestedRooms && doc.requestedRooms.length
+            each rr in doc.requestedRooms
+              tr
+                td= rr.roomTypeName
+                td= rr.fromDateDisplay
+                td= rr.toDateDisplay
+                td= rr.assignedRooms
+                td= approvedMap[String(rr.roomTypeId)] || 0
+                td= rr.baseOccupancy
+          else
+            tr
+              td(colspan="6" class="inner-center") Không có thông tin phòng
+
+  if holdBookings && holdBookings.length
+    .section-6(style="margin-top:16px;")
+      h3(style="margin:0 0 8px;font-size:15px;") Các bản giữ phòng đã tạo (#{holdBookings.length})
+      .table-2
+        table
+          thead
+            tr
+              th Mã
+              th Loại phòng
+              th Check-in
+              th Check-out
+              th Trạng thái
+          tbody
+            each b in holdBookings
+              tr
+                td= b.code
+                td(style="max-width:200px;")= b.roomTypeName || '—'
+                td= b.checkIn ? new Date(b.checkIn).toLocaleDateString('vi-VN') : '-'
+                td= b.checkOut ? new Date(b.checkOut).toLocaleDateString('vi-VN') : '-'
+                td= b.status
+
+  //- Tạm ẩn nút Super Admin huỷ cưỡng chế
+  //- if doc.status !== 'cancelled'
+  //-   .section-6(style="margin-top:16px;")
+  //-     button.button.button-danger(
+  //-       type="button"
+  //-       onclick=`forceCancel('${doc._id}')`
+  //-       style="background:#dc2626;color:#fff;border:0;padding:10px 18px;border-radius:4px;cursor:pointer;"
+  //-     )
+  //-       i.fa-solid.fa-ban
+  //-       |  Super Admin huỷ cưỡng chế
+  //-
+  //-   script.
+  //-     function forceCancel(id) {
+  //-       const reason = prompt('Lý do huỷ cưỡng chế (bắt buộc):', '');
+  //-       if (reason === null) return;
+  //-       if (!reason.trim()) { alert('Vui lòng nhập lý do.'); return; }
+  //-       fetch(`/${window.location.pathname.split('/')[1]}/super-admin/hotel-link-requests/${id}/force-cancel`, {
+  //-         method: 'PATCH',
+  //-         headers: { 'Content-Type': 'application/json' },
+  //-         body: JSON.stringify({ reason })
+  //-       })
+  //-       .then(r => r.json())
+  //-       .then(d => {
+  //-         alert(d.message);
+  //-         if (d.code === 'success') location.reload();
+  //-       });
+  //-     }

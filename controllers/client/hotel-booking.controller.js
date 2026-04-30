@@ -6,6 +6,7 @@ const Hotel = require("../../models/hotel.model");
 const Notification = require("../../models/notification.model");
 const moment = require("moment");
 const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
+const auditLogHelper = require("../../helpers/audit-log.helper");
 
 /**
  * PATCH /hotel-booking/transfer-proof
@@ -370,14 +371,16 @@ module.exports.createPost = async (req, res) => {
     const total = subtotal + extraOccupancyFee + tax + fee + additionalServicesTotal;
     console.log('TOTAL:', total);
 
-    // Tạo base code cho toàn bộ đơn
-    const baseCode = "HB" + generateRandomNumber(10);
-    
-    // Tạo 1 booking cho mỗi item (loại phòng)
+    // ── Kiểm tra tổng thể availability cho TẤT CẢ loại phòng trước khi tạo ──
+    // Không return ngay khi gặp loại phòng đầu tiên bị thiếu — tích lũy mọi
+    // xung đột để báo cho khách một lần, phân loại rõ "đang có khách đặt"
+    // (giữ chỗ chưa thanh toán) vs "đã có khách đặt" (đã thanh toán).
+    const roomConflicts = [];
+    const nowDate = new Date();
+
     for (let itemIndex = 0; itemIndex < cart.items.length; itemIndex++) {
       const item = cart.items[itemIndex];
-      
-      // Kiểm tra availability (đủ phòng trống không)
+
       const availableRooms = getAvailableRoomsForType(
         individualRooms,
         item.roomTypeId,
@@ -386,12 +389,77 @@ module.exports.createPost = async (req, res) => {
         checkOutMoment.toDate()
       );
 
-      if (availableRooms.length < item.quantity) {
-        return res.json({ 
-          code: "error", 
-          message: `Loại phòng ${item.roomTypeName} chỉ còn ${availableRooms.length} phòng trống!` 
-        });
+      if (availableRooms.length >= item.quantity) continue;
+
+      // Đếm số phòng đang bị chiếm bởi các booking khác (overlap, cùng
+      // roomTypeId, không cancelled/checked_out) — phân 2 nhóm.
+      let holdRoomsByOthers = 0;
+      let paidRoomsByOthers = 0;
+      for (const b of hotelBookings) {
+        if (b.status === "cancelled" || b.status === "checked_out") continue;
+        if (String(b.roomTypeId) !== String(item.roomTypeId)) continue;
+        // Tính cả booking đã/chưa gán roomId — vì đều chiếm chỗ loại phòng
+        // này trong khoảng thời gian trùng.
+        const roomsCount = Number(b.rooms || 1);
+        if (b.paymentStatus === "paid") {
+          paidRoomsByOthers += roomsCount;
+        } else if (
+          b.isTemporaryHold &&
+          (!b.holdExpiresAt || new Date(b.holdExpiresAt) > nowDate)
+        ) {
+          holdRoomsByOthers += roomsCount;
+        }
       }
+
+      let kind;
+      let blockedCount;
+      if (holdRoomsByOthers > 0) {
+        kind = "hold";
+        blockedCount = holdRoomsByOthers;
+      } else if (paidRoomsByOthers > 0) {
+        kind = "paid";
+        blockedCount = paidRoomsByOthers;
+      } else {
+        kind = "shortage";
+        blockedCount = 0;
+      }
+
+      roomConflicts.push({
+        kind,
+        roomTypeName: item.roomTypeName,
+        hotelName: hotel.name,
+        blockedCount,
+        availableForClient: availableRooms.length,
+      });
+    }
+
+    if (roomConflicts.length > 0) {
+      const buildLine = (c) => {
+        const hotelLabel = c.hotelName ? ` tại ${c.hotelName}` : "";
+        if (c.kind === "hold") {
+          return `Đang có khách đặt ${c.blockedCount} phòng cho loại phòng "${c.roomTypeName}"${hotelLabel}. Vui lòng chọn loại phòng khác.`;
+        }
+        if (c.kind === "paid") {
+          return `Đã có khách đặt ${c.blockedCount} phòng cho loại phòng "${c.roomTypeName}"${hotelLabel}, hiện loại phòng đó còn ${c.availableForClient} phòng.`;
+        }
+        return `Loại phòng "${c.roomTypeName}"${hotelLabel} chỉ còn ${c.availableForClient} phòng. Vui lòng chọn lại.`;
+      };
+
+      const message =
+        roomConflicts.length === 1
+          ? buildLine(roomConflicts[0])
+          : "Một số loại phòng bạn chọn không còn đủ:\n" +
+            roomConflicts.map((c, i) => `${i + 1}. ${buildLine(c)}`).join("\n");
+
+      return res.json({ code: "error", message });
+    }
+
+    // Tạo base code cho toàn bộ đơn
+    const baseCode = "HB" + generateRandomNumber(10);
+    
+    // Tạo 1 booking cho mỗi item (loại phòng)
+    for (let itemIndex = 0; itemIndex < cart.items.length; itemIndex++) {
+      const item = cart.items[itemIndex];
 
       // Tạo code với suffix nếu có nhiều items
       // Item đầu tiên: HB123, Item thứ 2: HB123-1, Item thứ 3: HB123-2, ...
@@ -474,6 +542,24 @@ module.exports.createPost = async (req, res) => {
       });
 
       await booking.save();
+
+      auditLogHelper.log(req, {
+        action: "customer.hotel-booking.create",
+        resourceType: "HotelBooking",
+        resourceId: booking._id,
+        resourceLabel: code,
+        asCompanyId: hotel.companyId || null,
+        after: {
+          hotel: hotel.name,
+          roomTypeId: String(item.roomTypeId || ""),
+          rooms: item.quantity,
+          nights: item.nights,
+          totalAmount: booking.totalAmount,
+          paymentMethod: booking.paymentMethod,
+        },
+        summary: `Khách đặt ${item.quantity} phòng tại "${hotel.name}" (${item.nights} đêm) — mã ${code}`,
+        metadata: { phone: phone || "", email: email || "" },
+      });
 
       // ── Kiểm tra race condition sau khi lưu (optimistic locking) ──────────
       // Lấy TẤT CẢ bookings cùng roomType, cùng ngày (bao gồm booking vừa tạo)
@@ -645,7 +731,7 @@ module.exports.paymentVNPay = async (req, res) => {
     let signData = querystring.stringify(vnp_Params, { encode: false });
     let crypto = require("crypto");
     let hmac = crypto.createHmac("sha512", secretKey);
-    let signed = hmac.update(new Buffer(signData, "utf-8")).digest("hex");
+    let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
     vnp_Params["vnp_SecureHash"] = signed;
     vnpUrl += "?" + querystring.stringify(vnp_Params, { encode: false });
 
@@ -677,7 +763,7 @@ module.exports.paymentVNPayResult = async (req, res) => {
     let signData = querystring.stringify(vnp_Params, { encode: false });
     let crypto = require("crypto");
     let hmac = crypto.createHmac("sha512", secretKey);
-    let signed = hmac.update(new Buffer(signData, "utf-8")).digest("hex");
+    let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
     if (secureHash === signed) {
       // Parse vnp_TxnRef: format là "bookingCode-phone-timestamp"

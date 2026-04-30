@@ -25,8 +25,8 @@ block main
       .detail-row
         .detail-label Ngày đăng ký:
         .detail-value
-          if customer.createdAt
-            = new Date(customer.createdAt).toLocaleDateString('vi-VN') + ' ' + new Date(customer.createdAt).toLocaleTimeString('vi-VN')
+          if customer.registrationDateTimeDisplay && customer.registrationDateTimeDisplay !== 'N/A'
+            = customer.registrationDateTimeDisplay
           else
             span(style="color: #999;") N/A
 
@@ -70,7 +70,7 @@ block main
                 td= new Date(order.createdAt).toLocaleDateString('vi-VN')
                 td
                   .inner-buttons
-                    a.inner-btn.inner-btn-view(href=`/${pathAdmin}/super-admin/orders/${order._id}`, title="Xem chi tiết")
+                    a.inner-btn.inner-btn-view(href=order.superAdminTourDetailUrl title="Xem chi tiết")
                       <i class="fa-solid fa-eye"></i>
   else
     .section-6(style="margin-top: 30px;")

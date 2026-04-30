@@ -2,11 +2,34 @@ extends ../layouts/default.pug
 
 block main
   - var _orderReadOnly = readOnly === true
+  - var _soBanner = (typeof superAdminOverrideBanner !== 'undefined') ? superAdminOverrideBanner : null
   h1.box-title= _orderReadOnly ? ('Chi tiết đơn: ' + orderDetail.code) : ('Đơn hàng: ' + orderDetail.code)
+
+  if _soBanner
+    .box(style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:10px 14px;border-radius:6px;margin-bottom:14px;display:flex;gap:10px;align-items:center;")
+      i.fa-solid.fa-user-shield
+      div
+        strong Super Admin Override. 
+        |  Bạn đang thao tác với tư cách công ty 
+        if _soBanner.companyName
+          strong(style="color:#78350f;")= _soBanner.companyName
+        else
+          code= _soBanner.companyId
+        | . Mọi thay đổi sẽ được ghi audit log.
+
+  if _orderReadOnly && typeof superAdminOverrideEditUrl !== 'undefined' && superAdminOverrideEditUrl
+    .box(style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:10px 14px;border-radius:6px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;")
+      div
+        i.fa-solid.fa-circle-info
+        |  Đang xem ở chế độ chỉ đọc của Super Admin.
+      a.button.button-primary(href=superAdminOverrideEditUrl style="background:#1e40af;color:#fff;border:0;padding:8px 14px;border-radius:4px;text-decoration:none;")
+        i.fa-solid.fa-pen
+        |  Chỉnh sửa với tư cách công ty này
 
   //- Section 8
   .section-8(class=_orderReadOnly ? 'order-section--readonly' : '')
-    form#order-edit-form(data-read-only=(_orderReadOnly ? '1' : '0'))
+    - var _orderPatchUrl = (_soBanner && _soBanner.companyId) ? `/${pathAdmin}/super-admin/as-company/${_soBanner.companyId}/orders/${orderDetail._id}` : null
+    form#order-edit-form(data-read-only=(_orderReadOnly ? '1' : '0') data-patch-url=_orderPatchUrl)
       .inner-group(style="display: none;")
         label(for="id" class="inner-label") Id
         input(type="text" id="id" name="id" value=orderDetail._id)
@@ -96,11 +119,119 @@ block main
                               span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
                       div Ngày khởi hành: #{item.departureDateFormat}
                       div Khởi hành tại: #{item.cityName}
-              if item.roomSelections && item.roomSelections.length
+              //- Hình thức lưu trú: ở riêng vs ở ghép.
+              - var accMode = item.accommodationMode === 'shared' ? 'shared' : 'private'
+              .inner-order-accommodation-mode
+                if accMode === 'shared'
+                  span.badge.badge--blue
+                    i.fa-solid.fa-people-group(style="margin-right:4px")
+                    | Ở ghép
+                else
+                  span.badge.badge--gray
+                    i.fa-solid.fa-bed(style="margin-right:4px")
+                    | Ở riêng
+              if accMode === 'shared' && item.sharedRoomRequest && item.sharedRoomRequest.length
+                .inner-order-block.inner-order-block--hotels
+                  .inner-order-rooms__title
+                    i.fa-solid.fa-people-group(style="margin-right:6px;color:#606060")
+                    | Yêu cầu ở ghép — đã được hệ thống tự xếp phòng
+                  each r in item.sharedRoomRequest
+                    .inner-order-rooms__seg
+                      .inner-order-rooms__seg-header #{r.fromDate} → #{r.toDate}
+                      //- Khối multi-hotel: nếu có hotelAllocations → render từng
+                      //- hotel kèm chi tiết atom; nếu không → fallback hotel
+                      //- chính (đơn cũ).
+                      if r.hotelAllocations && r.hotelAllocations.length > 0
+                        each alloc in r.hotelAllocations
+                          .inner-order-rooms__hotel
+                            .inner-order-rooms__hotel-name
+                              i.fa-solid.fa-hotel(style="margin-right:4px;color:#6366f1")
+                              span= alloc.hotelName || '—'
+                              if alloc.atomLabels && alloc.atomLabels.length
+                                span(style="font-size:12px;color:#64748b;margin-left:6px") (#{alloc.atomLabels.length} nhóm — sức chứa #{alloc.totalEffectiveSize})
+                            if alloc.atomLabels && alloc.atomLabels.length
+                              .inner-order-rooms__row(style="flex-wrap:wrap;gap:4px")
+                                each lbl in alloc.atomLabels
+                                  span.badge.badge--gray(style="font-size:12px") #{lbl}
+                            if alloc.roomAssignments && alloc.roomAssignments.length
+                              .inner-order-rooms__row(style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:6px;font-size:12.5px")
+                                .inner-order-rooms__type(style="font-weight:600;color:#475569")
+                                  i.fa-solid.fa-bed(style="margin-right:4px;color:#0ea5e9")
+                                  | Phòng đã giữ tự động:
+                                each ra, rai in alloc.roomAssignments
+                                  .inner-order-rooms__row(style="gap:8px;background:#f8fafc;padding:6px 8px;border-radius:6px;width:100%;align-items:center")
+                                    span.badge(class=(ra.gender === 'female' ? 'badge--pink' : 'badge--blue'), style="font-size:11.5px")
+                                      = ra.gender === 'female' ? 'Phòng nữ' : 'Phòng nam'
+                                    span(style="font-weight:600") #{ra.roomTypeName || 'Phòng'}
+                                    span(style="color:#64748b") (sức chứa #{ra.usedCapacity}/#{ra.baseOccupancy})
+                                    if ra.atomLabels && ra.atomLabels.length
+                                      span(style="color:#0f172a") • #{ra.atomLabels.join(', ')}
+                      else
+                        .inner-order-rooms__hotel
+                          .inner-order-rooms__hotel-name #{r.hotelName || '—'}
+                          .inner-order-rooms__row
+                            span.inner-order-rooms__type Yêu cầu #{Number(r.males) || 0} nam, #{Number(r.females) || 0} nữ
+                      if r.candidateHotels && r.candidateHotels.length > 1
+                        .inner-order-rooms__row(style="font-size:12px;color:#64748b;margin-top:2px")
+                          | Thứ tự ưu tiên: 
+                          each h, hi in r.candidateHotels
+                            if hi > 0
+                              | , 
+                            span= h.hotelName || h.hotelId
+                  //- Bảng "Hành khách" hiển thị từng người + người trông trẻ.
+                  if item.passengers && item.passengers.length
+                    -
+                      var psList = item.passengers || [];
+                      var adultByIdx = {};
+                      psList.forEach(function(p){ if (p.type === 'adult') adultByIdx[p.idx] = p; });
+                    .inner-order-passengers(style="margin-top:10px")
+                      .inner-order-rooms__title(style="font-size:13px;margin-bottom:6px")
+                        i.fa-solid.fa-id-card(style="margin-right:6px;color:#606060")
+                        | Danh sách hành khách
+                      table.passenger-admin-table(style="width:100%;border-collapse:collapse;font-size:13px")
+                        thead
+                          tr(style="background:#f1f5f9;color:#475569")
+                            th(style="padding:6px;text-align:left") #
+                            th(style="padding:6px;text-align:left") Họ tên
+                            th(style="padding:6px;text-align:center") Tuổi
+                            th(style="padding:6px;text-align:center") Loại
+                            th(style="padding:6px;text-align:center") Giới tính
+                            th(style="padding:6px;text-align:left") Đi cùng
+                        tbody
+                          each p, pi in psList
+                            tr(style="border-top:1px solid #e2e8f0")
+                              td(style="padding:6px") #{p.idx + 1}
+                              td(style="padding:6px") #{p.name || '—'}
+                              td(style="padding:6px;text-align:center") #{p.age}
+                              td(style="padding:6px;text-align:center")
+                                if p.type === 'adult'
+                                  span.badge.badge--blue Người lớn
+                                else if p.type === 'child'
+                                  span.badge.badge--yellow Trẻ em
+                                else
+                                  span.badge.badge--pink Em bé
+                              td(style="padding:6px;text-align:center")
+                                if p.gender === 'male'
+                                  | Nam
+                                else if p.gender === 'female'
+                                  | Nữ
+                                else
+                                  | —
+                              td(style="padding:6px;color:#475569")
+                                if p.type === 'adult'
+                                  | (Tự lập)
+                                else if adultByIdx[p.guardianIdx]
+                                  | #{adultByIdx[p.guardianIdx].name || ('Người lớn #' + (p.guardianIdx + 1))}
+                                else
+                                  | —
+              else if item.roomSelections && item.roomSelections.length
+                -
+                  var paxByIdxPrivate = {};
+                  (item.passengers || []).forEach(function(p){ paxByIdxPrivate[p.idx] = p; });
                 .inner-order-block.inner-order-block--hotels
                   .inner-order-rooms__title
                     i.fa-solid.fa-bed(style="margin-right:6px;color:#606060")
-                    | Phòng khách sạn đã chọn
+                    | Phòng khách sạn đã chọn (ở riêng)
                   - var segMap = {}
                   each rs in item.roomSelections
                     - var segKey = (rs.fromDate || '') + '__' + (rs.toDate || '')
@@ -121,16 +252,77 @@ block main
                               span.inner-order-rooms__type #{rs.roomTypeName}
                               span.inner-order-rooms__qty #{rs.selectedRooms} phòng
                               span.inner-order-rooms__occ (#{rs.baseOccupancy} người/phòng)
+                            //- Phân bổ hành khách vào từng phòng vật lý.
+                            if rs.roomAssignments && rs.roomAssignments.length && (item.passengers || []).length
+                              .inner-room-assignments(style="margin-top:6px;margin-left:4px")
+                                each a, ridx in rs.roomAssignments
+                                  .inner-room-assign-row
+                                    .inner-room-assign-row__title
+                                      i.fa-solid.fa-bed(style="margin-right:4px;color:#0071c2")
+                                      | Phòng #{rs.roomTypeName} ##{ridx + 1}
+                                      if a.usedCapacity !== undefined && a.usedCapacity !== null
+                                        span(style="font-size:11.5px;color:#64748b;margin-left:4px") · sức chứa quy đổi #{a.usedCapacity}/#{rs.baseOccupancy}
+                                    .inner-room-assign-row__pax
+                                      if !a.passengerIdxs || a.passengerIdxs.length === 0
+                                        span.inner-room-assign-empty — chưa gán hành khách —
+                                      else
+                                        each idx in a.passengerIdxs
+                                          - var p = paxByIdxPrivate[idx]
+                                          if p
+                                            span.inner-room-assign-pax(class=`inner-room-assign-pax--${p.type || 'adult'}`)
+                                              strong= p.name || ('Hành khách #' + (idx + 1))
+                                              span.inner-room-assign-pax__meta
+                                                = ' ' + (p.type === 'child' ? 'TE' : p.type === 'baby' ? 'EB' : 'NL')
+                                                if p.age !== undefined && p.age !== ''
+                                                  = ' · ' + p.age + 't'
+                                                if p.gender === 'male'
+                                                  = ' · Nam'
+                                                else if p.gender === 'female'
+                                                  = ' · Nữ'
                   if item.extraRoomCost && item.extraRoomCost > 0
                     .inner-order-extra-cost
-                      i.fa-solid.fa-circle-exclamation(style="margin-right:4px;color:#b45309")
-                      | Chi phí phòng dư: 
+                      i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
+                      | Chi phí phòng (ở riêng): 
                       strong #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
+                  //- Bảng hành khách (ở riêng).
+                  if item.passengers && item.passengers.length
+                    .inner-order-passengers(style="margin-top:10px")
+                      .inner-order-rooms__title(style="font-size:13px;margin-bottom:6px")
+                        i.fa-solid.fa-id-card(style="margin-right:6px;color:#606060")
+                        | Danh sách hành khách
+                      table.passenger-admin-table(style="width:100%;border-collapse:collapse;font-size:13px")
+                        thead
+                          tr(style="background:#f1f5f9;color:#475569")
+                            th(style="padding:6px;text-align:left") #
+                            th(style="padding:6px;text-align:left") Họ tên
+                            th(style="padding:6px;text-align:center") Tuổi
+                            th(style="padding:6px;text-align:center") Loại
+                            th(style="padding:6px;text-align:center") Giới tính
+                        tbody
+                          each p in item.passengers
+                            tr(style="border-top:1px solid #e2e8f0")
+                              td(style="padding:6px") #{p.idx + 1}
+                              td(style="padding:6px") #{p.name || '—'}
+                              td(style="padding:6px;text-align:center") #{p.age}
+                              td(style="padding:6px;text-align:center")
+                                if p.type === 'adult'
+                                  span.badge.badge--blue Người lớn
+                                else if p.type === 'child'
+                                  span.badge.badge--yellow Trẻ em
+                                else
+                                  span.badge.badge--pink Em bé
+                              td(style="padding:6px;text-align:center")
+                                if p.gender === 'male'
+                                  | Nam
+                                else if p.gender === 'female'
+                                  | Nữ
+                                else
+                                  | —
               else if item.extraRoomCost && item.extraRoomCost > 0
                 .inner-order-block.inner-order-block--hotels
                   .inner-order-extra-cost
-                    i.fa-solid.fa-circle-exclamation(style="margin-right:4px;color:#b45309")
-                    | Chi phí phòng dư: 
+                    i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
+                    | Chi phí phòng: 
                     strong #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
       .inner-group
         label(class="inner-label") Thanh toán
@@ -168,3 +360,14 @@ block main
           el.disabled = true;
         });
       });
+
+  style.
+    .inner-ages-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      margin-top: 4px;
+    }
+    .inner-age-tag {
+      display: inline-block;
+    }

@@ -2,6 +2,7 @@
 const mongoose = require("mongoose");
 const HotelReview = require("../../models/hotel-review.model");
 const Hotel = require("../../models/hotel.model");
+const auditLogHelper = require("../../helpers/audit-log.helper");
 
 // Tính lại rating trung bình của hotel
 async function recomputeHotelRating(hotelId) {
@@ -81,7 +82,7 @@ module.exports.list = async (req, res) => {
       Math.min(50, parseInt(req.query.limit || "10", 10))
     );
 
-    const filter = { hotelId, deleted: false };
+    const filter = { hotelId, deleted: false, hiddenBySuperAdmin: { $ne: true } };
     const [items, total] = await Promise.all([
       HotelReview.find(filter)
         .sort({ createdAt: -1 })
@@ -167,6 +168,20 @@ module.exports.createOrUpdate = async (req, res) => {
 
     // Tính lại thống kê
     await recomputeHotelRating(hotelId);
+
+    const hotelDoc = await Hotel.findById(hotelId).select("name companyId").lean();
+    auditLogHelper.log(req, {
+      action: "customer.hotel-review.create",
+      resourceType: "HotelReview",
+      resourceId: doc._id,
+      resourceLabel: (hotelDoc && hotelDoc.name) || String(hotelId),
+      asCompanyId: hotelDoc?.companyId || null,
+      after: {
+        ratingOverall,
+        content: content ? content.slice(0, 200) : "",
+      },
+      summary: `Khách đánh giá ${ratingOverall}/10 cho khách sạn "${(hotelDoc && hotelDoc.name) || ""}"`,
+    });
 
     return res.json({
       code: "success",

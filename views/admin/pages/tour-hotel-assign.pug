@@ -36,15 +36,15 @@ block main
 
   //- ── Danh sách khách hàng ────────────────────────────────────────────────
   .assign-customer-list-section
-    h2.assign-col__title
-      i.fa-solid.fa-list-check
-      |  Khách hàng đã đặt (#{customers.length} đơn)
+      h2.assign-col__title
+        i.fa-solid.fa-list-check
+        |  Khách hàng đã đặt (#{customers.length} đơn)
 
-    if customers.length === 0
-      .assign-empty
-        i.fa-solid.fa-circle-info
-        |  Chưa có đơn hàng thanh toán nào cho lịch khởi hành này.
-    else
+      if customers.length === 0
+        .assign-empty
+          i.fa-solid.fa-circle-info
+          |  Chưa có đơn hàng thanh toán nào cho lịch khởi hành này.
+      else
       .assign-cust-table-wrap
         table.assign-cust-table
           thead
@@ -62,21 +62,19 @@ block main
                 td= idx + 1
                 td
                   .assign-cust-table__name
-                    i.fa-solid.fa-user
-                    |  #{cust.guestName || 'Khách'}
+                  i.fa-solid.fa-user
+                  |  #{cust.guestName || 'Khách'}
                 td= cust.phone || '—'
                 td
                   span.assign-cust-table__code= '#' + cust.orderCode
                 td
                   span.assign-pax-badge.assign-pax-badge--adult
                     | #{cust.quantityAdult} NL
-                  if cust.quantityChildren > 0
-                    |  
-                    span.assign-pax-badge.assign-pax-badge--child
+                if cust.quantityChildren > 0
+                  span.assign-pax-badge.assign-pax-badge--child
                       | #{cust.quantityChildren} TE
-                  if cust.quantityBaby > 0
-                    |  
-                    span.assign-pax-badge.assign-pax-badge--baby
+                if cust.quantityBaby > 0
+                  span.assign-pax-badge.assign-pax-badge--baby
                       | #{cust.quantityBaby} EB
                 td
                   if cust.assignStatus === 'complete'
@@ -93,7 +91,7 @@ block main
                       |  Gán chưa đủ (#{cust.assignedCount} phòng)
                   else
                     span.assign-status-badge.assign-status-badge--none
-                      i.fa-solid.fa-triangle-exclamation
+                    i.fa-solid.fa-triangle-exclamation
                       |  Chưa gán phòng
                 td
                   a.btn-assign-detail(href=`/${pathAdmin}/tour-hotel/assign/${tourSeg._id}?orderId=${cust.orderId}`)

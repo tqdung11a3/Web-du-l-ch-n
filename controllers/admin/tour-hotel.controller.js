@@ -10,6 +10,7 @@ const HotelBooking= require("../../models/hotel-booking.model");
 const TourSegment = require("../../models/tour-segment.model");
 const HotelLinkRequest = require("../../models/hotel-link-request.model");
 const Order       = require("../../models/order.model");
+const AccountUser = require("../../models/account-user.model");
 
 const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
 const { generateRandomNumber }     = require("../../helpers/generate.helper");
@@ -18,6 +19,7 @@ const moment = require("moment");
 const {
   HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
 } = require("../../helpers/hotel-link-request-note.helper");
+const auditLogHelper = require("../../helpers/audit-log.helper");
 
 // ── Danh sách tour của company ───────────────────────────────────────────────
 module.exports.list = async (req, res) => {
@@ -37,14 +39,63 @@ module.exports.list = async (req, res) => {
       .select("_id tourId departureDate status")
       .lean();
 
+    // Chuẩn hoá trạng thái hiển thị từ link request thực tế. Với mỗi
+    // (segment, hotelId) chỉ xét request mới nhất (sort theo createdAt DESC
+    // và lọc trùng) để bỏ qua các request cũ đã reject/cancel ở vòng trước.
+    //   pending     → "pending_approval" (Chờ duyệt KS khác)
+    //   rejected    → "rejected"         (Bị <company> từ chối)
+    //   cancelled   → "draft"            (Bản nháp, bên gửi/Super Admin huỷ)
+    //   còn lại     → giữ trạng thái segment hiện tại (confirmed / draft).
+    const segmentIds = existing.map((s) => s._id);
+    const linkRequests = segmentIds.length
+      ? await HotelLinkRequest.find({ tourSegmentId: { $in: segmentIds } })
+          .select("tourSegmentId status toCompanyName hotelId createdAt")
+          .sort({ createdAt: -1 })
+          .lean()
+      : [];
+    const requestsBySegment = {};
+    for (const r of linkRequests) {
+      const key = String(r.tourSegmentId);
+      const list = (requestsBySegment[key] = requestsBySegment[key] || {
+        seenHotels: new Set(),
+        latest: [],
+      });
+      const hotelKey = String(r.hotelId);
+      if (list.seenHotels.has(hotelKey)) continue;
+      list.seenHotels.add(hotelKey);
+      list.latest.push(r);
+    }
+
     const configuredMap = {};
     for (const seg of existing) {
       const key = String(seg.tourId);
       if (!configuredMap[key]) configuredMap[key] = [];
+
+      const bucket = requestsBySegment[String(seg._id)];
+      const segRequests = bucket ? bucket.latest : [];
+      let effectiveStatus = seg.status;
+      let rejectedByCompanyName = "";
+      if (segRequests.length > 0) {
+        const hasPending = segRequests.some((r) => r.status === "pending");
+        const rejectedReq = segRequests.find((r) => r.status === "rejected");
+        const hasCancelled = segRequests.some((r) => r.status === "cancelled");
+        if (hasPending) {
+          effectiveStatus = "pending_approval";
+        } else if (rejectedReq) {
+          effectiveStatus = "rejected";
+          rejectedByCompanyName = rejectedReq.toCompanyName || "";
+        } else if (hasCancelled) {
+          effectiveStatus = "draft";
+        } else {
+          effectiveStatus = "confirmed";
+        }
+      }
+
       configuredMap[key].push({
-        segmentId:        String(seg._id),
-        departureDateStr: moment(seg.departureDate).format("YYYY-MM-DD"),
-        status:           seg.status,
+        segmentId:             String(seg._id),
+        departureDateStr:      moment(seg.departureDate).format("YYYY-MM-DD"),
+        status:                effectiveStatus,
+        rejectedByCompanyName,
       });
     }
 
@@ -106,6 +157,68 @@ module.exports.detail = async (req, res) => {
           tourId,
           departureDate: new Date(departureDateParam),
         }).lean();
+
+        // Heal DB status cho chính segment này theo luật latest-per-hotel —
+        // tránh trường hợp DB còn mắc kẹt ở "rejected" cũ dù link request mới
+        // đã được duyệt (dữ liệu trước khi helper được nâng cấp).
+        if (existingSegment) {
+          try {
+            const {
+              _recomputeTourSegmentStatus,
+            } = require("./hotel-link-request.controller");
+            await _recomputeTourSegmentStatus(existingSegment._id);
+            existingSegment = await TourSegment.findById(existingSegment._id).lean();
+          } catch (healErr) {
+            console.error(
+              "[tour-hotel.detail] heal status error:",
+              healErr
+            );
+          }
+        }
+
+        // Đồng bộ trạng thái hiển thị với link request thực tế. Chỉ xét request
+        // mới nhất theo createdAt cho mỗi hotel để các request cũ đã
+        // reject/cancel ở vòng trước không đè lên kết quả sau khi admin gửi
+        // lại và được chấp nhận.
+        if (existingSegment) {
+          const allRequests = await HotelLinkRequest.find({
+            tourSegmentId: existingSegment._id,
+          })
+            .select("status toCompanyName hotelId hotelName responseNote createdAt")
+            .sort({ createdAt: -1 })
+            .lean();
+
+          const seenHotels = new Set();
+          const segRequests = [];
+          for (const r of allRequests) {
+            const key = String(r.hotelId);
+            if (seenHotels.has(key)) continue;
+            seenHotels.add(key);
+            segRequests.push(r);
+          }
+
+          if (segRequests.length > 0) {
+            const hasPending = segRequests.some((r) => r.status === "pending");
+            const rejectedReq = segRequests.find((r) => r.status === "rejected");
+            const hasCancelled = segRequests.some(
+              (r) => r.status === "cancelled"
+            );
+            if (hasPending) {
+              existingSegment.status = "pending_approval";
+            } else if (rejectedReq) {
+              existingSegment.status = "rejected";
+              existingSegment.rejectedByCompanyName =
+                rejectedReq.toCompanyName || "";
+              existingSegment.rejectedHotelName = rejectedReq.hotelName || "";
+              existingSegment.rejectedResponseNote =
+                rejectedReq.responseNote || "";
+            } else if (hasCancelled) {
+              existingSegment.status = "draft";
+            } else {
+              existingSegment.status = "confirmed";
+            }
+          }
+        }
       }
     }
 
@@ -519,13 +632,29 @@ module.exports.confirmSegments = async (req, res) => {
 
       newLinkRequestIds.push(linkRequest._id);
 
+      auditLogHelper.log(req, {
+        action: "hotel-link-request.create",
+        resourceType: "HotelLinkRequest",
+        resourceId: linkRequest._id,
+        resourceLabel: `${hotelDoc.name} – ${tourName}`,
+        after: {
+          status: "pending",
+          fromCompanyId: String(companyId),
+          toCompanyId: String(hotelDoc.companyId),
+          hotelId: String(hotelDoc._id),
+          tourId: String(tourId),
+        },
+        summary: `Gửi yêu cầu liên kết khách sạn "${hotelDoc.name}" cho tour "${tourName}"`,
+        metadata: { requestedRooms: requestedRooms.length },
+      });
+
       // Gửi notification cho company sở hữu khách sạn
       await Notification.create({
         companyId: hotelDoc.companyId,
         type: "other",
         title: "Yêu cầu liên kết khách sạn mới",
         content: `${fromCompanyName} yêu cầu giữ phòng tại ${hotelDoc.name} cho tour "${tourName}" (${depDateFmt} – ${endDateFmt})`,
-        link: `/admin/hotel/link-requests`,
+        link: `/${pathAdmin}/hotel/link-requests`,
       });
     }
 
@@ -756,7 +885,11 @@ module.exports.assign = async (req, res) => {
         suggestedHotelId:     allocation?.allocations?.[0]?.hotelId || null,
         suggestedHotelName:   allocation?.allocations?.[0]?.hotelName || "",
         hotelAllocation:      allocation,
+        accommodationMode:
+          matchedItem.accommodationMode === "shared" ? "shared" : "private",
         roomSelections:       Array.isArray(matchedItem.roomSelections) ? matchedItem.roomSelections : [],
+        sharedRoomRequest:    Array.isArray(matchedItem.sharedRoomRequest) ? matchedItem.sharedRoomRequest : [],
+        passengers:           Array.isArray(matchedItem.passengers) ? matchedItem.passengers : [],
         extraRoomCost:        Number(matchedItem.extraRoomCost || 0),
       });
     }
@@ -963,15 +1096,51 @@ module.exports.saveAssignments = async (req, res) => {
       };
     });
 
-    // ── Đồng bộ guest info vào HotelBooking ──────────────────────────────────
+    // ── Đồng bộ guest info + orderCode vào HotelBooking ─────────────────────
+    const assignOrderIds = [
+      ...new Set(cleanAssignments.map((x) => x.orderId).filter(Boolean)),
+    ];
+    const assignOrders =
+      assignOrderIds.length > 0
+        ? await Order.find({ _id: { $in: assignOrderIds } })
+            .select("_id email userId")
+            .lean()
+        : [];
+    const assignOrderById = Object.fromEntries(
+      assignOrders.map((o) => [String(o._id), o])
+    );
+    const assignUserIds = [
+      ...new Set(
+        assignOrders
+          .filter((o) => !String(o.email || "").trim() && o.userId)
+          .map((o) => String(o.userId))
+      ),
+    ];
+    let assignUserEmailById = {};
+    if (assignUserIds.length) {
+      const urows = await AccountUser.find({ _id: { $in: assignUserIds } })
+        .select("email")
+        .lean();
+      assignUserEmailById = Object.fromEntries(
+        urows.map((u) => [String(u._id), String(u.email || "").trim()])
+      );
+    }
+
     const newAssignedBookingIds = new Set();
     for (const a of cleanAssignments) {
       const hb = holdMap[String(a.holdBookingId)] || null;
       if (!hb) continue;
       newAssignedBookingIds.add(String(hb._id));
+      const oa = assignOrderById[String(a.orderId)] || null;
+      let guestEmail = (oa?.email && String(oa.email).trim()) || "";
+      if (!guestEmail && oa?.userId) {
+        guestEmail = assignUserEmailById[String(oa.userId)] || "";
+      }
       await HotelBooking.findByIdAndUpdate(hb._id, {
+        orderCode: a.orderCode || "",
         "guest.fullName": a.guestName || "Khách tour",
-        "guest.phone":    a.phone || "",
+        "guest.phone": a.phone || "",
+        "guest.email": guestEmail,
         note: `[TOUR] Đơn #${a.orderCode} – ${a.guestName || ""} – ${a.numPeople} người/phòng (loại phòng)`,
       });
     }

@@ -1,0 +1,89 @@
+extends ../../layouts/default.pug
+
+block main
+
+  h1.box-title= pageTitle
+
+  .section-4
+    form.inner-wrap(method="GET" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;")
+      .inner-item
+        select(name="fromCompanyId" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+          option(value="" selected=!fromCompanyId) Tất cả công ty gửi
+          each co in allCompanies
+            option(value=co._id selected=fromCompanyId===String(co._id))= co.name
+      .inner-item
+        select(name="toCompanyId" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+          option(value="" selected=!toCompanyId) Tất cả công ty nhận
+          each co in allCompanies
+            option(value=co._id selected=toCompanyId===String(co._id))= co.name
+      .inner-item
+        select(name="status" style="height:38px;padding:0 12px;border:1px solid #d5d5d5;border-radius:4px;")
+          option(value="" selected=!statusFilter) Tất cả trạng thái
+          option(value="pending" selected=statusFilter==='pending') Chờ duyệt
+          option(value="approved" selected=statusFilter==='approved') Đã duyệt
+          option(value="partially_approved" selected=statusFilter==='partially_approved') Duyệt một phần
+          option(value="rejected" selected=statusFilter==='rejected') Từ chối
+          option(value="cancelled" selected=statusFilter==='cancelled') Đã huỷ
+      .inner-item
+        button(type="submit" style="height:38px;padding:0 18px;background:var(--color-primary);color:#fff;border:0;border-radius:4px;font-weight:600;") Lọc
+        a(href=`/${pathAdmin}/super-admin/hotel-link-requests` style="margin-left:8px;color:#64748b;") Xóa lọc
+
+  .section-6
+    .table-2
+      table
+        thead
+          tr
+            th STT
+            th Từ
+            th Đến
+            th Tour
+            th Khách sạn
+            th Ngày khởi hành
+            th Y/c
+            th Duyệt
+            th Trạng thái
+            th Ngày tạo
+            th(class="inner-center") Hành động
+        tbody
+          if items && items.length
+            each it, idx in items
+              tr
+                td= (pagination.skip || 0) + idx + 1
+                td(style="max-width:140px;font-size:13px;")= it.fromCompanyName || '-'
+                td(style="max-width:140px;font-size:13px;")= it.toCompanyName || '-'
+                td(style="max-width:180px;font-size:13px;")= it.tourName || '-'
+                td(style="max-width:160px;font-size:13px;")= it.hotelName || '-'
+                td(style="font-size:12px;")= it.departureDateDisplay
+                td.text-center= it.totalRequestedRooms
+                td.text-center= it.totalApprovedRooms
+                td
+                  case it.status
+                    when 'pending'
+                      span.badge.badge-orange Chờ
+                    when 'approved'
+                      span.badge.badge-green Đã duyệt
+                    when 'partially_approved'
+                      span.badge.badge-blue Một phần
+                    when 'rejected'
+                      span.badge.badge-red Từ chối
+                    when 'cancelled'
+                      span.badge.badge-red Đã huỷ
+                    default
+                      span.badge= it.status
+                td(style="font-size:12px;")= it.createdAtDisplay
+                td(class="inner-center")
+                  a.inner-btn.inner-btn-view(
+                    href=`/${pathAdmin}/super-admin/hotel-link-requests/${it._id}`
+                    title="Xem chi tiết"
+                  )
+                    i.fa-solid.fa-eye
+          else
+            tr
+              td(colspan="11" class="inner-center" style="padding:24px;color:#94a3b8;") Không có yêu cầu
+
+  if pagination && pagination.totalPage > 1
+    .section-7
+      span.inner-label Hiển thị #{pagination.skip + 1} - #{Math.min(pagination.skip + pagination.limitItems, pagination.totalRecord)} của #{pagination.totalRecord}
+      select(class="inner-pagination" box-pagination)
+        - for (let i = 1; i <= pagination.totalPage; i++)
+          option(value=i selected=(i === pagination.currentPage)) Trang #{i}

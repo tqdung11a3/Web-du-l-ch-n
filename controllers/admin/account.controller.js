@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const AccountAdmin = require("../../models/account-admin.model");
 const Company = require("../../models/company.model");
+const Role = require("../../models/role.model");
+const Hotel = require("../../models/hotel.model");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { generateRandomNumber } = require("../../helpers/generate.helper");
@@ -15,6 +17,58 @@ const slugify = (s) =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+
+/** URL đích sau đăng nhập cho company admin (theo phạm vi menu / nhóm quyền). */
+async function getCompanyAdminLoginRedirect(account) {
+  const pathAdmin = global.pathAdmin || "admin";
+  const base = `/${pathAdmin}`;
+
+  const scope = account.tabAccessScope || "inherit";
+
+  async function firstHotelDashboardUrl() {
+    const firstHotel = await Hotel.findOne({
+      companyId: account.companyId,
+      deleted: { $ne: true },
+    })
+      .sort({ name: 1 })
+      .select("_id")
+      .lean();
+    if (firstHotel?._id) {
+      return `${base}/hotel/dashboard?hotelId=${firstHotel._id}`;
+    }
+    return `${base}/hotel/dashboard`;
+  }
+
+  if (scope === "hotel_only") {
+    return firstHotelDashboardUrl();
+  }
+
+  if (scope === "tour_only" || scope === "full") {
+    return `${base}/dashboard`;
+  }
+
+  // inherit: giống loadRolePermissions — chỉ dùng Role nếu có tour-access / hotel-access
+  if (!account.role) {
+    return `${base}/dashboard`;
+  }
+
+  const role = await Role.findOne({
+    _id: account.role,
+    deleted: { $ne: true },
+  })
+    .select("permissions")
+    .lean();
+
+  const perms = role?.permissions || [];
+  const hasTour = perms.includes("tour-access");
+  const hasHotel = perms.includes("hotel-access");
+
+  if (hasHotel && !hasTour) {
+    return firstHotelDashboardUrl();
+  }
+
+  return `${base}/dashboard`;
+}
 
 module.exports.login = async (req, res) => {
   res.render("admin/pages/login", {
@@ -72,9 +126,12 @@ module.exports.loginPost = async (req, res) => {
     sameSite: "strict",
   });
 
-  const redirectUrl = existAccount.isSuperAdmin
-    ? `/${global.pathAdmin}/super-admin/dashboard`
-    : `/${global.pathAdmin}/dashboard`;
+  let redirectUrl;
+  if (existAccount.isSuperAdmin) {
+    redirectUrl = `/${global.pathAdmin}/super-admin/dashboard`;
+  } else {
+    redirectUrl = await getCompanyAdminLoginRedirect(existAccount);
+  }
 
   res.json({
     code: "success",

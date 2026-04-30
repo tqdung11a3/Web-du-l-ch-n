@@ -77,7 +77,7 @@
 }
 
 .btn-assign-room {
-  background: #4880ff;
+  background: #2d3e90;
   color: white;
   border: none;
   padding: 10px 20px;
@@ -213,7 +213,7 @@
 
 .booking-count-badge {
   display: inline-block;
-  background: #4880ff;
+  background: #2d3e90;
   color: white;
   padding: 4px 10px;
   border-radius: 12px;
@@ -237,7 +237,7 @@
 }
 
 .btn-view-bookings:hover {
-  background: #4880ff;
+  background: #2d3e90;
   color: white;
 }
 
@@ -317,7 +317,7 @@
 
 .detail-row i {
   width: 20px;
-  color: #4880ff;
+  color: #2d3e90;
   font-size: 14px;
 }
 
@@ -441,7 +441,7 @@
 }
 
 .room-option:hover {
-  border-color: #4880ff;
+  border-color: #2d3e90;
   background: #F0F6FF;
 }
 
@@ -497,7 +497,7 @@
 }
 
 .btn-confirm {
-  background: #4880ff;
+  background: #2d3e90;
   color: white;
 }
 
@@ -670,3 +670,15 @@
   font-weight: 500;
 }
 
+
+/* ── Passenger block trong booking detail modal (room-management) ── */
+.rm-pax-block { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; }
+.rm-pax-title { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; display: flex; align-items: center; }
+.rm-pax-list { display: flex; flex-direction: column; gap: 5px; margin-left: 24px; }
+.rm-pax-row { display: flex; align-items: center; gap: 7px; font-size: 13.5px; flex-wrap: wrap; }
+.rm-pax-name { color: #0f172a; font-weight: 500; }
+.rm-pax-meta { color: #64748b; font-size: 12px; }
+.rm-pax-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; background: #e2e8f0; color: #475569; }
+.rm-pax--adult { background: #dbeafe; color: #1e40af; }
+.rm-pax--child { background: #fef3c7; color: #92400e; }
+.rm-pax--baby  { background: #fce7f3; color: #9d174d; }

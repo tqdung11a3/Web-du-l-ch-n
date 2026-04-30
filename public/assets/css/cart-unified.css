@@ -196,11 +196,26 @@
   font-size: 14px;
 }
 
+.hotel-checkout-section .payment-method-item input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: #0071c2;
+}
+
+.hotel-checkout-section .payment-method-item label {
+  cursor: pointer;
+  flex: 1;
+  line-height: 1.45;
+}
+
 .hotel-checkout-section .inner-info-bank {
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f3f4ff;
-  border: 1px dashed #c4c6f5;
+  background: #f0f8ff;
+  border: 1px dashed rgba(0, 113, 194, 0.35);
   margin-bottom: 16px;
   font-size: 13px;
   display: none;
@@ -218,6 +233,7 @@
 .hotel-checkout-section .checkout-actions {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   margin-top: 8px;
 }
@@ -227,29 +243,42 @@
   align-items: center;
   gap: 8px;
   border: none;
-  border-radius: 999px;
-  padding: 10px 24px;
-  background: #e11d48;
+  border-radius: 8px;
+  padding: 12px 24px;
+  background: #0071c2;
   color: #fff;
   font-weight: 600;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .hotel-checkout-section .btn-checkout:hover {
-  background: #be123c;
+  background: #005999;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 113, 194, 0.3);
 }
 
 .hotel-checkout-section .btn-continue-shopping {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #2563eb;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  color: #0071c2;
+  background: #fff;
+  border: 2px solid #0071c2;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .hotel-checkout-section .btn-continue-shopping:hover {
-  text-decoration: underline;
+  background: #0071c2;
+  color: #fff;
+  text-decoration: none;
 }
 
 @media (max-width: 768px) {
@@ -263,7 +292,7 @@
 
   .hotel-checkout-section .checkout-actions {
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
   }
 
   .hotel-checkout-section .btn-checkout,

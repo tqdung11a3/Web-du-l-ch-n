@@ -56,6 +56,9 @@ router.get("/booking/tour-holds/detail/:segmentId", hotelController.tourHoldDeta
 // Giải phóng phòng giữ chỗ tour chưa gán khách
 router.post("/booking/release-holds", hotelController.releaseHolds);
 
+// Cập nhật trạng thái riêng của từng khách ghép phòng (per-assignment)
+router.post("/booking/update-assignment-status", hotelController.updateAssignmentStatus);
+
 // Danh sách khách sạn
 router.get("/list", hotelController.list);
 

@@ -85,7 +85,96 @@ block main
                       | #{age}t
                     | )
             span.assign-pax-total  · #{customer.totalPeople} người
-          if customer.roomSelections && customer.roomSelections.length > 0
+          if customer.accommodationMode === 'shared'
+            span.assign-pax-badge(style="background:#dbeafe;color:#1e3a8a;margin-left:6px")
+              i.fa-solid.fa-people-group
+              |  Ở ghép
+          else
+            span.assign-pax-badge(style="background:#f1f5f9;color:#475569;margin-left:6px")
+              i.fa-solid.fa-bed
+              |  Ở riêng
+          -
+            var _isAutoAssigned = false;
+            if (customer.accommodationMode === 'shared' && Array.isArray(customer.sharedRoomRequest)) {
+              for (var _ri = 0; _ri < customer.sharedRoomRequest.length; _ri++) {
+                var _rr = customer.sharedRoomRequest[_ri];
+                var _als = (_rr && _rr.hotelAllocations) || [];
+                for (var _ai = 0; _ai < _als.length; _ai++) {
+                  var _al = _als[_ai];
+                  if ((_al.roomAssignments || []).length > 0) { _isAutoAssigned = true; break; }
+                }
+                if (_isAutoAssigned) break;
+              }
+            }
+          if customer.accommodationMode === 'shared' && customer.sharedRoomRequest && customer.sharedRoomRequest.length > 0
+            .assign-customer-card__booked-rooms
+              .assign-customer-card__booked-rooms-title
+                i.fa-solid.fa-people-group(style="margin-right:4px")
+                | Yêu cầu ở ghép:
+              each r in customer.sharedRoomRequest
+                .assign-booked-seg
+                  .assign-booked-seg__date= r.fromDate + ' → ' + r.toDate
+                  if r.hotelAllocations && r.hotelAllocations.length > 0
+                    each a in r.hotelAllocations
+                      .assign-booked-row
+                        span.assign-booked-row__hotel
+                          i.fa-solid.fa-hotel(style="margin-right:4px;color:#6366f1")
+                          = a.hotelName || '—'
+                        span.assign-booked-row__type= (a.atomLabels || []).length + ' nhóm · sức chứa ' + (a.totalEffectiveSize || 0)
+                      if a.roomAssignments && a.roomAssignments.length
+                        .assign-booked-row(style="flex-direction:column;align-items:flex-start;gap:4px;font-size:12.5px;margin-top:2px;padding-left:14px")
+                          span(style="color:#475569;font-weight:600")
+                            i.fa-solid.fa-bed(style="margin-right:4px;color:#0ea5e9")
+                            | Phòng tự gán:
+                          each ra in a.roomAssignments
+                            .assign-booked-row(style="gap:8px;background:#f8fafc;padding:6px 8px;border-radius:6px;width:100%;align-items:center")
+                              span(style="font-size:11px;padding:2px 6px;border-radius:4px;color:#fff;background:" + (ra.gender === 'female' ? '#ec4899' : '#3b82f6'))
+                                = ra.gender === 'female' ? 'Phòng nữ' : 'Phòng nam'
+                              span(style="font-weight:600") #{ra.roomTypeName || 'Phòng'}
+                              span(style="color:#64748b") (#{ra.usedCapacity}/#{ra.baseOccupancy})
+                    if r.hotelAllocations.length > 1
+                      .assign-booked-row(style="font-size:12px;color:#b45309")
+                        i.fa-solid.fa-circle-info(style="margin-right:4px")
+                        | Đoàn được chia trên #{r.hotelAllocations.length} khách sạn
+                  else
+                    .assign-booked-row
+                      span.assign-booked-row__hotel= r.hotelName
+                      span.assign-booked-row__type= 'Yêu cầu ' + (Number(r.males) || 0) + ' nam, ' + (Number(r.females) || 0) + ' nữ'
+
+            //- Family unit cards chỉ cần khi chưa có auto-assign.
+            if customer.passengers && customer.passengers.length && !_isAutoAssigned
+              -
+                var psList = customer.passengers || [];
+                var adultMap = {};
+                psList.forEach(function(p){ if (p.type === 'adult') adultMap[p.idx] = { adult: p, kids: [] }; });
+                psList.forEach(function(p){
+                  if (p.type !== 'adult' && adultMap[p.guardianIdx]) adultMap[p.guardianIdx].kids.push(p);
+                });
+                var atomList = Object.values(adultMap);
+              .assign-customer-card__atoms(style="margin-top:6px")
+                .assign-customer-card__booked-rooms-title
+                  i.fa-solid.fa-people-roof(style="margin-right:4px")
+                  | #{atomList.length} nhóm gia đình cần ở cùng phòng:
+                .assign-atom-list(style="display:flex;flex-direction:column;gap:6px;margin-top:4px")
+                  each atom in atomList
+                    .assign-atom-card(style="border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;background:#f8fafc;font-size:12px")
+                      div(style="font-weight:600;color:#0f172a")
+                        if atom.adult.gender === 'male'
+                          i.fa-solid.fa-mars(style="color:#3b82f6;margin-right:4px")
+                        else
+                          i.fa-solid.fa-venus(style="color:#ec4899;margin-right:4px")
+                        | #{atom.adult.name || ('Người lớn #' + (atom.adult.idx + 1))} (#{atom.adult.age}t)
+                      if atom.kids.length > 0
+                        div(style="color:#475569;margin-top:2px")
+                          | đi cùng:
+                          each k in atom.kids
+                            span(style="margin-left:6px;display:inline-block")
+                              if k.type === 'child'
+                                span(style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;margin-right:3px") TE
+                              else
+                                span(style="background:#fce7f3;color:#9d174d;padding:1px 5px;border-radius:4px;margin-right:3px") EB
+                              | #{k.name || '?'} (#{k.age}t)
+          else if customer.roomSelections && customer.roomSelections.length > 0
             .assign-customer-card__booked-rooms
               .assign-customer-card__booked-rooms-title
                 i.fa-solid.fa-bed(style="margin-right:4px")
@@ -108,7 +197,7 @@ block main
               if customer.extraRoomCost && customer.extraRoomCost > 0
                 .assign-booked-extra
                   i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
-                  | Chi phí phòng dư: #{Number(customer.extraRoomCost).toLocaleString('vi-VN')}đ
+                  | Chi phí phòng (ở riêng): #{Number(customer.extraRoomCost).toLocaleString('vi-VN')}đ
 
         //- Validation + assigned rooms (rendered by JS)
         .assign-customer-card__validation
@@ -131,6 +220,10 @@ block main
                     data-room-id=a.roomId
                   )
                     i.fa-solid.fa-xmark
+          else if _isAutoAssigned
+            span.assign-customer-card__autoassigned(style="display:inline-flex;align-items:center;gap:6px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;padding:6px 10px;border-radius:6px;font-weight:600;font-size:13px")
+              i.fa-solid.fa-circle-check
+              | Hệ thống đã tự xếp phòng cho khách ở ghép
           else
             span.assign-customer-card__unassigned
               i.fa-solid.fa-triangle-exclamation
@@ -556,6 +649,15 @@ block main
       if (!card) return;
       var myAssigns = assignments.filter(function(a) { return a.orderId === customer.orderId; });
       var container = card.querySelector('.assign-customer-card__rooms');
+      var isSharedAutoAssigned =
+        customer &&
+        customer.accommodationMode === 'shared' &&
+        Array.isArray(customer.sharedRoomRequest) &&
+        customer.sharedRoomRequest.some(function(r) {
+          return Array.isArray(r.hotelAllocations) && r.hotelAllocations.some(function(a) {
+            return Array.isArray(a.roomAssignments) && a.roomAssignments.length > 0;
+          });
+        });
 
       var valEl = card.querySelector('.assign-customer-card__validation');
       if (customer.roomSelections && customer.roomSelections.length > 0) {
@@ -581,6 +683,11 @@ block main
             + '<i class="fa-solid fa-xmark"></i></button>'
             + '</div>';
         }).join('');
+      } else if (isSharedAutoAssigned) {
+        container.innerHTML = '<span class="assign-customer-card__autoassigned"'
+          + ' style="display:inline-flex;align-items:center;gap:6px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;padding:6px 10px;border-radius:6px;font-weight:600;font-size:13px">'
+          + '<i class="fa-solid fa-circle-check"></i> Hệ thống đã tự xếp phòng cho khách ở ghép'
+          + '</span>';
       } else {
         container.innerHTML = '<span class="assign-customer-card__unassigned">'
           + '<i class="fa-solid fa-triangle-exclamation"></i> Chưa phân công phòng nào'

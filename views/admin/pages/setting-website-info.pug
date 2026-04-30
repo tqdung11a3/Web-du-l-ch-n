@@ -2,12 +2,13 @@ extends ../layouts/default.pug
 include ../mixins/options.pug
 
 block main
-  
+
   h1.box-title Thông tin website
 
   //- Section 8
+  - var _patchUrl = isSuperAdmin ? `/${pathAdmin}/super-admin/setting/website-info` : `/${pathAdmin}/setting/website-info`
   .section-8
-    form(id="setting-website-info-form")
+    form(id="setting-website-info-form" data-read-only=readOnly ? '1' : '' data-patch-url=_patchUrl)
       .inner-group
         label(for="websiteName" class="inner-label") Tên website
         input(type="text" id="websiteName" name="websiteName" value=record.websiteName)
@@ -23,28 +24,118 @@ block main
       .inner-group
         label(for="logo" class="inner-label") Logo
         .inner-upload-image(image-default=record.logo)
-          input(
-            type="file" 
-            id="logo"
-            name="logo"
-            filepond-image
+          input(type="file" id="logo" name="logo" filepond-image)
+
+      if !readOnly
+        //- ── SECTION 4 TAG PICKER (Super Admin) ──
+        .inner-group
+          label.inner-label Danh mục Section 4 trên trang chủ
+
+          //- Tag list hiện tại
+          #s4-tag-list(style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;min-height:32px;")
+            each id in section4CategoryIds
+              - var tagName = (section4CategoryMap && section4CategoryMap[id]) || id
+              .s4-tag(
+                data-id=id
+                style="display:inline-flex;align-items:center;gap:6px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;padding:4px 10px 4px 12px;border-radius:20px;font-size:13px;font-weight:500;"
+              )
+                span= tagName
+                button.s4-tag-remove(
+                  type="button"
+                  data-id=id
+                  title="Bỏ danh mục này"
+                  style="background:none;border:none;cursor:pointer;color:#0369a1;font-size:16px;line-height:1;padding:0 2px;"
+                ) ×
+
+          //- Picker: dropdown + nút thêm
+          .s4-picker(style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;")
+            select#s4-cat-select(style="height:38px;padding:0 10px;border:1px solid #d5d5d5;border-radius:4px;font-size:13px;min-width:280px;")
+              option(value="") -- Chọn danh mục --
+              each cat in categoryFlatSection4Active
+                option(value=cat.id)= cat.displayName
+            button#s4-add-btn(
+              type="button"
+              style="height:38px;padding:0 16px;background:#0ea5e9;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;"
             )
-      .inner-group
-        label(for="favicon" class="inner-label") Favicon
-        .inner-upload-image(image-default=record.favicon)
-          input(
-            type="file" 
-            id="favicon"
-            name="favicon"
-            filepond-image
-            )
-      .inner-group
-        label(for="categoryIdSection4" class="inner-label") Danh mục cho Section 4
-        select(id="categoryIdSection4" name="categoryIdSection4")
-          option(value="") -- Chọn danh mục -- 
-          +options(categoryList, 0, record.categoryIdSection4)
-      .inner-button.inner-two-col
-        button Cập nhật
+              i.fa-solid.fa-plus(style="margin-right:6px;")
+              | Thêm danh mục
+
+          //- Hidden inputs quản lý bởi JS
+          #s4-hidden(style="display:none;")
+            each id in section4CategoryIds
+              input(type="hidden" name="categoryIdsSection4" value=id)
+
+        .inner-button.inner-two-col
+          button Cập nhật
+
     .inner-back
-      a(href=`/${pathAdmin}/setting/list`) Quay lại danh sách
+      a(href=isSuperAdmin ? `/${pathAdmin}/super-admin/dashboard` : `/${pathAdmin}/setting/list`) Quay lại danh sách
   //- End Section 8
+
+  //- ── Scripts ──
+  if readOnly
+    script.
+      (function(){
+        var f = document.getElementById('setting-website-info-form');
+        if (!f) return;
+        f.querySelectorAll('input, select, textarea, button').forEach(function(el) {
+          if (el.tagName === 'BUTTON') el.style.display = 'none';
+          else { el.setAttribute('disabled', 'disabled'); el.style.pointerEvents='none'; el.style.opacity='0.85'; }
+        });
+        f.addEventListener('submit', function(e){ e.preventDefault(); });
+      })();
+
+  if !readOnly
+    script.
+      (function () {
+        var MAX = !{JSON.stringify(maxSection4Categories)};
+        var tagList   = document.getElementById('s4-tag-list');
+        var hiddenBox = document.getElementById('s4-hidden');
+        var catSelect = document.getElementById('s4-cat-select');
+        var addBtn    = document.getElementById('s4-add-btn');
+        if (!tagList || !hiddenBox || !catSelect || !addBtn) return;
+
+        function currentIds() {
+          return Array.from(hiddenBox.querySelectorAll('input[name="categoryIdsSection4"]')).map(function(i){ return i.value; });
+        }
+
+        function removeTag(id) {
+          var tag = tagList.querySelector('.s4-tag[data-id="' + id + '"]');
+          if (tag) tag.remove();
+          var inp = hiddenBox.querySelector('input[value="' + id + '"]');
+          if (inp) inp.remove();
+        }
+
+        tagList.addEventListener('click', function(e) {
+          var btn = e.target.closest('.s4-tag-remove');
+          if (!btn) return;
+          removeTag(btn.dataset.id);
+        });
+
+        addBtn.addEventListener('click', function() {
+          var val = catSelect.value;
+          var text = catSelect.options[catSelect.selectedIndex] ? catSelect.options[catSelect.selectedIndex].text : '';
+          if (!val) { alert('Vui lòng chọn một danh mục.'); return; }
+          var ids = currentIds();
+          if (ids.includes(val)) { alert('Danh mục này đã được thêm rồi.'); return; }
+          if (ids.length >= MAX) { alert('Đã đạt tối đa ' + MAX + ' danh mục.'); return; }
+
+          // Thêm tag
+          var tag = document.createElement('div');
+          tag.className = 's4-tag';
+          tag.dataset.id = val;
+          tag.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;padding:4px 10px 4px 12px;border-radius:20px;font-size:13px;font-weight:500;';
+          tag.innerHTML = '<span>' + text.trim() + '</span><button type="button" class="s4-tag-remove" data-id="' + val + '" title="Bỏ danh mục này" style="background:none;border:none;cursor:pointer;color:#0369a1;font-size:16px;line-height:1;padding:0 2px;">×</button>';
+          tagList.appendChild(tag);
+
+          // Thêm hidden input
+          var inp = document.createElement('input');
+          inp.type = 'hidden';
+          inp.name = 'categoryIdsSection4';
+          inp.value = val;
+          hiddenBox.appendChild(inp);
+
+          catSelect.value = '';
+        });
+      })();
+

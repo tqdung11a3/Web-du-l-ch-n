@@ -6,6 +6,9 @@ var notify = new Notyf({
     y: "top",
   },
   dismissible: true,
+  // Khi ripple: true, Notyf chỉ gán màu nền lên .notyf__ripple — nếu CSS ẩn
+  // ripple thì toast không còn nền đỏ. Tắt ripple để màu gán thẳng lên toast.
+  ripple: false,
 });
 
 let existNotify = sessionStorage.getItem("notify");

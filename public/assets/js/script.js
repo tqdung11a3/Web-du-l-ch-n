@@ -776,6 +776,68 @@ if (boxTourDetail) {
   const requiredWarning = boxTourDetail.querySelector(".room-selection-required-warning");
   const isRoomRequired = roomSelectionWrap && roomSelectionWrap.getAttribute("data-required") === "1";
 
+  // ── ACCOMMODATION MODE (Ở riêng / Ở ghép) ──────────────────────────────────
+  const modePicker = boxTourDetail.querySelector(".accommodation-mode-picker");
+  const sharedSelectionWrap = boxTourDetail.querySelector(
+    ".inner-shared-room-selection"
+  );
+  const sharedRequiredWarning = boxTourDetail.querySelector(
+    ".shared-room-required-warning"
+  );
+  const passengerListWrap = boxTourDetail.querySelector(
+    ".shared-passenger-list"
+  );
+  const passengerRowsWrap = boxTourDetail.querySelector(
+    ".shared-passenger-list__rows"
+  );
+  const passengerWarning = boxTourDetail.querySelector(
+    ".shared-passenger-list__warning"
+  );
+  const privateAssignmentWrap = boxTourDetail.querySelector(
+    ".private-room-assignment"
+  );
+  const privateAssignmentSegmentsEl = boxTourDetail.querySelector(
+    ".private-room-assignment__segments"
+  );
+  const privateAssignmentWarning = boxTourDetail.querySelector(
+    ".private-room-assignment__warning"
+  );
+
+  /**
+   * State của passenger list — lưu cục bộ (không gắn DOM) để tránh mất data
+   * khi re-render. Mỗi entry: { idx, name, age, type, gender, guardianIdx }.
+   * Index bám theo thứ tự render (NL trước, TE giữa, EB cuối) → khi user đổi
+   * số lượng ở quantity inputs, ta re-render và cố gắng giữ data theo idx.
+   */
+  let passengerState = [];
+
+  /**
+   * State phân bổ phòng cho mode "Ở riêng".
+   * Key: `${fromDate}|${toDate}|${hotelId}|${roomTypeId}|${roomIndex}` (1 phòng vật lý).
+   * Value: Set<number> — các idx hành khách đã gán vào phòng này.
+   * Mỗi segment có thể có nhiều hotel × roomType × room. State sống độc lập
+   * với DOM để tránh mất khi user đổi số phòng.
+   */
+  const privateAssignmentState = new Map();
+  function _privateAssignKey(fromDate, toDate, hotelId, roomTypeId, roomIndex) {
+    return [fromDate, toDate, hotelId, roomTypeId, roomIndex].join("|");
+  }
+  function _getAssignSet(key) {
+    if (!privateAssignmentState.has(key)) {
+      privateAssignmentState.set(key, new Set());
+    }
+    return privateAssignmentState.get(key);
+  }
+
+  /** Trả về mode hiện tại: "private" | "shared". Mặc định "private". */
+  function getAccommodationMode() {
+    if (!modePicker) return "private";
+    const checked = modePicker.querySelector(
+      'input[name="accommodationMode"]:checked'
+    );
+    return checked ? checked.value : "private";
+  }
+
   let segmentsData = [];
   if (roomSelectionWrap) {
     try { segmentsData = JSON.parse(roomSelectionWrap.getAttribute("data-room-segments") || "[]"); } catch (_) {}
@@ -848,13 +910,37 @@ if (boxTourDetail) {
     return { total, detail: parts.join("  |  ") };
   }
 
-  function getTotalSelectedRooms() {
-    let total = 0;
-    if (!roomSelectionWrap) return total;
-    roomSelectionWrap.querySelectorAll(".room-qty-input").forEach((inp) => {
-      total += Math.max(0, parseInt(inp?.value || "0", 10));
+  /** Đọc sức chứa quy đổi đoàn + tổng sức chứa phòng đã chọn trong một khung thời gian */
+  function getSegmentOccupancyAndSelections(segEl) {
+    const fromDate = segEl.getAttribute("data-from-date");
+    const toDate = segEl.getAttribute("data-to-date");
+    const segObj = getSegmentDataByKey(fromDate, toDate);
+    const mergedBands = segObj ? getMergedAgeBandsForSegment(segObj) : [];
+    const { total: totalOcc, detail } = calcOccupancyBreakdown(mergedBands);
+    let segTotalCap = 0;
+    const selectedItems = [];
+    segEl.querySelectorAll(".room-type-row").forEach((row) => {
+      const qty = Math.max(0, parseInt(row.querySelector(".room-qty-input")?.value || "0", 10));
+      if (qty <= 0) return;
+      const baseOcc = parseInt(row.getAttribute("data-base-occupancy") || "2", 10);
+      const pricePerNight = parseFloat(row.getAttribute("data-price-per-night") || "0");
+      const roomTypeName = row.querySelector(".room-type-row__name")?.textContent?.trim() || "";
+      const hotelBlock = row.closest(".room-hotel-block");
+      const hotelName = hotelBlock?.querySelector(".room-hotel-block__name")?.textContent?.trim() || "";
+      segTotalCap += qty * baseOcc;
+      selectedItems.push({ qty, baseOcc, pricePerNight, roomTypeName, hotelName });
     });
-    return total;
+    return { fromDate, toDate, totalOcc, detail, segTotalCap, selectedItems };
+  }
+
+  function hasRoomSegmentCapacityShortfall() {
+    if (!roomSelectionWrap) return false;
+    let bad = false;
+    roomSelectionWrap.querySelectorAll(".room-time-segment").forEach((segEl) => {
+      const m = getSegmentOccupancyAndSelections(segEl);
+      if (m.totalOcc > m.segTotalCap) bad = true;
+    });
+    return bad;
   }
 
   function collectRoomSelections() {
@@ -888,188 +974,1013 @@ if (boxTourDetail) {
     return selections;
   }
 
+  // ── Passenger list (chi tiết hành khách cho mode "Ở ghép") ──────────────
+  //
+  // Render row động dựa trên quantityAdult/Children/Baby. Index trong list:
+  //   [0..A-1] = adult, [A..A+C-1] = child, [A+C..A+C+B-1] = baby.
+  // State được preserve qua re-render bằng cách map theo idx + type.
+
+  function _readQuantityCounts() {
+    const adults = parseInt(
+      boxTourDetail.querySelector(`[name="quantityAdult"]`)?.value || "0",
+      10
+    ) || 0;
+    const children = parseInt(
+      boxTourDetail.querySelector(`[name="quantityChildren"]`)?.value || "0",
+      10
+    ) || 0;
+    const babies = parseInt(
+      boxTourDetail.querySelector(`[name="quantityBaby"]`)?.value || "0",
+      10
+    ) || 0;
+    return { adults, children, babies };
+  }
+
+  function _readChildAndBabyAgesFromMiniBlock() {
+    return {
+      childAges: collectAges(childrenAgesList),
+      babyAges: collectAges(babiesAgesList),
+    };
+  }
+
+  function _ensurePassengerSlots() {
+    const { adults, children, babies } = _readQuantityCounts();
+    const { childAges, babyAges } = _readChildAndBabyAgesFromMiniBlock();
+    const totalCount = adults + children + babies;
+    const newState = [];
+    for (let i = 0; i < adults; i++) {
+      const prev = passengerState.find((p) => p.idx === i && p.type === "adult");
+      newState.push({
+        idx: i,
+        type: "adult",
+        name: prev ? prev.name : "",
+        age: prev ? prev.age : "",
+        gender: prev ? prev.gender : "",
+        guardianIdx: null,
+      });
+    }
+    for (let i = 0; i < children; i++) {
+      const idx = adults + i;
+      const prev = passengerState.find((p) => p.idx === idx && p.type === "child");
+      const prevGuardian = prev && typeof prev.guardianIdx === "number" ? prev.guardianIdx : null;
+      const ageFromMini = Number.isFinite(Number(childAges[i]))
+        ? Math.max(0, parseInt(childAges[i], 10) || 0)
+        : "";
+      newState.push({
+        idx,
+        type: "child",
+        name: prev ? prev.name : "",
+        // Tuổi TE luôn đồng bộ từ khối "Tuổi hành khách nhỏ".
+        age: ageFromMini,
+        gender: "",
+        guardianIdx: prevGuardian !== null && prevGuardian < adults ? prevGuardian : null,
+      });
+    }
+    for (let i = 0; i < babies; i++) {
+      const idx = adults + children + i;
+      const prev = passengerState.find((p) => p.idx === idx && p.type === "baby");
+      const prevGuardian = prev && typeof prev.guardianIdx === "number" ? prev.guardianIdx : null;
+      const ageFromMini = Number.isFinite(Number(babyAges[i]))
+        ? Math.max(0, parseInt(babyAges[i], 10) || 0)
+        : "";
+      newState.push({
+        idx,
+        type: "baby",
+        name: prev ? prev.name : "",
+        // Tuổi em bé luôn đồng bộ từ khối "Tuổi hành khách nhỏ".
+        age: ageFromMini,
+        gender: "",
+        guardianIdx: prevGuardian !== null && prevGuardian < adults ? prevGuardian : null,
+      });
+    }
+    passengerState = newState;
+    return totalCount;
+  }
+
+  function _renderPassengerRow(p) {
+    const row = document.createElement("div");
+    row.className = "passenger-row";
+    row.setAttribute("data-idx", String(p.idx));
+    row.setAttribute("data-type", p.type);
+
+    const indexEl = document.createElement("span");
+    indexEl.className = "passenger-row__index";
+    indexEl.textContent = String(p.idx + 1);
+    row.appendChild(indexEl);
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "passenger-name";
+    nameInput.placeholder = "Họ tên";
+    nameInput.value = p.name || "";
+    nameInput.addEventListener("input", () => {
+      p.name = nameInput.value;
+      _refreshGuardianOptions();
+      updateRoomValidation();
+    });
+    row.appendChild(nameInput);
+
+    const ageInput = document.createElement("input");
+    ageInput.type = "number";
+    ageInput.className = "passenger-age";
+    ageInput.min = "0";
+    ageInput.max = "120";
+    ageInput.placeholder = "Tuổi";
+    ageInput.value = p.age === "" ? "" : String(p.age);
+    if (p.type !== "adult") {
+      // Trẻ em/em bé lấy tuổi từ khối "Tuổi hành khách nhỏ", không sửa tại đây.
+      ageInput.readOnly = true;
+      ageInput.title = "Tuổi được đồng bộ từ khối Tuổi hành khách nhỏ.";
+    }
+    ageInput.addEventListener("input", () => {
+      p.age = ageInput.value === "" ? "" : Math.max(0, parseInt(ageInput.value, 10) || 0);
+      updateRoomValidation();
+    });
+    row.appendChild(ageInput);
+
+    const badge = document.createElement("span");
+    badge.className =
+      "passenger-type-badge is-" + (p.type === "adult" ? "adult" : p.type === "child" ? "child" : "baby");
+    badge.textContent =
+      p.type === "adult" ? "Người lớn" : p.type === "child" ? "Trẻ em" : "Em bé";
+    row.appendChild(badge);
+
+    if (p.type === "adult") {
+      const genderWrap = document.createElement("div");
+      genderWrap.className = "passenger-gender";
+      ["male", "female"].forEach((g) => {
+        const lbl = document.createElement("label");
+        const inp = document.createElement("input");
+        inp.type = "radio";
+        inp.name = "passenger_gender_" + p.idx;
+        inp.value = g;
+        if (p.gender === g) inp.checked = true;
+        inp.addEventListener("change", () => {
+          if (inp.checked) {
+            p.gender = g;
+            updateRoomValidation();
+          }
+        });
+        lbl.appendChild(inp);
+        lbl.appendChild(document.createTextNode(g === "male" ? " Nam" : " Nữ"));
+        genderWrap.appendChild(lbl);
+      });
+      row.appendChild(genderWrap);
+    } else if (getAccommodationMode() === "shared") {
+      // Guardian select chỉ hiện khi ở ghép; ở riêng không cần.
+      const guardianSelect = document.createElement("select");
+      guardianSelect.className = "passenger-guardian";
+      guardianSelect.setAttribute("data-idx", String(p.idx));
+      guardianSelect.addEventListener("change", () => {
+        p.guardianIdx =
+          guardianSelect.value === "" ? null : parseInt(guardianSelect.value, 10);
+        updateRoomValidation();
+      });
+      row.appendChild(guardianSelect);
+    }
+
+    return row;
+  }
+
+  function _refreshGuardianOptions() {
+    if (!passengerRowsWrap) return;
+    // Ở mode "private" không có guardian select — không cần refresh.
+    if (getAccommodationMode() !== "shared") return;
+    const adults = passengerState.filter((p) => p.type === "adult");
+    passengerRowsWrap.querySelectorAll(".passenger-guardian").forEach((sel) => {
+      const idx = parseInt(sel.getAttribute("data-idx") || "-1", 10);
+      const ps = passengerState.find((p) => p.idx === idx);
+      if (!ps) return;
+      const prevValue = ps.guardianIdx === null ? "" : String(ps.guardianIdx);
+      sel.innerHTML = "";
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "-- Chọn người lớn đi cùng --";
+      sel.appendChild(empty);
+      adults.forEach((a) => {
+        const opt = document.createElement("option");
+        opt.value = String(a.idx);
+        const display = a.name && a.name.trim() ? a.name.trim() : "Người lớn #" + (a.idx + 1);
+        opt.textContent = display;
+        if (prevValue === String(a.idx)) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      // Nếu guardian cũ không còn (vd giảm số người lớn), reset về "".
+      if (sel.value === "") ps.guardianIdx = null;
+    });
+  }
+
+  function renderPassengerRows() {
+    if (!passengerRowsWrap) return;
+    _ensurePassengerSlots();
+    passengerRowsWrap.innerHTML = "";
+    passengerState.forEach((p) => {
+      passengerRowsWrap.appendChild(_renderPassengerRow(p));
+    });
+    _refreshGuardianOptions();
+  }
+
+  /**
+   * Validate passenger list. Trả về { ok, message?, derivedMales, derivedFemales }.
+   * - Tên non-empty cho mọi người.
+   * - Tuổi phải khai (>=0).
+   * - Adult phải chọn gender.
+   * - Child/baby phải chọn guardian.
+   */
+  function validatePassengers() {
+    const errors = [];
+    if (!passengerRowsWrap) return { ok: true, derivedMales: 0, derivedFemales: 0 };
+    let derivedMales = 0;
+    let derivedFemales = 0;
+    passengerState.forEach((p) => {
+      const rowEl = passengerRowsWrap.querySelector(
+        `.passenger-row[data-idx="${p.idx}"][data-type="${p.type}"]`
+      );
+      if (rowEl) rowEl.classList.remove("is-invalid");
+      const label = "#" + (p.idx + 1);
+      if (!p.name || !p.name.trim()) {
+        errors.push(label + ": chưa khai họ tên.");
+        rowEl?.classList.add("is-invalid");
+      }
+      if (p.age === "" || p.age === null || p.age === undefined) {
+        errors.push(label + ": chưa khai tuổi.");
+        rowEl?.classList.add("is-invalid");
+      }
+      if (p.type === "adult") {
+        if (p.gender === "male") derivedMales++;
+        else if (p.gender === "female") derivedFemales++;
+        else {
+          errors.push(label + ": chưa chọn giới tính.");
+          rowEl?.classList.add("is-invalid");
+        }
+      } else {
+        // Guardian chỉ bắt buộc ở mode "ở ghép".
+        if (
+          getAccommodationMode() === "shared" &&
+          (p.guardianIdx === null || p.guardianIdx === undefined)
+        ) {
+          errors.push(label + ": chưa chọn người lớn đi cùng.");
+          rowEl?.classList.add("is-invalid");
+        }
+      }
+    });
+    return {
+      ok: errors.length === 0,
+      message: errors.join("\n"),
+      derivedMales,
+      derivedFemales,
+    };
+  }
+
+  /** Đọc cấu hình lưu trú "Ở ghép": 1 entry / (segment + khung) — server tự
+   *  resolve danh sách candidateHotels từ TourSegment để chạy multi-hotel
+   *  pooling. Client chỉ cần gửi tourSegmentId + fromDate + toDate; males /
+   *  females được derive từ danh sách hành khách. */
+  function collectSharedRoomRequest() {
+    const items = [];
+    if (!sharedSelectionWrap) return items;
+    const v = validatePassengers();
+    const males = v.derivedMales;
+    const females = v.derivedFemales;
+    sharedSelectionWrap
+      .querySelectorAll(".shared-room-segment")
+      .forEach((segEl) => {
+        const fromDate = segEl.getAttribute("data-from-date");
+        const toDate = segEl.getAttribute("data-to-date");
+        const tourSegmentId = segEl.getAttribute("data-tour-segment-id");
+        if (!tourSegmentId || !fromDate || !toDate) return;
+        // Gửi luôn danh sách hotel ứng viên (theo thứ tự render) để admin/log
+        // có ngữ cảnh; server sẽ resolve lại từ DB.
+        const candidateHotels = Array.from(
+          segEl.querySelectorAll(".shared-room-hotel-block__candidate")
+        ).map((el) => ({
+          hotelId: el.getAttribute("data-hotel-id") || "",
+          hotelName: el.getAttribute("data-hotel-name") || "",
+        }));
+        items.push({
+          tourSegmentId,
+          fromDate,
+          toDate,
+          males,
+          females,
+          candidateHotels,
+        });
+      });
+    return items;
+  }
+
+  function collectPassengers() {
+    return passengerState.map((p) => ({
+      idx: p.idx,
+      name: (p.name || "").trim(),
+      age: p.age === "" ? 0 : Math.max(0, parseInt(p.age, 10) || 0),
+      type: p.type,
+      gender: p.type === "adult" ? p.gender || null : null,
+      guardianIdx: p.type === "adult" ? null : p.guardianIdx,
+    }));
+  }
+
+  // ── Private room assignment ─────────────────────────────────────────────
+  // Render UI gán hành khách vào từng phòng vật lý (mode = "Ở riêng").
+
+  function _passengerLabel(p) {
+    const typeShort = p.type === "adult" ? "NL" : p.type === "child" ? "TE" : "EB";
+    const baseName =
+      p.name && p.name.trim() ? p.name.trim() : "Hành khách #" + (p.idx + 1);
+    const ageTxt = p.age === "" || p.age === null || p.age === undefined
+      ? "—"
+      : String(p.age) + "t";
+    const genderTxt = p.type === "adult"
+      ? p.gender === "male" ? " · Nam" : p.gender === "female" ? " · Nữ" : ""
+      : "";
+    return baseName + " (" + typeShort + " · " + ageTxt + genderTxt + ")";
+  }
+
+  function _findHotelInSegment(segObj, hotelId) {
+    if (!segObj) return null;
+    return (segObj.hotels || []).find((h) => String(h.hotelId) === String(hotelId)) || null;
+  }
+
+  /**
+   * Tính sức chứa quy đổi của 1 phòng (theo ageBands của hotel sở hữu phòng).
+   * Em bé thường occupancyWeight=0 → không tính.
+   */
+  function _computeRoomUsedCapacity(passengerIdxs, ageBands) {
+    let total = 0;
+    passengerIdxs.forEach((idx) => {
+      const p = passengerState.find((x) => x.idx === idx);
+      if (!p) return;
+      const ageNum = p.age === "" ? 0 : parseInt(p.age, 10) || 0;
+      total += getOccupancyWeight(ageNum, ageBands);
+    });
+    return total;
+  }
+
+  /**
+   * Đọc tất cả selections (phòng đã chọn) trong DOM, gom theo segment.
+   * Trả về: [{ segKey, fromDate, toDate, segObj, hotels: [
+   *   { hotelId, hotelName, tourSegmentId, ageBands, roomTypes: [
+   *     { roomTypeId, roomTypeName, baseOccupancy, selectedRooms, pricePerNight }
+   *   ] }
+   * ] }]
+   */
+  function _readPrivateSelectionsBySegment() {
+    const result = [];
+    if (!roomSelectionWrap) return result;
+    roomSelectionWrap.querySelectorAll(".room-time-segment").forEach((segEl) => {
+      const fromDate = segEl.getAttribute("data-from-date");
+      const toDate = segEl.getAttribute("data-to-date");
+      const segObj = getSegmentDataByKey(fromDate, toDate);
+      const segLabel =
+        segEl.querySelector(".room-time-segment__label")?.textContent?.trim() ||
+        fromDate + " → " + toDate;
+      const hotels = [];
+      segEl.querySelectorAll(".room-hotel-block").forEach((hBlock) => {
+        const hotelId = hBlock.getAttribute("data-hotel-id");
+        const hotelName =
+          hBlock.querySelector(".room-hotel-block__name")?.textContent?.trim() || "";
+        const tourSegmentId = hBlock.getAttribute("data-tour-segment-id");
+        const hotelMeta = _findHotelInSegment(segObj, hotelId);
+        const ageBands = hotelMeta ? hotelMeta.ageBands || [] : [];
+        const roomTypes = [];
+        hBlock.querySelectorAll(".room-type-row").forEach((row) => {
+          const qty = Math.max(
+            0,
+            parseInt(row.querySelector(".room-qty-input")?.value || "0", 10)
+          );
+          if (qty <= 0) return;
+          roomTypes.push({
+            roomTypeId: row.getAttribute("data-room-type-id"),
+            roomTypeName:
+              row.querySelector(".room-type-row__name")?.textContent?.trim() || "",
+            baseOccupancy: parseInt(
+              row.getAttribute("data-base-occupancy") || "2",
+              10
+            ),
+            pricePerNight: parseFloat(
+              row.getAttribute("data-price-per-night") || "0"
+            ),
+            selectedRooms: qty,
+          });
+        });
+        if (roomTypes.length > 0) {
+          hotels.push({
+            hotelId,
+            hotelName,
+            tourSegmentId,
+            ageBands,
+            roomTypes,
+          });
+        }
+      });
+      result.push({
+        segKey: fromDate + "|" + toDate,
+        fromDate,
+        toDate,
+        segLabel,
+        segObj,
+        hotels,
+      });
+    });
+    return result;
+  }
+
+  /**
+   * Dọn state: bỏ những entry không còn ứng với phòng nào, và những idx
+   * hành khách đã không còn trong passengerState.
+   */
+  function _gcPrivateAssignmentState(segments) {
+    const validKeys = new Set();
+    const validIdxs = new Set(passengerState.map((p) => p.idx));
+    segments.forEach((seg) => {
+      seg.hotels.forEach((h) => {
+        h.roomTypes.forEach((rt) => {
+          for (let i = 0; i < rt.selectedRooms; i++) {
+            validKeys.add(
+              _privateAssignKey(seg.fromDate, seg.toDate, h.hotelId, rt.roomTypeId, i)
+            );
+          }
+        });
+      });
+    });
+    Array.from(privateAssignmentState.keys()).forEach((k) => {
+      if (!validKeys.has(k)) {
+        privateAssignmentState.delete(k);
+        return;
+      }
+      const set = privateAssignmentState.get(k);
+      Array.from(set).forEach((idx) => {
+        if (!validIdxs.has(idx)) set.delete(idx);
+      });
+    });
+  }
+
+  function _renderPrivateAssignRoom({
+    fromDate,
+    toDate,
+    hotel,
+    rt,
+    roomIndex,
+    roomNumberDisplay,
+    assignedSetForSegment,
+  }) {
+    const key = _privateAssignKey(fromDate, toDate, hotel.hotelId, rt.roomTypeId, roomIndex);
+    const set = _getAssignSet(key);
+
+    const wrap = document.createElement("div");
+    wrap.className = "private-assign-room";
+    wrap.setAttribute("data-room-key", key);
+    wrap.setAttribute("data-base-occupancy", String(rt.baseOccupancy));
+
+    const header = document.createElement("div");
+    header.className = "private-assign-room__header";
+    const title = document.createElement("span");
+    title.className = "private-assign-room__title";
+    title.innerHTML =
+      '<i class="fa-solid fa-bed" style="margin-right:6px;color:#0071c2"></i>' +
+      "Phòng " + rt.roomTypeName + " #" + roomNumberDisplay +
+      " · sức chứa " + rt.baseOccupancy;
+    header.appendChild(title);
+
+    const hotelTag = document.createElement("span");
+    hotelTag.className = "private-assign-room__hotel";
+    hotelTag.textContent = "(" + hotel.hotelName + ")";
+    header.appendChild(hotelTag);
+
+    const usage = document.createElement("span");
+    usage.className = "private-assign-room__usage";
+    usage.setAttribute("data-room-key", key);
+    header.appendChild(usage);
+
+    wrap.appendChild(header);
+
+    const list = document.createElement("div");
+    list.className = "private-assign-room__passengers";
+    passengerState.forEach((p) => {
+      const lbl = document.createElement("label");
+      lbl.className = "private-assign-passenger";
+      lbl.setAttribute("data-passenger-idx", String(p.idx));
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = String(p.idx);
+      cb.checked = set.has(p.idx);
+      // Disable nếu hành khách đã được gán vào phòng khác trong cùng segment.
+      const inOther =
+        assignedSetForSegment.has(p.idx) && !set.has(p.idx);
+      if (inOther) {
+        cb.disabled = true;
+        lbl.classList.add("is-disabled");
+        lbl.title = "Đã gán cho phòng khác trong khung này.";
+      }
+      cb.addEventListener("change", () => {
+        if (cb.checked) set.add(p.idx);
+        else set.delete(p.idx);
+        // Cần re-render lại toàn bộ private-assign vì checkbox của các phòng
+        // khác trong cùng segment cũng phải cập nhật disabled state.
+        renderPrivateAssignments();
+        updateRoomValidation();
+      });
+      lbl.appendChild(cb);
+      const txt = document.createElement("span");
+      txt.textContent = " " + _passengerLabel(p);
+      lbl.appendChild(txt);
+      if (cb.checked) lbl.classList.add("is-checked");
+      list.appendChild(lbl);
+    });
+    wrap.appendChild(list);
+
+    return { roomEl: wrap, key, set };
+  }
+
+  function renderPrivateAssignments() {
+    if (!privateAssignmentSegmentsEl) return;
+    const segments = _readPrivateSelectionsBySegment();
+    _gcPrivateAssignmentState(segments);
+
+    privateAssignmentSegmentsEl.innerHTML = "";
+
+    if (passengerState.length === 0 || segments.every((s) => s.hotels.length === 0)) {
+      // Không có hành khách hoặc chưa chọn phòng → ẩn block.
+      if (privateAssignmentWrap) privateAssignmentWrap.style.display = "none";
+      return;
+    }
+    if (privateAssignmentWrap) privateAssignmentWrap.style.display = "";
+
+    segments.forEach((seg) => {
+      if (seg.hotels.length === 0) return;
+      const segWrap = document.createElement("div");
+      segWrap.className = "private-assign-segment";
+      segWrap.setAttribute("data-from-date", seg.fromDate);
+      segWrap.setAttribute("data-to-date", seg.toDate);
+
+      const segHeader = document.createElement("div");
+      segHeader.className = "private-assign-segment__header";
+      segHeader.innerHTML =
+        '<i class="fa-solid fa-calendar-days" style="color:#6366f1"></i><span>' +
+        seg.segLabel +
+        "</span>";
+      segWrap.appendChild(segHeader);
+
+      const roomsWrap = document.createElement("div");
+      roomsWrap.className = "private-assign-segment__rooms";
+
+      // Pre-compute: tập idx hành khách đã được gán đâu đó trong cùng segment.
+      const assignedSetForSegment = new Set();
+      seg.hotels.forEach((h) => {
+        h.roomTypes.forEach((rt) => {
+          for (let i = 0; i < rt.selectedRooms; i++) {
+            const k = _privateAssignKey(seg.fromDate, seg.toDate, h.hotelId, rt.roomTypeId, i);
+            const s = privateAssignmentState.get(k);
+            if (!s) continue;
+            s.forEach((idx) => assignedSetForSegment.add(idx));
+          }
+        });
+      });
+
+      // Đánh số phòng liên tục trong cùng segment để dễ đọc.
+      let roomNumber = 0;
+      seg.hotels.forEach((hotel) => {
+        hotel.roomTypes.forEach((rt) => {
+          for (let i = 0; i < rt.selectedRooms; i++) {
+            roomNumber++;
+            const { roomEl } = _renderPrivateAssignRoom({
+              fromDate: seg.fromDate,
+              toDate: seg.toDate,
+              hotel,
+              rt,
+              roomIndex: i,
+              roomNumberDisplay: roomNumber,
+              assignedSetForSegment,
+            });
+            roomsWrap.appendChild(roomEl);
+          }
+        });
+      });
+
+      segWrap.appendChild(roomsWrap);
+      privateAssignmentSegmentsEl.appendChild(segWrap);
+    });
+  }
+
+  /**
+   * Validate phân bổ phòng "Ở riêng" cho từng segment:
+   * - Không trùng idx giữa các phòng trong cùng segment.
+   * - Σ adult+child gán = quantityAdult + quantityChildren.
+   * - Σ occupancyWeight ≤ baseOccupancy mỗi phòng (theo ageBands của hotel).
+   * - child/baby được gán phải ở cùng phòng với guardian (adult) đã chọn.
+   * Trả về { ok, message?, perRoom: Map<key, {used, base, overflow}> }.
+   */
+  function validatePrivateAssignments() {
+    const errors = [];
+    const perRoom = new Map();
+    if (!privateAssignmentWrap || privateAssignmentWrap.style.display === "none") {
+      return { ok: true, message: "", perRoom };
+    }
+
+    const adults = parseInt(
+      boxTourDetail.querySelector(`[name="quantityAdult"]`)?.value || "0",
+      10
+    ) || 0;
+    const children = parseInt(
+      boxTourDetail.querySelector(`[name="quantityChildren"]`)?.value || "0",
+      10
+    ) || 0;
+    const requiredCount = adults + children;
+
+    const segments = _readPrivateSelectionsBySegment();
+    segments.forEach((seg) => {
+      if (seg.hotels.length === 0) return;
+      const segLabel = seg.segLabel;
+      const idxToRoomKey = new Map();
+      const assignedAdultsAndChildren = new Set();
+
+      seg.hotels.forEach((hotel) => {
+        hotel.roomTypes.forEach((rt) => {
+          for (let i = 0; i < rt.selectedRooms; i++) {
+            const key = _privateAssignKey(seg.fromDate, seg.toDate, hotel.hotelId, rt.roomTypeId, i);
+            const set = privateAssignmentState.get(key) || new Set();
+            const idxs = Array.from(set);
+            const used = _computeRoomUsedCapacity(idxs, hotel.ageBands);
+            const overflow = used > rt.baseOccupancy + 1e-9;
+            perRoom.set(key, { used, base: rt.baseOccupancy, overflow });
+            if (overflow) {
+              errors.push(
+                segLabel + " · Phòng " + rt.roomTypeName +
+                  " (" + hotel.hotelName + "): vượt sức chứa (" +
+                  fmtOccNum(used) + " / " + rt.baseOccupancy + ")."
+              );
+            }
+            idxs.forEach((idx) => {
+              const p = passengerState.find((x) => x.idx === idx);
+              if (!p) return;
+              if (idxToRoomKey.has(idx)) {
+                errors.push(
+                  segLabel + " · " + _passengerLabel(p) +
+                    " bị gán vào nhiều phòng cùng khung."
+                );
+              } else {
+                idxToRoomKey.set(idx, key);
+              }
+              if (p.type !== "baby") assignedAdultsAndChildren.add(idx);
+            });
+          }
+        });
+      });
+
+      // Đủ adult + child?
+      if (assignedAdultsAndChildren.size < requiredCount) {
+        errors.push(
+          segLabel + ": chưa gán đủ hành khách (đã gán " +
+            assignedAdultsAndChildren.size + "/" + requiredCount +
+            " người lớn + trẻ em)."
+        );
+      }
+
+      // Ở riêng (private) không có guardian — bỏ qua kiểm tra này.
+    });
+
+    return {
+      ok: errors.length === 0,
+      message: errors.join("\n"),
+      perRoom,
+    };
+  }
+
+  /**
+   * Gắn roomAssignments vào từng phần tử roomSelections (private mode).
+   * Sắp xếp roomAssignments theo roomIndex để ổn định.
+   */
+  function decorateRoomSelectionsWithAssignments(selections) {
+    return selections.map((s) => {
+      const roomAssignments = [];
+      for (let i = 0; i < s.selectedRooms; i++) {
+        const key = _privateAssignKey(
+          s.fromDate,
+          s.toDate,
+          s.hotelId,
+          s.roomTypeId,
+          i
+        );
+        const set = privateAssignmentState.get(key) || new Set();
+        const idxs = Array.from(set).sort((a, b) => a - b);
+        const segObj = getSegmentDataByKey(s.fromDate, s.toDate);
+        const hotelMeta = _findHotelInSegment(segObj, s.hotelId);
+        const ageBands = hotelMeta ? hotelMeta.ageBands || [] : [];
+        const usedCapacity = _computeRoomUsedCapacity(idxs, ageBands);
+        roomAssignments.push({
+          roomIndex: i,
+          passengerIdxs: idxs,
+          usedCapacity: Math.round(usedCapacity * 100) / 100,
+        });
+      }
+      return { ...s, roomAssignments };
+    });
+  }
+
+  /**
+   * Trả về cấu hình lưu trú đầy đủ để gửi lên server. Tuỳ mode mà fill
+   * roomSelections hoặc sharedRoomRequest + passengers; field còn lại để rỗng.
+   */
+  function collectAccommodationConfig() {
+    const accommodationMode = getAccommodationMode();
+    if (accommodationMode === "shared") {
+      return {
+        accommodationMode,
+        roomSelections: [],
+        sharedRoomRequest: collectSharedRoomRequest(),
+        passengers: collectPassengers(),
+      };
+    }
+    const baseSelections = collectRoomSelections();
+    return {
+      accommodationMode: "private",
+      roomSelections: decorateRoomSelectionsWithAssignments(baseSelections),
+      sharedRoomRequest: [],
+      passengers: collectPassengers(),
+    };
+  }
+
   const globalExtraWarn = boxTourDetail.querySelector(".room-selection-global-extra-warning");
+
+  /**
+   * Mode "Ở riêng": tính FULL tiền phòng `pricePerNight × nights × selectedRooms`
+   * cộng vào tour. Đồng thời gom theo (segment, hotel, roomType) cho phần
+   * cảnh báo "Chi tiết phòng & phụ phí" để khách thấy rõ tổng.
+   */
+  function computePrivateRoomCost() {
+    if (!roomSelectionWrap) return { total: 0, lines: [] };
+    let total = 0;
+    const lines = [];
+    roomSelectionWrap
+      .querySelectorAll(".room-time-segment")
+      .forEach((segEl) => {
+        const fromDate = segEl.getAttribute("data-from-date");
+        const toDate = segEl.getAttribute("data-to-date");
+        let nights = 1;
+        if (fromDate && toDate) {
+          nights = Math.max(
+            1,
+            Math.round((new Date(toDate) - new Date(fromDate)) / 86400000)
+          );
+        }
+        const segLabel =
+          segEl.querySelector(".room-time-segment__label")?.textContent?.trim() ||
+          fromDate + " → " + toDate;
+        const segLineDetails = [];
+        let segCost = 0;
+        segEl.querySelectorAll(".room-type-row").forEach((row) => {
+          const qty = Math.max(
+            0,
+            parseInt(row.querySelector(".room-qty-input")?.value || "0", 10)
+          );
+          if (qty <= 0) return;
+          const pricePerNight = parseFloat(
+            row.getAttribute("data-price-per-night") || "0"
+          );
+          const cost = pricePerNight * nights * qty;
+          if (cost > 0) {
+            const roomTypeName =
+              row.querySelector(".room-type-row__name")?.textContent?.trim() ||
+              "";
+            const hotelBlock = row.closest(".room-hotel-block");
+            const hotelName =
+              hotelBlock?.querySelector(".room-hotel-block__name")?.textContent?.trim() ||
+              "";
+            segLineDetails.push({
+              hotelName,
+              roomTypeName,
+              pricePerNight,
+              qty,
+              nights,
+              cost,
+            });
+            segCost += cost;
+            total += cost;
+          }
+        });
+        if (segLineDetails.length > 0) {
+          lines.push({ segLabel, details: segLineDetails, segCost });
+        }
+      });
+    return { total, lines };
+  }
 
   function updateRoomValidation() {
     currentExtraRoomCost = 0;
-    const totalRooms = getTotalSelectedRooms();
-    const allExtraLines = [];
+    let anyRoomCapacityShortfall = false;
+    const mode = getAccommodationMode();
 
-    // Cảnh báo chưa chọn phòng (bắt buộc)
-    if (requiredWarning) {
-      requiredWarning.style.display = (isRoomRequired && totalRooms === 0) ? "" : "none";
+    // Toggle hiển thị các vùng theo mode hiện tại.
+    if (roomSelectionWrap) {
+      roomSelectionWrap.style.display = mode === "private" ? "" : "none";
+    }
+    if (sharedSelectionWrap) {
+      sharedSelectionWrap.style.display = mode === "shared" ? "" : "none";
+    }
+    // Passenger list dùng chung cho cả 2 mode — chỉ hiện khi có hành khách.
+    if (passengerListWrap) {
+      const totalPax = passengerState.length;
+      passengerListWrap.style.display = totalPax > 0 ? "" : "none";
     }
 
-    // Duyệt từng khung thời gian
+    // Cập nhật class is-selected cho radio (UI feedback).
+    if (modePicker) {
+      modePicker.querySelectorAll(".accommodation-mode-option").forEach((el) => {
+        const inp = el.querySelector('input[type="radio"]');
+        if (inp && inp.checked) el.classList.add("is-selected");
+        else el.classList.remove("is-selected");
+      });
+    }
+
+    // ── Mode "Private": hiển thị occupancy + tổng tiền phòng (full) ──
     if (roomSelectionWrap) {
       roomSelectionWrap.querySelectorAll(".room-time-segment").forEach((segEl) => {
-        const fromDate = segEl.getAttribute("data-from-date");
-        const toDate = segEl.getAttribute("data-to-date");
-        const segObj = getSegmentDataByKey(fromDate, toDate);
-        const mergedBands = segObj ? getMergedAgeBandsForSegment(segObj) : [];
+        const m = getSegmentOccupancyAndSelections(segEl);
+        const { totalOcc, detail, segTotalCap } = m;
+        if (mode === "private" && totalOcc > segTotalCap)
+          anyRoomCapacityShortfall = true;
 
-        // -- Hiển thị tổng sức chứa quy đổi --
-        const { total: totalOcc, detail } = calcOccupancyBreakdown(mergedBands);
         const valEl = segEl.querySelector(".room-time-segment__occupancy-live-value");
         const detEl = segEl.querySelector(".room-time-segment__occupancy-live-detail");
         if (valEl) valEl.textContent = fmtOccNum(totalOcc);
         if (detEl) detEl.textContent = detail;
 
-        // -- Cộng dồn capacity trong toàn bộ khung thời gian --
-        let segTotalCap = 0;
-        const selectedItems = [];
-        segEl.querySelectorAll(".room-type-row").forEach((row) => {
-          const qty = Math.max(0, parseInt(row.querySelector(".room-qty-input")?.value || "0", 10));
-          if (qty <= 0) return;
-          const baseOcc = parseInt(row.getAttribute("data-base-occupancy") || "2", 10);
-          const pricePerNight = parseFloat(row.getAttribute("data-price-per-night") || "0");
-          const roomTypeName = row.querySelector(".room-type-row__name")?.textContent?.trim() || "";
-          const hotelBlock = row.closest(".room-hotel-block");
-          const hotelName = hotelBlock?.querySelector(".room-hotel-block__name")?.textContent?.trim() || "";
-          segTotalCap += qty * baseOcc;
-          selectedItems.push({ qty, baseOcc, pricePerNight, roomTypeName, hotelName });
-        });
-
         const capWarn = segEl.querySelector(".room-segment-capacity-warning");
-
-        // -- Kiểm tra thiếu sức chứa --
         if (capWarn) {
-          if (segTotalCap > 0 && totalOcc > segTotalCap) {
-            capWarn.textContent = "⚠ Sức chứa quy đổi (" + fmtOccNum(totalOcc) + ") vượt quá tổng phòng đã chọn (" + segTotalCap + "). Vui lòng chọn thêm phòng.";
+          if (mode === "private" && totalOcc > segTotalCap) {
+            capWarn.textContent = "Khung này chưa đủ phòng cho đoàn.";
             capWarn.style.display = "";
           } else {
             capWarn.style.display = "none";
           }
         }
-
-        // -- Kiểm tra phòng dư (segment level) → gom vào danh sách global --
-        if (segTotalCap > 0 && totalOcc > 0 && segTotalCap > Math.ceil(totalOcc)) {
-          let nights = 1;
-          if (fromDate && toDate) {
-            nights = Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000));
-          }
-
-          // Tách tất cả phòng thành từng đơn vị để xử lý độc lập
-          const allRooms = [];
-          for (const item of selectedItems) {
-            for (let r = 0; r < item.qty; r++) {
-              allRooms.push({ ...item, qty: 1 });
-            }
-          }
-
-          const neededCap = Math.ceil(totalOcc);
-
-          // Tìm tập "giữ" tối ưu: là minimal cover (không thể bỏ thêm phòng mà
-          // vẫn đủ sức chứa) và có tổng giá LỚN NHẤT → phần "dư" (phần còn lại)
-          // có tổng giá nhỏ nhất cho khách.
-          //   Điều kiện minimal cover của tập K:
-          //     sumCap(K) >= needed  và  min(cap in K) > sumCap(K) - needed
-          //
-          // Với n nhỏ (≤ 22) dùng brute force 2^n; với n lớn fallback greedy
-          // theo giá tăng dần (bỏ rẻ trước, vẫn tốt hơn code cũ).
-          const n = allRooms.length;
-          let keptMask = 0;
-
-          if (n > 0 && n <= 22) {
-            let bestKeptPrice = -1;
-            const totalMasks = 1 << n;
-            for (let mask = 1; mask < totalMasks; mask++) {
-              let sumCap = 0;
-              let sumPrice = 0;
-              let minCap = Infinity;
-              for (let i = 0; i < n; i++) {
-                if (mask & (1 << i)) {
-                  const rm = allRooms[i];
-                  sumCap += rm.baseOcc;
-                  sumPrice += rm.pricePerNight;
-                  if (rm.baseOcc < minCap) minCap = rm.baseOcc;
-                }
-              }
-              if (sumCap < neededCap) continue;
-              // Minimal cover: bỏ phòng nhỏ nhất vẫn phá vỡ coverage
-              if (minCap <= sumCap - neededCap) continue;
-              if (sumPrice > bestKeptPrice) {
-                bestKeptPrice = sumPrice;
-                keptMask = mask;
-              }
-            }
-          } else if (n > 22) {
-            // Fallback: sort theo giá TĂNG DẦN, bỏ rẻ nhất trước miễn vẫn đủ
-            // (heuristic tốt hơn bỏ đắt nhất trước).
-            const order = allRooms
-              .map((_, i) => i)
-              .sort(
-                (a, b) =>
-                  allRooms[a].pricePerNight - allRooms[b].pricePerNight ||
-                  allRooms[a].baseOcc - allRooms[b].baseOcc
-              );
-            const kept = new Array(n).fill(true);
-            let remain = segTotalCap;
-            for (const idx of order) {
-              if (remain - allRooms[idx].baseOcc >= neededCap) {
-                kept[idx] = false;
-                remain -= allRooms[idx].baseOcc;
-              }
-            }
-            for (let i = 0; i < n; i++) if (kept[i]) keptMask |= (1 << i);
-          }
-
-          let extraCostSeg = 0;
-          const extraDetails = [];
-          for (let i = 0; i < n; i++) {
-            if (keptMask & (1 << i)) continue; // phòng giữ
-            const room = allRooms[i];
-            const cost = room.pricePerNight * nights;
-            extraCostSeg += cost;
-            const existing = extraDetails.find(
-              (d) => d.roomTypeName === room.roomTypeName && d.hotelName === room.hotelName
-            );
-            if (existing) {
-              existing.extra++;
-              existing.cost += cost;
-            } else {
-              extraDetails.push({
-                hotelName: room.hotelName,
-                roomTypeName: room.roomTypeName,
-                pricePerNight: room.pricePerNight,
-                extra: 1,
-                cost,
-                nights,
-              });
-            }
-          }
-
-          if (extraCostSeg > 0) {
-            currentExtraRoomCost += extraCostSeg;
-            const segLabel = segEl.querySelector(".room-time-segment__label")?.textContent?.trim() || (fromDate + " → " + toDate);
-            allExtraLines.push({ segLabel, extraDetails, extraCostSeg });
-          }
-        }
+        const extraWarn = segEl.querySelector(".room-segment-extra-warning");
+        if (extraWarn) extraWarn.style.display = "none";
       });
     }
 
-    // -- Khối cảnh báo phòng dư toàn cục (trên Tổng cộng) --
-    if (globalExtraWarn) {
-      if (allExtraLines.length > 0) {
-        let html = "";
-        allExtraLines.forEach((seg) => {
-          html += "<div style='margin-bottom:6px'><span style='font-size:12px;color:#6b7280'>" + seg.segLabel + "</span><br>";
-          seg.extraDetails.forEach((d) => {
-            const priceStr = d.pricePerNight > 0 ? " (giá " + d.pricePerNight.toLocaleString("vi-VN") + "đ/đêm × " + d.nights + " đêm)" : "";
-            html += "⚠ <strong>" + d.roomTypeName + "</strong> tại " + d.hotelName
-              + ": dư <strong>" + d.extra + " phòng</strong>" + priceStr
-              + " — phát sinh <strong>" + d.cost.toLocaleString("vi-VN") + "đ</strong><br>";
-          });
-          html += "Chi phí dư khung này: <strong>" + seg.extraCostSeg.toLocaleString("vi-VN") + "đ</strong>";
-          html += "</div>";
+    // Tính tổng tiền phòng theo mode.
+    let privateLines = [];
+    if (mode === "private") {
+      const cost = computePrivateRoomCost();
+      currentExtraRoomCost = cost.total;
+      privateLines = cost.lines;
+    } else {
+      currentExtraRoomCost = 0;
+    }
+
+    // Cảnh báo bắt buộc đủ phòng (chỉ áp cho mode "private").
+    if (requiredWarning) {
+      requiredWarning.style.display =
+        mode === "private" && isRoomRequired && anyRoomCapacityShortfall ? "" : "none";
+    }
+
+    // ── Validate passengers (dùng chung cho cả 2 mode) ─────────────────────
+    let anySharedMismatch = false;
+    let passengerWarnText = "";
+    const adults =
+      parseInt(
+        boxTourDetail.querySelector(`[name="quantityAdult"]`)?.value || "0",
+        10
+      ) || 0;
+    const passengerCheck =
+      passengerState.length > 0 ? validatePassengers() : null;
+    if (passengerCheck && !passengerCheck.ok) {
+      passengerWarnText = passengerCheck.message;
+    }
+
+    // ── Mode "Shared": sync số nam/nữ vào tóm tắt ──
+    if (sharedSelectionWrap) {
+      const males = passengerCheck ? passengerCheck.derivedMales : 0;
+      const females = passengerCheck ? passengerCheck.derivedFemales : 0;
+      sharedSelectionWrap
+        .querySelectorAll(".shared-room-hotel-block")
+        .forEach((hBlock) => {
+          const expected = hBlock.querySelector(
+            ".shared-room-hotel-block__expected"
+          );
+          if (expected) expected.textContent = String(adults);
+          const maleDisp = hBlock.querySelector(".shared-male-display");
+          const femaleDisp = hBlock.querySelector(".shared-female-display");
+          if (maleDisp) maleDisp.textContent = String(males);
+          if (femaleDisp) femaleDisp.textContent = String(females);
+          const maleHidden = hBlock.querySelector(".shared-male-input");
+          const femaleHidden = hBlock.querySelector(".shared-female-input");
+          if (maleHidden) maleHidden.value = String(males);
+          if (femaleHidden) femaleHidden.value = String(females);
+          const hint = hBlock.querySelector(".shared-room-hotel-block__hint");
+          if (hint) {
+            if (mode === "shared" && males + females !== adults) {
+              hint.classList.add("is-mismatch");
+              anySharedMismatch = true;
+            } else {
+              hint.classList.remove("is-mismatch");
+            }
+          }
         });
-        if (allExtraLines.length > 1) {
-          html += "<div style='border-top:1px solid #fde68a;margin-top:4px;padding-top:6px'>Tổng chi phí phòng dư: <strong>" + currentExtraRoomCost.toLocaleString("vi-VN") + "đ</strong></div>";
+    }
+    if (sharedRequiredWarning) {
+      sharedRequiredWarning.style.display =
+        mode === "shared" && isRoomRequired && anySharedMismatch ? "" : "none";
+    }
+    if (passengerWarning) {
+      if (passengerWarnText) {
+        passengerWarning.textContent = passengerWarnText;
+        passengerWarning.style.display = "";
+      } else {
+        passengerWarning.style.display = "none";
+        passengerWarning.textContent = "";
+      }
+    }
+
+    // ── Mode "Private": render block phân bổ phòng + validate ──
+    if (mode === "private") {
+      renderPrivateAssignments();
+      const v = validatePrivateAssignments();
+      // Cập nhật usage indicator trên từng phòng vật lý.
+      v.perRoom.forEach((info, key) => {
+        const usageEl =
+          privateAssignmentSegmentsEl?.querySelector(
+            `.private-assign-room__usage[data-room-key="${CSS.escape(key)}"]`
+          );
+        if (!usageEl) return;
+        usageEl.textContent =
+          "Sức chứa quy đổi: " + fmtOccNum(info.used) + " / " + info.base;
+        usageEl.classList.toggle("is-overflow", !!info.overflow);
+      });
+      // Cập nhật class is-checked cho các checkbox đã chọn (UI feedback).
+      privateAssignmentSegmentsEl
+        ?.querySelectorAll(".private-assign-passenger")
+        .forEach((lbl) => {
+          const cb = lbl.querySelector("input[type=checkbox]");
+          lbl.classList.toggle("is-checked", !!cb && cb.checked);
+        });
+      if (privateAssignmentWarning) {
+        if (
+          isRoomRequired &&
+          !v.ok &&
+          privateAssignmentWrap &&
+          privateAssignmentWrap.style.display !== "none"
+        ) {
+          privateAssignmentWarning.textContent = v.message;
+          privateAssignmentWarning.style.display = "";
+        } else {
+          privateAssignmentWarning.style.display = "none";
+          privateAssignmentWarning.textContent = "";
+        }
+      }
+    } else {
+      if (privateAssignmentWrap) privateAssignmentWrap.style.display = "none";
+      if (privateAssignmentWarning) {
+        privateAssignmentWarning.style.display = "none";
+        privateAssignmentWarning.textContent = "";
+      }
+    }
+
+    // -- Hiển thị block "Chi phí phòng cộng vào tour" (private only) --
+    if (globalExtraWarn) {
+      if (mode === "private" && privateLines.length > 0 && currentExtraRoomCost > 0) {
+        let html =
+          '<div style="font-weight:600;color:#1e293b;margin-bottom:6px">' +
+          '<i class="fa-solid fa-bed" style="color:#0071c2;margin-right:6px"></i>' +
+          "Chi phí phòng (cộng vào tour, hình thức ở riêng)</div>";
+        privateLines.forEach((seg) => {
+          html +=
+            '<div style="margin-bottom:6px"><span style="font-size:12px;color:#6b7280">' +
+            seg.segLabel +
+            "</span><br>";
+          seg.details.forEach((d) => {
+            html +=
+              "• <strong>" +
+              d.roomTypeName +
+              "</strong> tại " +
+              d.hotelName +
+              ": " +
+              d.qty +
+              " phòng × " +
+              d.pricePerNight.toLocaleString("vi-VN") +
+              "đ/đêm × " +
+              d.nights +
+              " đêm = <strong>" +
+              d.cost.toLocaleString("vi-VN") +
+              "đ</strong><br>";
+          });
+          html +=
+            "Chi phí phòng khung này: <strong>" +
+            seg.segCost.toLocaleString("vi-VN") +
+            "đ</strong></div>";
+        });
+        if (privateLines.length > 1) {
+          html +=
+            '<div style="border-top:1px solid #fde68a;margin-top:4px;padding-top:6px">Tổng chi phí phòng: <strong>' +
+            currentExtraRoomCost.toLocaleString("vi-VN") +
+            "đ</strong></div>";
         }
         globalExtraWarn.innerHTML = html;
         globalExtraWarn.style.display = "";
       } else {
         globalExtraWarn.style.display = "none";
+        globalExtraWarn.innerHTML = "";
       }
     }
 
@@ -1091,10 +2002,52 @@ if (boxTourDetail) {
     boxTourDetail.querySelectorAll("[input-quantity]").forEach((inp) => {
       inp.addEventListener("input", updateRoomValidation);
     });
-    if (childrenAgesList) childrenAgesList.addEventListener("input", updateRoomValidation);
-    if (babiesAgesList) babiesAgesList.addEventListener("input", updateRoomValidation);
+    if (childrenAgesList) {
+      childrenAgesList.addEventListener("input", () => {
+        renderPassengerRows();
+        updateRoomValidation();
+      });
+    }
+    if (babiesAgesList) {
+      babiesAgesList.addEventListener("input", () => {
+        renderPassengerRows();
+        updateRoomValidation();
+      });
+    }
     updateRoomValidation();
   }
+
+  if (modePicker) {
+    modePicker.addEventListener("change", (e) => {
+      if (
+        e.target &&
+        e.target.matches('input[name="accommodationMode"]')
+      ) {
+        // Khi chuyển sang "ở riêng", xóa guardianIdx khỏi state vì không dùng.
+        if (e.target.value === "private") {
+          passengerState.forEach((p) => {
+            if (p.type !== "adult") p.guardianIdx = null;
+          });
+        }
+        renderPassengerRows();
+        updateRoomValidation();
+      }
+    });
+  }
+
+  // Re-render passenger rows khi user thay đổi số người lớn / trẻ em / em bé.
+  ["quantityAdult", "quantityChildren", "quantityBaby"].forEach((nm) => {
+    const el = boxTourDetail.querySelector(`[name="${nm}"]`);
+    if (!el) return;
+    el.addEventListener("input", () => {
+      renderPassengerRows();
+      updateRoomValidation();
+    });
+  });
+
+  // Render lần đầu (cả private + shared đều cần passenger list).
+  renderPassengerRows();
+  updateRoomValidation();
 
   // === ĐẶT NGAY (không còn locationFrom) ===
   const buttonAddToCart = boxTourDetail.querySelector(".inner-button-add-cart");
@@ -1136,14 +2089,89 @@ if (boxTourDetail) {
         const childrenAges = collectAges(childrenAgesList);
         const babyAges     = collectAges(babiesAgesList);
 
-        const roomSelections = collectRoomSelections();
+        const accCfg = collectAccommodationConfig();
 
-        // Kiểm tra bắt buộc chọn phòng
-        if (isRoomRequired && roomSelections.length === 0) {
-          if (requiredWarning) requiredWarning.style.display = "";
-          requiredWarning?.scrollIntoView({ behavior: "smooth", block: "center" });
-          notify?.error?.("Vui lòng chọn ít nhất một loại phòng khách sạn.");
-          return;
+        // Validate theo mode hiện tại.
+        if (accCfg.accommodationMode === "private") {
+          // Mode "Ở riêng": mỗi khung phải đủ sức chứa phòng cho occupancy quy đổi.
+          if (isRoomRequired && hasRoomSegmentCapacityShortfall()) {
+            if (requiredWarning) requiredWarning.style.display = "";
+            requiredWarning?.scrollIntoView({ behavior: "smooth", block: "center" });
+            notify?.error?.("Vui lòng chọn đủ phòng ở từng khung thời gian.");
+            return;
+          }
+          // Validate passenger list (tên/tuổi/giới tính/guardian).
+          if (isRoomRequired && passengerState.length > 0) {
+            const v = validatePassengers();
+            if (!v.ok) {
+              if (passengerWarning) {
+                passengerWarning.textContent = v.message;
+                passengerWarning.style.display = "";
+              }
+              passengerWarning?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+              notify?.error?.(
+                "Vui lòng khai đầy đủ thông tin hành khách trước khi đặt tour."
+              );
+              return;
+            }
+          }
+          // Validate phân bổ hành khách vào phòng.
+          if (isRoomRequired && privateAssignmentWrap && privateAssignmentWrap.style.display !== "none") {
+            const va = validatePrivateAssignments();
+            if (!va.ok) {
+              if (privateAssignmentWarning) {
+                privateAssignmentWarning.textContent = va.message;
+                privateAssignmentWarning.style.display = "";
+              }
+              privateAssignmentWarning?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+              notify?.error?.(
+                "Vui lòng phân bổ hành khách vào phòng đầy đủ trước khi đặt tour."
+              );
+              return;
+            }
+          }
+        } else {
+          // Mode "Ở ghép": validate passenger list trước, sau đó nam+nữ=NL/khung.
+          if (isRoomRequired) {
+            const v = validatePassengers();
+            if (!v.ok) {
+              if (passengerWarning) {
+                passengerWarning.textContent = v.message;
+                passengerWarning.style.display = "";
+              }
+              passengerWarning?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+              notify?.error?.(
+                "Vui lòng khai đầy đủ thông tin hành khách trước khi đặt tour."
+              );
+              return;
+            }
+            if (quantityAdult > 0) {
+              const mismatch = (accCfg.sharedRoomRequest || []).find(
+                (r) => (r.males || 0) + (r.females || 0) !== quantityAdult
+              );
+              if (mismatch) {
+                if (sharedRequiredWarning)
+                  sharedRequiredWarning.style.display = "";
+                sharedRequiredWarning?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+                notify?.error?.(
+                  "Tổng số nam và nữ phải bằng số người lớn của đoàn."
+                );
+                return;
+              }
+            }
+          }
         }
 
         const item = {
@@ -1157,7 +2185,10 @@ if (boxTourDetail) {
           childrenAges,
           babyAges,
           ageBands: { babyMaxAge: agebabyMax, childrenMinAge: ageChildMin, childrenMaxAge: ageChildMax },
-          roomSelections,
+          accommodationMode: accCfg.accommodationMode,
+          roomSelections: accCfg.roomSelections,
+          sharedRoomRequest: accCfg.sharedRoomRequest,
+          passengers: accCfg.passengers || [],
           extraRoomCost: currentExtraRoomCost || 0,
         };
         sessionStorage.setItem("cart_once_mode", "quick-order");
@@ -1327,7 +2358,19 @@ if (orderForm) {
           .then((res) => res.json())
           .then((data) => {
             if (data.code == "error" || data.code == "room_unavailable") {
-              notify.error(data.message);
+              // Nếu message nhiều dòng (gộp nhiều xung đột phòng), tăng thời
+              // gian hiển thị để khách kịp đọc hết.
+              const msg = String(data.message || "");
+              const lineCount = msg ? msg.split("\n").length : 1;
+              if (lineCount > 1) {
+                notify.open({
+                  type: "error",
+                  message: msg,
+                  duration: Math.min(15000, 4000 + lineCount * 2000),
+                });
+              } else {
+                notify.error(msg);
+              }
               return;
             }
 
@@ -1356,6 +2399,7 @@ if (orderForm) {
                 respPhone = data.orders[0].phone;
               }
 
+              window.__cartNavigateAway = true;
               switch (paymentMethod) {
                 case "money":
                 case "bank":
@@ -1637,7 +2681,7 @@ const drawCart = () => {
                 </div>
                 <div class="inner-meta">
                   <div>Ngày Khởi Hành: <b>${item.departureDate}</b></div>
-                  <div>Khởi Hành Tại: <b>${item.cityName}</b></div>
+                  <div>Khởi Hành Tại: <b>${(item.cityName || "").trim() || "Chưa thiết lập"}</b></div>
                   <div>Số ghế còn lại: <b>${seatsTotal}</b></div>
                   ${
                     babySeat
@@ -1692,17 +2736,6 @@ const drawCart = () => {
             </div>
 
             ${(() => {
-              const roomSels = Array.isArray(item.roomSelections) ? item.roomSelections : [];
-              if (roomSels.length === 0) return "";
-
-              // Nhóm theo khung thời gian
-              const segMap = {};
-              roomSels.forEach((sel) => {
-                const key = (sel.fromDate || "") + "__" + (sel.toDate || "");
-                if (!segMap[key]) segMap[key] = { fromDate: sel.fromDate, toDate: sel.toDate, items: [] };
-                segMap[key].items.push(sel);
-              });
-
               const fmtDate = (d) => {
                 if (!d) return "";
                 const dt = new Date(d);
@@ -1713,7 +2746,147 @@ const drawCart = () => {
                 return dd + "/" + mm + "/" + yyyy;
               };
 
-              let html = `<div class="inner-room-selections"><div class="inner-label">Phòng khách sạn đã chọn</div><div class="inner-room-seg-list">`;
+              if (item.accommodationMode === "shared") {
+                const sharedReq = Array.isArray(item.sharedRoomRequest)
+                  ? item.sharedRoomRequest
+                  : [];
+                const psList = Array.isArray(item.passengers) ? item.passengers : [];
+
+                // Build adult lookup map để tra tên người trông
+                const adultByIdx = {};
+                psList.forEach((p) => {
+                  if (p.type === "adult") adultByIdx[p.idx] = p;
+                });
+
+                let html = `<div class="inner-room-selections">`;
+                html += `<div class="inner-label" style="display:flex;align-items:center;gap:6px;">
+                  <i class="fa-solid fa-people-group" style="color:#6366f1;font-size:13px"></i>
+                  Ở ghép — chờ admin xếp phòng
+                </div>`;
+
+                // ── Khung thời gian + khách sạn ──
+                if (sharedReq.length > 0) {
+                  html += `<div class="inner-room-seg-list">`;
+                  sharedReq.forEach((r) => {
+                    const segLabel = fmtDate(r.fromDate) + " → " + fmtDate(r.toDate);
+                    const candidates = Array.isArray(r.candidateHotels) && r.candidateHotels.length > 0
+                      ? r.candidateHotels
+                      : r.hotelName ? [{ hotelName: r.hotelName }] : [];
+                    html += `<div class="inner-room-seg">
+                      <div class="inner-room-seg__header">${segLabel}</div>`;
+                    if (candidates.length > 0) {
+                      html += `<div class="inner-room-hotel">`;
+                      if (candidates.length > 1) {
+                        html += `<div class="inner-room-hotel__name" style="font-size:12px;color:#64748b;">
+                          <i class="fa-solid fa-hotel" style="margin-right:4px;color:#6366f1;"></i>
+                          Hệ thống sẽ ưu tiên sắp xếp theo thứ tự: ${candidates.map((c, i) => `${i+1}. ${c.hotelName || c.hotelId || '?'}`).join(" · ")}
+                        </div>`;
+                      } else {
+                        html += `<div class="inner-room-hotel__name">
+                          <i class="fa-solid fa-hotel" style="margin-right:4px;color:#6366f1;"></i>
+                          ${candidates[0].hotelName || ""}
+                        </div>`;
+                      }
+                      html += `<div class="inner-room-row">
+                        <span class="inner-room-row__type">Số người lớn ở ghép: ${Number(r.males)||0} nam, ${Number(r.females)||0} nữ</span>
+                      </div>
+                      <div class="inner-room-row" style="padding-top:0;">
+                        <span class="inner-room-row__occ">Khách sạn thực tế sẽ được hệ thống sắp xếp theo khả năng ghép phòng.</span>
+                      </div>`;
+                      html += `</div>`;
+                    }
+                    html += `</div>`;
+                  });
+                  html += `</div>`;
+                }
+
+                // ── Danh sách hành khách chi tiết ──
+                if (psList.length > 0) {
+                  html += `<div class="cart-passenger-list">
+                    <div class="cart-passenger-list__title">
+                      <i class="fa-solid fa-id-card" style="margin-right:6px;color:#475569;font-size:12px"></i>
+                      Danh sách hành khách (${psList.length} người)
+                    </div>
+                    <div class="cart-passenger-list__rows">`;
+
+                  psList.forEach((p) => {
+                    const typeLabel = p.type === "adult" ? "Người lớn" : p.type === "child" ? "Trẻ em" : "Em bé";
+                    const typeClass = p.type === "adult" ? "adult" : p.type === "child" ? "child" : "baby";
+                    const genderIcon = p.gender === "male"
+                      ? `<i class="fa-solid fa-mars" style="color:#3b82f6;font-size:11px"></i>`
+                      : p.gender === "female"
+                      ? `<i class="fa-solid fa-venus" style="color:#ec4899;font-size:11px"></i>`
+                      : "";
+                    const genderText = p.gender === "male" ? "Nam" : p.gender === "female" ? "Nữ" : "";
+
+                    let guardianHtml = "";
+                    if (p.type !== "adult") {
+                      const guardian = adultByIdx[p.guardianIdx];
+                      const guardianName = guardian
+                        ? (guardian.name || `Người lớn #${guardian.idx + 1}`)
+                        : "—";
+                      guardianHtml = `<span class="cart-passenger-guardian">
+                        <i class="fa-solid fa-link" style="font-size:10px;color:#94a3b8;margin-right:3px"></i>
+                        Ở cùng: <strong>${guardianName}</strong>
+                      </span>`;
+                    }
+
+                    html += `<div class="cart-passenger-row cart-passenger-row--${typeClass}">
+                      <span class="cart-passenger-badge cart-passenger-badge--${typeClass}">${typeLabel}</span>
+                      <span class="cart-passenger-name">${p.name || "(chưa có tên)"}</span>
+                      <span class="cart-passenger-age">${p.age !== undefined && p.age !== "" ? p.age + " tuổi" : ""}</span>
+                      ${genderIcon ? `<span class="cart-passenger-gender">${genderIcon} ${genderText}</span>` : ""}
+                      ${guardianHtml}
+                    </div>`;
+                  });
+
+                  html += `</div></div>`;
+                }
+
+                html += `</div>`;
+                return html;
+              }
+
+              const roomSels = Array.isArray(item.roomSelections) ? item.roomSelections : [];
+              if (roomSels.length === 0) return "";
+
+              const psListPrivate = Array.isArray(item.passengers) ? item.passengers : [];
+              // Build adult lookup map cho việc tra tên người lớn đi cùng.
+              const adultByIdxPrivate = {};
+              psListPrivate.forEach((p) => {
+                if (p.type === "adult") adultByIdxPrivate[p.idx] = p;
+              });
+              // Build idx → passenger map.
+              const paxByIdxPrivate = {};
+              psListPrivate.forEach((p) => {
+                paxByIdxPrivate[p.idx] = p;
+              });
+              const renderPaxRow = (p) => {
+                const typeLabel = p.type === "adult" ? "Người lớn" : p.type === "child" ? "Trẻ em" : "Em bé";
+                const typeClass = p.type === "adult" ? "adult" : p.type === "child" ? "child" : "baby";
+                const genderIcon = p.gender === "male"
+                  ? `<i class="fa-solid fa-mars" style="color:#3b82f6;font-size:11px"></i>`
+                  : p.gender === "female"
+                  ? `<i class="fa-solid fa-venus" style="color:#ec4899;font-size:11px"></i>`
+                  : "";
+                const genderText = p.gender === "male" ? "Nam" : p.gender === "female" ? "Nữ" : "";
+                return `<div class="cart-passenger-row cart-passenger-row--${typeClass}">
+                  <span class="cart-passenger-badge cart-passenger-badge--${typeClass}">${typeLabel}</span>
+                  <span class="cart-passenger-name">${p.name || "(chưa có tên)"}</span>
+                  <span class="cart-passenger-age">${p.age !== undefined && p.age !== "" ? p.age + " tuổi" : ""}</span>
+                  ${genderIcon ? `<span class="cart-passenger-gender">${genderIcon} ${genderText}</span>` : ""}
+                </div>`;
+              };
+
+              // Nhóm theo khung thời gian
+              const segMap = {};
+              roomSels.forEach((sel) => {
+                const key = (sel.fromDate || "") + "__" + (sel.toDate || "");
+                if (!segMap[key]) segMap[key] = { fromDate: sel.fromDate, toDate: sel.toDate, items: [] };
+                segMap[key].items.push(sel);
+              });
+
+              let html = `<div class="inner-room-selections"><div class="inner-label">Phòng khách sạn đã chọn (ở riêng)</div><div class="inner-room-seg-list">`;
 
               Object.values(segMap).forEach((seg) => {
                 const segLabel = fmtDate(seg.fromDate) + " → " + fmtDate(seg.toDate);
@@ -1736,6 +2909,38 @@ const drawCart = () => {
                       <span class="inner-room-row__qty">${sel.selectedRooms} phòng</span>
                       <span class="inner-room-row__occ">(${sel.baseOccupancy} người/phòng)</span>
                     </div>`;
+
+                    // Hiển thị từng phòng vật lý + danh sách hành khách đã gán.
+                    const assigns = Array.isArray(sel.roomAssignments) ? sel.roomAssignments : [];
+                    if (assigns.length > 0 && psListPrivate.length > 0) {
+                      html += `<div class="inner-room-assignments">`;
+                      assigns.forEach((a, ridx) => {
+                        const idxs = Array.isArray(a.passengerIdxs) ? a.passengerIdxs : [];
+                        const namesHtml = idxs
+                          .map((idx) => {
+                            const p = paxByIdxPrivate[idx];
+                            if (!p) return "";
+                            const typeShort = p.type === "child" ? "TE" : p.type === "baby" ? "EB" : "NL";
+                            return `<span class="inner-room-assign-pax inner-room-assign-pax--${p.type}">
+                              <strong>${p.name || "Hành khách #" + (idx + 1)}</strong>
+                              <span class="inner-room-assign-pax__meta">${typeShort}${p.age !== undefined && p.age !== "" ? " · " + p.age + "t" : ""}</span>
+                            </span>`;
+                          })
+                          .join("");
+                        const usedTxt =
+                          a.usedCapacity !== undefined && a.usedCapacity !== null
+                            ? ` · sức chứa quy đổi ${a.usedCapacity}/${sel.baseOccupancy}`
+                            : "";
+                        html += `<div class="inner-room-assign-row">
+                          <div class="inner-room-assign-row__title">
+                            <i class="fa-solid fa-bed" style="margin-right:4px;color:#0071c2"></i>
+                            Phòng ${sel.roomTypeName} #${ridx + 1}${usedTxt}
+                          </div>
+                          <div class="inner-room-assign-row__pax">${namesHtml || '<span class="inner-room-assign-empty">— chưa gán hành khách —</span>'}</div>
+                        </div>`;
+                      });
+                      html += `</div>`;
+                    }
                   });
                   html += `</div>`;
                 });
@@ -1744,7 +2949,21 @@ const drawCart = () => {
               });
 
               if (itemExtraRoomCost > 0) {
-                html += `<div class="inner-room-extra-cost">⚠ Chi phí phòng dư: <strong>${itemExtraRoomCost.toLocaleString("vi-VN")}đ</strong></div>`;
+                html += `<div class="inner-room-extra-cost">Chi phí phòng (ở riêng): <strong>${itemExtraRoomCost.toLocaleString("vi-VN")}đ</strong></div>`;
+              }
+
+              // ── Danh sách hành khách chi tiết (private mode mới) ──
+              if (psListPrivate.length > 0) {
+                html += `<div class="cart-passenger-list">
+                  <div class="cart-passenger-list__title">
+                    <i class="fa-solid fa-id-card" style="margin-right:6px;color:#475569;font-size:12px"></i>
+                    Danh sách hành khách (${psListPrivate.length} người)
+                  </div>
+                  <div class="cart-passenger-list__rows">`;
+                psListPrivate.forEach((p) => {
+                  html += renderPaxRow(p);
+                });
+                html += `</div></div>`;
               }
 
               html += `</div></div>`;
@@ -1763,10 +2982,14 @@ const drawCart = () => {
       } else {
         elementCartList.innerHTML = `<div class="inner-no-data">Giỏ hàng rỗng.</div>`;
       }
-      pageCart.querySelector("[cart-sub-total]").innerHTML =
-        subTotal.toLocaleString("vi-VN");
-      pageCart.querySelector("[cart-total]").innerHTML =
-        total.toLocaleString("vi-VN");
+      const elCartSubTotal = pageCart.querySelector("[cart-sub-total]");
+      if (elCartSubTotal) {
+        elCartSubTotal.innerHTML = subTotal.toLocaleString("vi-VN");
+      }
+      const elCartTotal = pageCart.querySelector("[cart-total]");
+      if (elCartTotal) {
+        elCartTotal.innerHTML = total.toLocaleString("vi-VN");
+      }
 
       // --- CẬP NHẬT SỐ LƯỢNG + RÀNG BUỘC GHẾ ---
       const listInputQuantity = elementCartList.querySelectorAll(
@@ -1885,17 +3108,23 @@ const drawCart = () => {
 
 if (pageCart) {
   drawCart();
-  // Khi điều hướng sang trang khác (không phải reload), xoá giỏ tạm ĐẶT NGAY
-  let isNavigatingAway = false;
+  // Khi điều hướng sang trang khác (không phải reload), xoá giỏ tạm ĐẶT NGAY.
+  // Chỉ đánh dấu navigate-away khi user thật sự click sang URL khác hoặc khi
+  // order tạo thành công. KHÔNG đánh dấu khi form submit thường (vì F5 sau khi
+  // form trả lỗi cũng phát sinh `pagehide`, gây xoá giỏ ngoài ý muốn).
+  window.__cartNavigateAway = false;
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a[href]");
-    if (a && !a.getAttribute("href").startsWith("#") && !a.getAttribute("href").startsWith("javascript")) {
-      isNavigatingAway = true;
+    if (
+      a &&
+      !a.getAttribute("href").startsWith("#") &&
+      !a.getAttribute("href").startsWith("javascript")
+    ) {
+      window.__cartNavigateAway = true;
     }
   });
-  document.addEventListener("submit", () => { isNavigatingAway = true; });
   window.addEventListener("pagehide", () => {
-    if (isQuickOrderMode() && isNavigatingAway) clearSessionCart();
+    if (isQuickOrderMode() && window.__cartNavigateAway) clearSessionCart();
   });
 }
 

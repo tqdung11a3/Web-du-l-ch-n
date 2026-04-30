@@ -160,12 +160,18 @@ module.exports.detail = async (req, res) => {
       ? `/${pathAdmin}/super-admin/hotels/company/${cid}`
       : `/${pathAdmin}/super-admin/hotels`;
 
+    // Link "Chỉnh sửa với tư cách công ty này"
+    const superAdminOverrideEditUrl = cid
+      ? `/${pathAdmin}/super-admin/as-company/${cid}/hotels/${plain.id}`
+      : null;
+
     return res.render("admin/pages/hotel-edit", {
       pageTitle: "Chi tiết khách sạn",
       hotelDetail: plain,
       cityList,
       readOnly: true,
       hotelsListBackUrl,
+      superAdminOverrideEditUrl,
     });
   } catch (error) {
     console.error("Super Admin - Hotel Detail Error:", error);

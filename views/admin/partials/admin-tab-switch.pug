@@ -1,9 +1,10 @@
 //- views/admin/partials/admin-tab-switch.pug
-.admin-tab-switch
-  button.tab-btn(data-tab="tour" class="active")
-    i.fa-solid.fa-plane
-    span Tour du lịch
-  button.tab-btn(data-tab="hotel")
-    i.fa-solid.fa-hotel
-    span Khách sạn
-
+//- Ẩn thanh chuyển tab khi admin chỉ được phép một tab (Tour hoặc Khách sạn)
+if !isTourOnlyAdmin && !isHotelOnlyAdmin
+  .admin-tab-switch
+    button.tab-btn(data-tab="tour" class="active")
+      i.fa-solid.fa-plane
+      span Tour du lịch
+    button.tab-btn(data-tab="hotel")
+      i.fa-solid.fa-hotel
+      span Khách sạn

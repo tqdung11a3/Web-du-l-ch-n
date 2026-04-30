@@ -34,6 +34,43 @@ block main
         i.fa-solid.fa-hotel
         span  Phòng (của bạn): #{holdsByHotel.reduce((s,h) => s + h.rooms.length, 0)}
 
+    //- Tổng hợp nhu cầu lưu trú: phân loại "Ở riêng" vs "Ở ghép"
+    //- để admin biết cần xếp bao nhiêu phòng riêng và bao nhiêu nhóm ghép.
+    -
+      var summaryPrivateOrders = 0
+      var summarySharedOrders = 0
+      var summarySharedMales = 0
+      var summarySharedFemales = 0
+      var summaryPrivateRoomsRequested = 0
+      ;(customers || []).forEach(function(c){
+        if (c.accommodationMode === 'shared') {
+          summarySharedOrders += 1
+          ;(c.sharedRoomRequest || []).forEach(function(r){
+            summarySharedMales += Number(r.males) || 0
+            summarySharedFemales += Number(r.females) || 0
+          })
+        } else {
+          summaryPrivateOrders += 1
+          ;(c.roomSelections || []).forEach(function(rs){
+            summaryPrivateRoomsRequested += Number(rs.selectedRooms) || 0
+          })
+        }
+      })
+    if customers && customers.length > 0
+      .assign-demand-summary(style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px")
+        .assign-demand-summary__item(style="flex:1;min-width:240px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px")
+          .assign-demand-summary__title(style="font-weight:600;color:#1e293b;margin-bottom:4px")
+            i.fa-solid.fa-bed(style="color:#475569;margin-right:6px")
+            | Đã chọn phòng riêng
+          .assign-demand-summary__value(style="font-size:13px;color:#475569")
+            | #{summaryPrivateOrders} đơn · #{summaryPrivateRoomsRequested} phòng đã đặt
+        .assign-demand-summary__item(style="flex:1;min-width:240px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px")
+          .assign-demand-summary__title(style="font-weight:600;color:#1e3a8a;margin-bottom:4px")
+            i.fa-solid.fa-people-group(style="color:#1d4ed8;margin-right:6px")
+            | Yêu cầu ở ghép (cộng dồn)
+          .assign-demand-summary__value(style="font-size:13px;color:#1e3a8a")
+            | #{summarySharedOrders} đơn · #{summarySharedMales} nam · #{summarySharedFemales} nữ
+
     .assign-customer-list-section
       h2.assign-col__title
         i.fa-solid.fa-list-check
@@ -53,6 +90,7 @@ block main
                 th Số điện thoại
                 th Mã đơn hàng
                 th Số người
+                th Hình thức
                 th Trạng thái gán phòng
                 th Thao tác
             tbody
@@ -77,6 +115,42 @@ block main
                       |  
                       span.assign-pax-badge.assign-pax-badge--baby
                         | #{cust.quantityBaby} EB
+                  td
+                    if cust.accommodationMode === 'shared'
+                      span.assign-pax-badge(style="background:#dbeafe;color:#1e3a8a")
+                        i.fa-solid.fa-people-group
+                        |  Ở ghép
+                      //- Hiển thị số nhóm thuộc CHÍNH hotel này (nếu khách
+                      //- được phân ra nhiều hotel cùng segment).
+                      -
+                        var custAtomsHere = 0;
+                        var custMalesAll = 0, custFemalesAll = 0;
+                        var hasMultiHotelSplit = false;
+                        (cust.sharedRoomRequest || []).forEach(function(r){
+                          custMalesAll += Number(r.males) || 0;
+                          custFemalesAll += Number(r.females) || 0;
+                          if (Array.isArray(r.hotelAllocations) && r.hotelAllocations.length > 0) {
+                            if (r.hotelAllocations.length > 1) hasMultiHotelSplit = true;
+                            r.hotelAllocations.forEach(function(a){
+                              if (selectedHotelId && String(a.hotelId) === String(selectedHotelId)) {
+                                custAtomsHere += (a.atomLabels || []).length;
+                              }
+                            });
+                          }
+                        });
+                      if custMalesAll > 0 || custFemalesAll > 0
+                        br
+                        span.assign-pax-ages= '(' + custMalesAll + ' nam, ' + custFemalesAll + ' nữ)'
+                      if selectedHotelId && custAtomsHere > 0
+                        br
+                        span.assign-pax-ages(style="color:#0e7490;font-weight:600")= '· ' + custAtomsHere + ' nhóm tại KS này'
+                      if hasMultiHotelSplit
+                        br
+                        span.assign-pax-ages(style="color:#b45309") · Đoàn được chia trên nhiều KS
+                    else
+                      span.assign-pax-badge(style="background:#f1f5f9;color:#475569")
+                        i.fa-solid.fa-bed
+                        |  Ở riêng
                   td
                     if cust.assignStatus === 'complete'
                       span.assign-status-badge.assign-status-badge--complete
@@ -175,7 +249,115 @@ block main
                         | #{age}t
                       | )
               span.assign-pax-total  · #{customer.totalPeople} người
-            if customer.roomSelections && customer.roomSelections.length > 0
+            //- Hình thức lưu trú
+            if customer.accommodationMode === 'shared'
+              span.assign-pax-badge.assign-pax-badge--shared(style="background:#dbeafe;color:#1e3a8a")
+                i.fa-solid.fa-people-group
+                |  Ở ghép
+            else if customer.accommodationMode === 'private'
+              span.assign-pax-badge.assign-pax-badge--private(style="background:#f1f5f9;color:#475569")
+                i.fa-solid.fa-bed
+                |  Ở riêng
+
+            -
+              var _isAutoAssigned = false;
+              if (customer.accommodationMode === 'shared' && Array.isArray(customer.sharedRoomRequest)) {
+                for (var _ri = 0; _ri < customer.sharedRoomRequest.length; _ri++) {
+                  var _rr = customer.sharedRoomRequest[_ri];
+                  var _als = (_rr && _rr.hotelAllocations) || [];
+                  for (var _ai = 0; _ai < _als.length; _ai++) {
+                    var _al = _als[_ai];
+                    if (selectedHotelId && String(_al.hotelId) !== String(selectedHotelId)) continue;
+                    if ((_al.roomAssignments || []).length > 0) { _isAutoAssigned = true; break; }
+                  }
+                  if (_isAutoAssigned) break;
+                }
+              }
+            if customer.accommodationMode === 'shared' && customer.sharedRoomRequest && customer.sharedRoomRequest.length > 0
+              .assign-customer-card__booked-rooms
+                .assign-customer-card__booked-rooms-title
+                  i.fa-solid.fa-people-group(style="margin-right:4px")
+                  | Yêu cầu ở ghép tại KS của bạn:
+                each r in customer.sharedRoomRequest
+                  .assign-booked-seg
+                    .assign-booked-seg__date= r.fromDate + ' → ' + r.toDate
+                    //- Đơn mới: render từng hotel trong hotelAllocations.
+                    //- Đơn cũ: render hotelId/hotelName + males/females.
+                    if r.hotelAllocations && r.hotelAllocations.length > 0
+                      each a in r.hotelAllocations
+                        - var _isHere = selectedHotelId && String(a.hotelId) === String(selectedHotelId)
+                        .assign-booked-row(style=_isHere ? 'background:#ecfdf5;border-left:3px solid #10b981;padding-left:6px' : '')
+                          span.assign-booked-row__hotel
+                            i.fa-solid.fa-hotel(style="margin-right:4px;color:#6366f1")
+                            = a.hotelName || '—'
+                            if _isHere
+                              span(style="font-size:11px;color:#047857;margin-left:4px") (KS này)
+                          span.assign-booked-row__type= (a.atomLabels || []).length + ' nhóm · sức chứa ' + (a.totalEffectiveSize || 0)
+                        if a.atomLabels && a.atomLabels.length
+                          .assign-booked-row(style="flex-wrap:wrap;gap:4px;font-size:12px;color:#475569")
+                            each lbl in a.atomLabels
+                              span(style="background:#f1f5f9;border-radius:4px;padding:2px 6px") #{lbl}
+                        if a.roomAssignments && a.roomAssignments.length
+                          .assign-booked-row(style="flex-direction:column;align-items:flex-start;gap:4px;font-size:12.5px;margin-top:4px")
+                            span(style="font-weight:600;color:#0f172a")
+                              i.fa-solid.fa-bed(style="margin-right:4px;color:#0ea5e9")
+                              | Phòng tự gán:
+                            each ra in a.roomAssignments
+                              .assign-booked-row(style="gap:8px;background:#f8fafc;padding:6px 8px;border-radius:6px;width:100%;align-items:center")
+                                span(class=(ra.gender === 'female' ? 'badge badge--pink' : 'badge badge--blue'), style="font-size:11px;padding:2px 6px;border-radius:4px;color:#fff;background:" + (ra.gender === 'female' ? '#ec4899' : '#3b82f6'))
+                                  = ra.gender === 'female' ? 'Phòng nữ' : 'Phòng nam'
+                                span(style="font-weight:600") #{ra.roomTypeName || 'Phòng'}
+                                span(style="color:#64748b") (#{ra.usedCapacity}/#{ra.baseOccupancy})
+                                if ra.atomLabels && ra.atomLabels.length
+                                  span(style="color:#0f172a") • #{ra.atomLabels.join(', ')}
+                      if r.hotelAllocations.length > 1
+                        .assign-booked-row(style="font-size:12px;color:#b45309;margin-top:2px")
+                          i.fa-solid.fa-circle-info(style="margin-right:4px")
+                          | Đoàn được chia trên #{r.hotelAllocations.length} khách sạn cùng khung
+                    else
+                      .assign-booked-row
+                        span.assign-booked-row__hotel= r.hotelName
+                        span.assign-booked-row__type= 'Yêu cầu ' + (Number(r.males) || 0) + ' nam, ' + (Number(r.females) || 0) + ' nữ'
+
+              //- Family unit (atom) cards: chỉ hiển thị khi chưa được hệ thống
+              //- tự gán phòng — vì khi đã tự gán, danh sách "Phòng tự gán" ở
+              //- trên đã thể hiện rõ ai ở cùng ai.
+              if customer.passengers && customer.passengers.length && !_isAutoAssigned
+                -
+                  var psList = customer.passengers || [];
+                  var adultMap = {};
+                  psList.forEach(function(p){ if (p.type === 'adult') adultMap[p.idx] = { adult: p, kids: [] }; });
+                  psList.forEach(function(p){
+                    if (p.type !== 'adult' && adultMap[p.guardianIdx]) adultMap[p.guardianIdx].kids.push(p);
+                  });
+                  var atomList = Object.values(adultMap);
+                .assign-customer-card__atoms(style="margin-top:8px")
+                  .assign-customer-card__booked-rooms-title
+                    i.fa-solid.fa-people-roof(style="margin-right:4px")
+                    | #{atomList.length} nhóm cần ở cùng phòng:
+                  .assign-atom-list(style="display:flex;flex-direction:column;gap:6px;margin-top:4px")
+                    each atom in atomList
+                      .assign-atom-card(style="border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;background:#f8fafc;font-size:12px")
+                        div(style="font-weight:600;color:#0f172a")
+                          if atom.adult.gender === 'male'
+                            i.fa-solid.fa-mars(style="color:#3b82f6;margin-right:4px")
+                          else
+                            i.fa-solid.fa-venus(style="color:#ec4899;margin-right:4px")
+                          | #{atom.adult.name || ('Người lớn #' + (atom.adult.idx + 1))} (#{atom.adult.age}t)
+                        if atom.kids.length > 0
+                          div(style="color:#475569;margin-top:2px")
+                            | đi cùng:
+                            each k in atom.kids
+                              span(style="margin-left:6px;display:inline-block")
+                                if k.type === 'child'
+                                  span(style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;margin-right:3px") TE
+                                else
+                                  span(style="background:#fce7f3;color:#9d174d;padding:1px 5px;border-radius:4px;margin-right:3px") EB
+                                | #{k.name || '?'} (#{k.age}t)
+            else if customer.roomSelections && customer.roomSelections.length > 0
+              -
+                var _paxByIdxPrivate = {};
+                (customer.passengers || []).forEach(function(p){ _paxByIdxPrivate[p.idx] = p; });
               .assign-customer-card__booked-rooms
                 .assign-customer-card__booked-rooms-title
                   i.fa-solid.fa-bed(style="margin-right:4px")
@@ -195,6 +377,65 @@ block main
                         span.assign-booked-row__qty= rs.selectedRooms + ' phòng'
                         if rs.baseOccupancy
                           span.assign-booked-row__occ= '(' + rs.baseOccupancy + ' người/phòng)'
+                      if rs.roomAssignments && rs.roomAssignments.length && (customer.passengers || []).length
+                        .inner-room-assignments(style="margin-top:4px;margin-left:2px")
+                          each a, ridx in rs.roomAssignments
+                            .inner-room-assign-row
+                              .inner-room-assign-row__title
+                                i.fa-solid.fa-bed(style="margin-right:4px;color:#0071c2")
+                                | Phòng #{rs.roomTypeName} ##{ridx + 1}
+                                if a.usedCapacity !== undefined && a.usedCapacity !== null
+                                  span(style="font-size:11px;color:#64748b;margin-left:4px") · sức chứa quy đổi #{a.usedCapacity}/#{rs.baseOccupancy}
+                              .inner-room-assign-row__pax
+                                if !a.passengerIdxs || a.passengerIdxs.length === 0
+                                  span.inner-room-assign-empty — chưa gán hành khách —
+                                else
+                                  each idx in a.passengerIdxs
+                                    - var _p = _paxByIdxPrivate[idx]
+                                    if _p
+                                      span.inner-room-assign-pax(class=`inner-room-assign-pax--${_p.type || 'adult'}`)
+                                        strong= _p.name || ('HK #' + (idx + 1))
+                                        span.inner-room-assign-pax__meta
+                                          = ' ' + (_p.type === 'child' ? 'TE' : _p.type === 'baby' ? 'EB' : 'NL')
+                                          if _p.age !== undefined && _p.age !== ''
+                                            = ' · ' + _p.age + 't'
+                                          if _p.gender === 'male'
+                                            = ' · Nam'
+                                          else if _p.gender === 'female'
+                                            = ' · Nữ'
+              if customer.passengers && customer.passengers.length
+                .assign-customer-card__atoms(style="margin-top:8px")
+                  .assign-customer-card__booked-rooms-title
+                    i.fa-solid.fa-id-card(style="margin-right:4px")
+                    | Danh sách hành khách (#{customer.passengers.length} người):
+                  table.passenger-admin-table(style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px")
+                    thead
+                      tr(style="background:#f1f5f9;color:#475569")
+                        th(style="padding:5px 6px;text-align:left") #
+                        th(style="padding:5px 6px;text-align:left") Họ tên
+                        th(style="padding:5px 6px;text-align:center") Tuổi
+                        th(style="padding:5px 6px;text-align:center") Loại
+                        th(style="padding:5px 6px;text-align:center") Giới tính
+                    tbody
+                      each _p in customer.passengers
+                        tr(style="border-top:1px solid #e2e8f0")
+                          td(style="padding:5px 6px") #{_p.idx + 1}
+                          td(style="padding:5px 6px") #{_p.name || '—'}
+                          td(style="padding:5px 6px;text-align:center") #{_p.age}
+                          td(style="padding:5px 6px;text-align:center")
+                            if _p.type === 'adult'
+                              span.badge.badge--blue(style="font-size:11px") Người lớn
+                            else if _p.type === 'child'
+                              span.badge.badge--yellow(style="font-size:11px") Trẻ em
+                            else
+                              span.badge.badge--pink(style="font-size:11px") Em bé
+                          td(style="padding:5px 6px;text-align:center")
+                            if _p.gender === 'male'
+                              | Nam
+                            else if _p.gender === 'female'
+                              | Nữ
+                            else
+                              | —
 
           .assign-customer-card__validation
           .assign-customer-card__rooms
@@ -215,6 +456,10 @@ block main
                     data-room-id=a.roomId
                   )
                     i.fa-solid.fa-xmark
+            else if _isAutoAssigned
+              span.assign-customer-card__autoassigned(style="display:inline-flex;align-items:center;gap:6px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;padding:6px 10px;border-radius:6px;font-weight:600;font-size:13px")
+                i.fa-solid.fa-circle-check
+                | Hệ thống đã tự xếp phòng cho khách ở ghép
             else
               span.assign-customer-card__unassigned
                 i.fa-solid.fa-triangle-exclamation
@@ -272,6 +517,35 @@ block main
           button#btn-cancel-select.btn-secondary(type="button" onclick="cancelSelect()")
             |  Huỷ chọn
 
+    //- Context menu khi chuột phải vào phòng
+    #room-ctx-menu.room-ctx-menu(style="display:none")
+      button.room-ctx-menu__item#ctx-view-detail(type="button")
+        i.fa-solid.fa-circle-info
+        |  Xem chi tiết
+
+    //- Modal xem chi tiết phòng
+    #room-detail-modal.room-detail-modal(style="display:none")
+      .room-detail-modal__backdrop(onclick="closeRoomDetail()")
+      .room-detail-modal__panel
+        .room-detail-modal__header
+          span#rdm-title.room-detail-modal__title Thông tin phòng
+          button.room-detail-modal__close(type="button" onclick="closeRoomDetail()")
+            i.fa-solid.fa-xmark
+        .room-detail-modal__body#rdm-body
+
+    //- Modal thông báo thay cho alert()
+    #assign-notify-modal.room-detail-modal(style="display:none")
+      .room-detail-modal__backdrop(onclick="closeAssignNotifyModal()")
+      .room-detail-modal__panel(style="max-width:560px")
+        .room-detail-modal__header
+          span.room-detail-modal__title Thông báo
+          button.room-detail-modal__close(type="button" onclick="closeAssignNotifyModal()")
+            i.fa-solid.fa-xmark
+        .room-detail-modal__body
+          .assign-notify-modal__content#assign-notify-modal-content
+          .assign-notify-modal__actions(style="display:flex;justify-content:flex-end;margin-top:14px")
+            button.btn-primary(type="button" onclick="closeAssignNotifyModal()") OK
+
     .assign-save-bar
       button#btn-save-assignments.btn-primary(type="button" onclick="saveAllAssignments()")
         i.fa-solid.fa-floppy-disk
@@ -323,6 +597,22 @@ block main
       function escAttr(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
       }
+      function nl2brEscaped(s) {
+        return escHtmlText(s).replace(/\n/g, '<br>');
+      }
+
+      function showAssignNotifyModal(message) {
+        var modal = document.getElementById('assign-notify-modal');
+        var content = document.getElementById('assign-notify-modal-content');
+        if (!modal || !content) return;
+        content.innerHTML = nl2brEscaped(message || 'Có lỗi xảy ra.');
+        modal.style.display = 'flex';
+      }
+
+      function closeAssignNotifyModal() {
+        var modal = document.getElementById('assign-notify-modal');
+        if (modal) modal.style.display = 'none';
+      }
 
       function renderRoomGrid() {
         var grid      = document.getElementById('room-grid');
@@ -359,14 +649,21 @@ block main
         grid.innerHTML = rooms.map(function(r) {
           var slotId   = String(r._id);
           var physRoomId = String(r.roomId || slotId);
-          var isAssigned  = assignments.some(function(a) { return a.holdBookingId === slotId; });
+          // 1 phòng có thể được nhiều đơn share (shared cross-order) → lấy
+          // toàn bộ assignees, không chỉ 1.
+          var assignees = assignments.filter(function(a) { return a.holdBookingId === slotId; });
+          var isAssigned  = assignees.length > 0;
           var isSelecting = selectedRoomIds.indexOf(slotId) !== -1;
-          var assignee = isAssigned
-            ? assignments.find(function(a) { return a.holdBookingId === slotId; })
-            : null;
+          var hasMyAssign = assignees.some(function(a) { return a.orderId === customer.orderId; });
+          var hasOtherAssign = assignees.some(function(a) { return a.orderId !== customer.orderId; });
+          // "Locked" = có đơn khác đang ở phòng và phòng không phải shared của
+          // mình. Nếu phòng share cùng giới với đơn mình → vẫn cho chọn.
+          var allShared = assignees.length > 0 && assignees.every(function(a) { return a.accommodationMode === 'shared'; });
+          var isLocked = !hasMyAssign && hasOtherAssign && !allShared;
 
           var cls = 'assign-room-tile';
           if (isSelecting)  cls += ' assign-room-tile--selecting';
+          else if (isLocked) cls += ' assign-room-tile--assigned assign-room-tile--locked';
           else if (isAssigned) cls += ' assign-room-tile--assigned';
 
           var showDates = physicalRoomCount[physRoomId] > 1;
@@ -374,23 +671,57 @@ block main
             ? '<div class="assign-room-tile__dates">' + formatSegDate(r.checkIn) + ' → ' + formatSegDate(r.checkOut) + '</div>'
             : '';
 
-          var gname = assignee ? (assignee.guestName || assignee.orderCode || '') : '';
-          var assigneeLabel = isAssigned && assignee
-            ? '<div class="assign-room-tile__assignee" title="' + escAttr(gname) + '">'
+          var assigneeLabel = '';
+          if (isAssigned) {
+            var names = assignees.map(function(a) { return a.guestName || a.orderCode || ''; });
+            var titleStr = names.join(', ');
+            var nameHtml = '';
+            if (allShared && names.length > 1) {
+              nameHtml = names
+                .map(function(n) {
+                  return '<div><span class="assign-room-tile__assignee-name">' + escHtmlText(n) + '</span></div>';
+                })
+                .join('');
+            } else {
+              nameHtml = '<span class="assign-room-tile__assignee-name">' + escHtmlText(names[0] || '') + '</span>';
+            }
+            var modeLabel = allShared ? 'Ở ghép' : 'Ở riêng';
+            var genders = assignees
+              .map(function(a) { return a.gender || null; })
+              .filter(function(g) { return !!g; });
+            var uniqGender = [];
+            genders.forEach(function(g) { if (uniqGender.indexOf(g) === -1) uniqGender.push(g); });
+            var genderLabel = '';
+            if (uniqGender.length === 1) {
+              genderLabel = uniqGender[0] === 'male' ? 'Nam' : 'Nữ';
+            } else if (uniqGender.length > 1) {
+              genderLabel = 'Nam/Nữ';
+            }
+            assigneeLabel = '<div class="assign-room-tile__assignee" title="' + escAttr(titleStr) + '">'
               + '<i class="fa-solid fa-user-check" aria-hidden="true"></i>'
-              + '<span class="assign-room-tile__assignee-name">' + escHtmlText(gname) + '</span>'
+              + nameHtml
+              + '<div style="margin-top:2px;font-size:11px;color:#64748b;line-height:1.2">'
+              + escHtmlText(modeLabel)
+              + (genderLabel ? ' · ' + escHtmlText(genderLabel) : '')
               + '</div>'
-            : '';
+              + '</div>';
+          }
 
+          var noteRaw = r.note ? escAttr(r.note) : '';
           return '<div class="' + cls + '" data-room-id="' + slotId + '"'
             + ' data-physical-room-id="' + physRoomId + '"'
             + ' data-room-number="' + (r.roomNumber || '') + '"'
             + ' data-room-type="' + (r.roomTypeName || '') + '"'
+            + ' data-room-type-id="' + (r.roomTypeId || '') + '"'
             + ' data-hotel-id="' + (r.hotel && r.hotel.hotelId ? r.hotel.hotelId : '') + '"'
             + ' data-hotel-name="' + (r.hotelName || '') + '"'
             + ' data-base-occ="' + (r.baseOccupancy || 2) + '"'
             + ' data-max-occ="' + (r.maxOccupancy || r.baseOccupancy || 2) + '"'
-            + ' onclick="selectRoom(\'' + slotId + '\')">'
+            + ' data-note="' + noteRaw + '"'
+            + ' data-checkin="' + (r.checkIn || '') + '"'
+            + ' data-checkout="' + (r.checkOut || '') + '"'
+            + ' onclick="selectRoom(\'' + slotId + '\')"'
+            + ' oncontextmenu="roomContextMenu(event, \'' + slotId + '\')">'
             + '<div class="assign-room-tile__number">' + (r.roomNumber || '?') + '</div>'
             + '<div class="assign-room-tile__type">' + (r.roomTypeName || '') + '</div>'
             + '<div class="assign-room-tile__occ">' + (r.baseOccupancy || 2) + ' <i class="fa-solid fa-user-group fa-xs"></i></div>'
@@ -429,7 +760,118 @@ block main
         });
       });
 
+      // ── Helper: suy ra giới tính chính của khách shared ───────────────────
+      function inferCustomerGender(c) {
+        if (!c || !Array.isArray(c.passengers)) return null;
+        var males = 0, females = 0;
+        c.passengers.forEach(function(p) {
+          if (p.type !== 'adult') return;
+          if (p.gender === 'male')   males++;
+          else if (p.gender === 'female') females++;
+        });
+        if (males > 0 && females === 0) return 'male';
+        if (females > 0 && males === 0) return 'female';
+        return null;
+      }
+
+      // ── Helper: số chỗ (effective size) khách shared chiếm trong 1 phòng ──
+      function inferCustomerSizePerRoom(c) {
+        if (!c) return 1;
+        var arr = c.sharedRoomRequest || [];
+        for (var i = 0; i < arr.length; i++) {
+          var allocs = (arr[i] && arr[i].hotelAllocations) || [];
+          for (var j = 0; j < allocs.length; j++) {
+            var ras = allocs[j].roomAssignments || [];
+            if (ras.length) {
+              return Math.max(1, Number(ras[0].usedCapacity) || 1);
+            }
+          }
+        }
+        return 1;
+      }
+
+      // ── Helper: kiểm tra có thể ghép khách hiện tại vào phòng đang có
+      //   khách khác hay không. Cho phép khi cả 2 đều là shared, cùng giới
+      //   tính, và còn đủ sức chứa. Trả về { ok, message }.
+      function canSharedJoinRoom(slotId, existingOthers) {
+        if (customer.accommodationMode !== 'shared') {
+          return {
+            ok: false,
+            message:
+              'Phòng này đã được gán cho khách "' +
+              (existingOthers[0].guestName || existingOthers[0].orderCode) +
+              '" (#' + existingOthers[0].orderCode + ').\n' +
+              'Hãy bỏ phân công ở đơn đó trước nếu muốn gán lại cho khách hiện tại.',
+          };
+        }
+        var allShared = existingOthers.every(function(a) {
+          return a.accommodationMode === 'shared';
+        });
+        if (!allShared) {
+          return {
+            ok: false,
+            message:
+              'Phòng này hiện có khách ở riêng đang giữ. Không thể ghép thêm.\n' +
+              'Hãy bỏ phân công ở đơn đó trước nếu muốn gán lại.',
+          };
+        }
+        // Giới tính phòng = giới tính các khách đang ở (đều shared).
+        var roomGender = null;
+        for (var i = 0; i < existingOthers.length; i++) {
+          var g = existingOthers[i].gender || null;
+          if (!g) continue;
+          if (roomGender === null) roomGender = g;
+          else if (roomGender !== g) {
+            return {
+              ok: false,
+              message: 'Phòng này hiện có khách đa giới tính, không thể ghép thêm.',
+            };
+          }
+        }
+        var myGender = inferCustomerGender(customer);
+        if (roomGender && myGender && roomGender !== myGender) {
+          var roomLabel = roomGender === 'male' ? 'nam' : 'nữ';
+          var myLabel   = myGender   === 'male' ? 'nam' : 'nữ';
+          return {
+            ok: false,
+            message:
+              'Phòng này hiện đang ghép khách ' + roomLabel + '.\n' +
+              'Khách hiện tại là ' + myLabel + ', không thể ghép cùng phòng.',
+          };
+        }
+        // Sức chứa
+        var tile = document.querySelector('.assign-room-tile[data-room-id="' + slotId + '"]');
+        var cap = tile ? parseInt(tile.dataset.baseOcc, 10) : 0;
+        if (cap > 0) {
+          var usedByOthers = existingOthers.reduce(function(s, a) {
+            return s + (Number(a.numPeople) || 0);
+          }, 0);
+          var myNeed = inferCustomerSizePerRoom(customer);
+          if (usedByOthers + myNeed > cap) {
+            return {
+              ok: false,
+              message:
+                'Phòng còn ' + Math.max(0, cap - usedByOthers) + ' chỗ trống, ' +
+                'không đủ cho ' + myNeed + ' khách của đơn này.',
+            };
+          }
+        }
+        return { ok: true };
+      }
+
       function selectRoom(roomId) {
+        // Lấy các đơn KHÁC đang gán phòng này
+        var existingOthers = assignments.filter(function(a) {
+          return a.holdBookingId === roomId && a.orderId !== customer.orderId;
+        });
+        if (existingOthers.length > 0) {
+          var check = canSharedJoinRoom(roomId, existingOthers);
+          if (!check.ok) {
+            showAssignNotifyModal(check.message);
+            return;
+          }
+        }
+
         var idx = selectedRoomIds.indexOf(roomId);
         if (idx !== -1) {
           selectedRoomIds.splice(idx, 1);
@@ -483,23 +925,39 @@ block main
         if (selectedRoomIds.length === 0) return;
         var cust = customer;
 
-        var conflictMsgs = [];
+        // Phân loại: phòng xung đột thật vs có thể ghép cùng (shared+shared)
+        var hardConflicts = [];
         selectedRoomIds.forEach(function(slotId) {
-          var alreadyOtherOrder = assignments.find(function(a) {
+          var existingOthers = assignments.filter(function(a) {
             return a.holdBookingId === slotId && a.orderId !== cust.orderId;
           });
-          if (alreadyOtherOrder) {
+          if (existingOthers.length === 0) return;
+          var check = canSharedJoinRoom(slotId, existingOthers);
+          if (!check.ok) {
             var tile = document.querySelector('.assign-room-tile[data-room-id="' + slotId + '"]');
-            conflictMsgs.push('Phòng ' + (tile ? tile.dataset.roomNumber : slotId) + ' đã gán cho đơn ' + alreadyOtherOrder.orderCode);
+            hardConflicts.push(
+              'Phòng ' + (tile ? tile.dataset.roomNumber : slotId) +
+              ': ' + check.message.replace(/\n+/g, ' ')
+            );
           }
         });
-        if (conflictMsgs.length > 0) {
-          if (!confirm(conflictMsgs.join('\n') + '\n\nGán lại tất cả?')) return;
-          selectedRoomIds.forEach(function(slotId) {
-            assignments = assignments.filter(function(a) {
-              return !(a.holdBookingId === slotId && a.orderId !== cust.orderId);
+        if (hardConflicts.length > 0) {
+          showAssignNotifyModal(
+            'Không thể gán các phòng sau:\n\n' +
+              hardConflicts.join('\n') +
+              '\n\nVui lòng chọn phòng khác hoặc bỏ phân công ở đơn liên quan.'
+          );
+          // Bỏ những slot bị xung đột thật
+          selectedRoomIds = selectedRoomIds.filter(function(slotId) {
+            var existingOthers = assignments.filter(function(a) {
+              return a.holdBookingId === slotId && a.orderId !== cust.orderId;
             });
+            if (existingOthers.length === 0) return true;
+            return canSharedJoinRoom(slotId, existingOthers).ok;
           });
+          renderRoomGrid();
+          updateActionBox();
+          return;
         }
 
         selectedRoomIds.forEach(function(slotId) {
@@ -509,24 +967,32 @@ block main
           if (!baseOcc || baseOcc < 1) baseOcc = 2;
           baseOcc = Math.round(baseOcc);
 
+          // numPeople của entry này là số chỗ riêng đơn này chiếm — với shared
+          // dùng usedCapacity thay vì baseOccupancy để cộng dồn vào phòng đúng.
+          var myNum = cust.accommodationMode === 'shared'
+            ? inferCustomerSizePerRoom(cust)
+            : baseOcc;
+
           var existing = assignments.find(function(a) {
             return a.orderId === cust.orderId && a.holdBookingId === slotId;
           });
           if (!existing) {
             assignments.push({
-              orderId:       cust.orderId,
-              orderCode:     cust.orderCode,
-              guestName:     cust.guestName,
-              phone:         cust.phone,
-              numPeople:     baseOcc,
-              effectiveOcc:  baseOcc,
-              totalEffOcc:   cust.totalPeople,
-              hotelId:       roomTile.dataset.hotelId,
-              hotelName:     roomTile.dataset.hotelName,
-              roomId:        roomTile.dataset.physicalRoomId || slotId,
-              roomNumber:    roomTile.dataset.roomNumber,
-              roomTypeName:  roomTile.dataset.roomType,
-              holdBookingId: slotId,
+              orderId:           cust.orderId,
+              orderCode:         cust.orderCode,
+              guestName:         cust.guestName,
+              phone:             cust.phone,
+              numPeople:         myNum,
+              effectiveOcc:      myNum,
+              totalEffOcc:       cust.totalPeople,
+              hotelId:           roomTile.dataset.hotelId,
+              hotelName:         roomTile.dataset.hotelName,
+              roomId:            roomTile.dataset.physicalRoomId || slotId,
+              roomNumber:        roomTile.dataset.roomNumber,
+              roomTypeName:      roomTile.dataset.roomType,
+              holdBookingId:     slotId,
+              accommodationMode: cust.accommodationMode || 'private',
+              gender:            cust.accommodationMode === 'shared' ? inferCustomerGender(cust) : null,
             });
           }
         });
@@ -611,6 +1077,35 @@ block main
         return parts.join('');
       }
 
+      // Detect: shared mode + đã có roomAssignments tại KS đang xem → "tự xếp phòng".
+      function isAutoAssignedShared() {
+        if (!customer || customer.accommodationMode !== 'shared') return false;
+        var arr = customer.sharedRoomRequest || [];
+        for (var i = 0; i < arr.length; i++) {
+          var allocs = (arr[i] && arr[i].hotelAllocations) || [];
+          for (var j = 0; j < allocs.length; j++) {
+            if (SCOPE_HOTEL_ID && String(allocs[j].hotelId) !== String(SCOPE_HOTEL_ID)) continue;
+            if ((allocs[j].roomAssignments || []).length > 0) return true;
+          }
+        }
+        return false;
+      }
+
+      // Tổng số phòng vật lý cần được gán cho khách shared tại KS đang xem.
+      function getExpectedSharedRoomsAtScope() {
+        if (!customer || customer.accommodationMode !== 'shared') return 0;
+        var total = 0;
+        var arr = customer.sharedRoomRequest || [];
+        for (var i = 0; i < arr.length; i++) {
+          var allocs = (arr[i] && arr[i].hotelAllocations) || [];
+          for (var j = 0; j < allocs.length; j++) {
+            if (SCOPE_HOTEL_ID && String(allocs[j].hotelId) !== String(SCOPE_HOTEL_ID)) continue;
+            total += (allocs[j].roomAssignments || []).length;
+          }
+        }
+        return total;
+      }
+
       function rerenderCustomerCard() {
         var card = document.querySelector('.assign-customer-card--single');
         if (!card) return;
@@ -624,23 +1119,55 @@ block main
           valEl.innerHTML = '';
         }
 
-        if (myAssigns.length > 0) {
-          container.innerHTML = myAssigns.map(function(a) {
-            var segIdx  = holdSegmentMap[a.holdBookingId];
-            var segInfo = segIdx != null && tourSegsData[segIdx]
-              ? '<span class="assign-tag__seg">' + formatSegDate(tourSegsData[segIdx].fromDate) + '→' + formatSegDate(tourSegsData[segIdx].toDate) + '</span> '
-              : '';
-            return '<div class="assign-tag" data-room-id="' + a.roomId + '">'
-              + '<i class="fa-solid fa-door-open"></i> '
-              + segInfo
-              + 'Phòng ' + a.roomNumber + ' – ' + a.hotelName
-              + (a.roomTypeName ? ' <span class="assign-tag__type">(' + a.roomTypeName + ')</span>' : '')
-              + ' <span class="assign-tag__num">' + a.numPeople + ' người/phòng</span>'
-              + '<button class="assign-tag__remove" type="button" title="Bỏ phân công"'
-              + ' onclick="removeAssignment(this)" data-order-id="' + a.orderId + '" data-room-id="' + a.roomId + '">'
-              + '<i class="fa-solid fa-xmark"></i></button>'
-              + '</div>';
-          }).join('');
+        // Helper: render 1 tag phòng đã gán
+        function renderTag(a) {
+          var segIdx  = holdSegmentMap[a.holdBookingId];
+          var segInfo = segIdx != null && tourSegsData[segIdx]
+            ? '<span class="assign-tag__seg">' + formatSegDate(tourSegsData[segIdx].fromDate) + '→' + formatSegDate(tourSegsData[segIdx].toDate) + '</span> '
+            : '';
+          return '<div class="assign-tag" data-room-id="' + a.roomId + '">'
+            + '<i class="fa-solid fa-door-open"></i> '
+            + segInfo
+            + 'Phòng ' + a.roomNumber + ' – ' + a.hotelName
+            + (a.roomTypeName ? ' <span class="assign-tag__type">(' + a.roomTypeName + ')</span>' : '')
+            + ' <span class="assign-tag__num">' + a.numPeople + ' người/phòng</span>'
+            + '<button class="assign-tag__remove" type="button" title="Bỏ phân công"'
+            + ' onclick="removeAssignment(this)" data-order-id="' + a.orderId + '" data-room-id="' + a.roomId + '">'
+            + '<i class="fa-solid fa-xmark"></i></button>'
+            + '</div>';
+        }
+
+        var isSharedAuto = isAutoAssignedShared();
+        var expectedShared = isSharedAuto ? getExpectedSharedRoomsAtScope() : 0;
+        var bound = myAssigns.length;
+
+        if (isSharedAuto) {
+          // ── Mode shared (auto-assign): 3 trạng thái: full / partial / none ──
+          var html = '';
+          if (bound > 0) {
+            html += myAssigns.map(renderTag).join('');
+          }
+          if (bound >= expectedShared && expectedShared > 0) {
+            html += '<span class="assign-customer-card__autoassigned"'
+              + ' style="display:inline-flex;align-items:center;gap:6px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;padding:6px 10px;border-radius:6px;font-weight:600;font-size:13px;margin-top:6px">'
+              + '<i class="fa-solid fa-circle-check"></i>'
+              + ' Hệ thống đã tự xếp ' + bound + '/' + expectedShared + ' phòng vật lý cho khách ở ghép'
+              + '</span>';
+          } else if (bound > 0 && bound < expectedShared) {
+            html += '<span class="assign-customer-card__autoassigned"'
+              + ' style="display:inline-flex;align-items:center;gap:6px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;padding:6px 10px;border-radius:6px;font-weight:600;font-size:13px;margin-top:6px">'
+              + '<i class="fa-solid fa-triangle-exclamation"></i>'
+              + ' Đã tự xếp ' + bound + '/' + expectedShared + ' phòng vật lý — còn thiếu ' + (expectedShared - bound) + ' phòng. Vui lòng gán thủ công hoặc giải phóng phòng từ đơn khác.'
+              + '</span>';
+          } else {
+            // bound === 0 && expectedShared > 0
+            html += '<span class="assign-customer-card__unassigned">'
+              + '<i class="fa-solid fa-triangle-exclamation"></i> Chưa phân công phòng nào'
+              + '</span>';
+          }
+          container.innerHTML = html;
+        } else if (bound > 0) {
+          container.innerHTML = myAssigns.map(renderTag).join('');
         } else {
           container.innerHTML = '<span class="assign-customer-card__unassigned">'
             + '<i class="fa-solid fa-triangle-exclamation"></i> Chưa phân công phòng nào'
@@ -711,6 +1238,7 @@ block main
         msg.style.color = '#6b7280';
         var savePayload = { assignments: assignments };
         if (SCOPE_HOTEL_ID) savePayload.hotelId = SCOPE_HOTEL_ID;
+        if (customer && customer.orderId) savePayload.scopeOrderId = customer.orderId;
         fetch(SAVE_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -732,6 +1260,451 @@ block main
             msg.textContent = 'Lỗi kết nối';
             msg.style.color = '#ef4444';
           });
+      }
+
+      // ── Context menu + Room detail modal ─────────────────────────────────
+      var _ctxRoomId = null;
+      var ctxMenu    = document.getElementById('room-ctx-menu');
+      var rdmModal   = document.getElementById('room-detail-modal');
+      var notifyModal = document.getElementById('assign-notify-modal');
+
+      // Đưa context-menu + modal ra <body> để tránh bị cha cắt (overflow/transform).
+      if (ctxMenu && ctxMenu.parentNode !== document.body) document.body.appendChild(ctxMenu);
+      if (rdmModal && rdmModal.parentNode !== document.body) document.body.appendChild(rdmModal);
+      if (notifyModal && notifyModal.parentNode !== document.body) document.body.appendChild(notifyModal);
+
+      function roomContextMenu(e, slotId) {
+        e.preventDefault();
+        e.stopPropagation();
+        _ctxRoomId = slotId;
+        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
+        ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 60) + 'px';
+        ctxMenu.style.display = 'block';
+      }
+
+      document.addEventListener('click', function(e) {
+        if (!ctxMenu.contains(e.target)) {
+          ctxMenu.style.display = 'none';
+          _ctxRoomId = null;
+        }
+      });
+
+      document.getElementById('ctx-view-detail').addEventListener('click', function() {
+        ctxMenu.style.display = 'none';
+        if (!_ctxRoomId) return;
+        openRoomDetail(_ctxRoomId);
+        _ctxRoomId = null;
+      });
+
+      function closeRoomDetail() {
+        rdmModal.style.display = 'none';
+      }
+
+      function formatDate(str) {
+        if (!str) return '—';
+        var d = new Date(str);
+        return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+      }
+
+      function typeLabel(t) {
+        return t === 'child' ? '<span class="rdm-badge rdm-badge--child">Trẻ em</span>'
+             : t === 'baby'  ? '<span class="rdm-badge rdm-badge--baby">Em bé</span>'
+             : '<span class="rdm-badge rdm-badge--adult">Người lớn</span>';
+      }
+
+      // Tìm hold-room data theo slotId trong holdsData (đầy đủ).
+      function findHoldRoom(slotId) {
+        for (var i = 0; i < holdsData.length; i++) {
+          var hg = holdsData[i];
+          for (var j = 0; j < (hg.rooms || []).length; j++) {
+            if (String(hg.rooms[j]._id) === String(slotId)) return hg.rooms[j];
+          }
+        }
+        return null;
+      }
+
+      // Map 1 hold (slot) → roomSelection + roomIndex của khách (nếu private + có roomAssignments).
+      // Logic: gom các assignment của khách cùng "bucket" (hotelId + roomTypeId + dates),
+      // sort theo holdBookingId để có thứ tự ổn định, vị trí slot trong bucket = roomIndex.
+      function mapSlotToCustomerRoom(cust, slotId) {
+        if (!cust || !cust.roomSelections || !cust.roomSelections.length) return null;
+
+        var slotHold = findHoldRoom(slotId);
+        if (!slotHold) return null;
+
+        var hotelId   = slotHold.hotel && slotHold.hotel.hotelId ? String(slotHold.hotel.hotelId) : '';
+        var typeId    = slotHold.roomTypeId ? String(slotHold.roomTypeId) : '';
+        var typeName  = slotHold.roomTypeName || '';
+        var checkIn   = (slotHold.checkIn || '').split('T')[0];
+        var checkOut  = (slotHold.checkOut || '').split('T')[0];
+
+        // Match roomSelection: ưu tiên hotelId + roomTypeId + dates; fallback dùng roomTypeName.
+        var matchingRs = cust.roomSelections.find(function(rs) {
+          var rsFrom = (rs.fromDate || '').split('T')[0];
+          var rsTo   = (rs.toDate || '').split('T')[0];
+          var sameHotel = String(rs.hotelId || '') === hotelId;
+          var sameType  = typeId
+            ? String(rs.roomTypeId || '') === typeId
+            : (rs.roomTypeName || '') === typeName;
+          return sameHotel && sameType && rsFrom === checkIn && rsTo === checkOut;
+        });
+        if (!matchingRs || !matchingRs.roomAssignments || !matchingRs.roomAssignments.length) {
+          return { roomSelection: matchingRs || null, assignment: null, roomIndex: -1 };
+        }
+
+        // Lọc assignments cùng bucket của khách → tính position của slot này.
+        var bucketAssigns = assignments.filter(function(a) {
+          if (a.orderId !== cust.orderId) return false;
+          var hr = findHoldRoom(a.holdBookingId);
+          if (!hr) return false;
+          var hHId = hr.hotel && hr.hotel.hotelId ? String(hr.hotel.hotelId) : '';
+          var hTId = hr.roomTypeId ? String(hr.roomTypeId) : '';
+          var hCi  = (hr.checkIn || '').split('T')[0];
+          var hCo  = (hr.checkOut || '').split('T')[0];
+          var sameType = typeId
+            ? hTId === typeId
+            : (hr.roomTypeName || '') === typeName;
+          return hHId === hotelId && sameType && hCi === checkIn && hCo === checkOut;
+        });
+        bucketAssigns.sort(function(a, b) {
+          return String(a.holdBookingId).localeCompare(String(b.holdBookingId));
+        });
+
+        var pos = -1;
+        for (var i = 0; i < bucketAssigns.length; i++) {
+          if (String(bucketAssigns[i].holdBookingId) === String(slotId)) { pos = i; break; }
+        }
+        if (pos < 0 || pos >= matchingRs.roomAssignments.length) {
+          return { roomSelection: matchingRs, assignment: null, roomIndex: -1 };
+        }
+        return {
+          roomSelection: matchingRs,
+          assignment:    matchingRs.roomAssignments[pos],
+          roomIndex:     pos,
+        };
+      }
+
+      function openRoomDetail(slotId) {
+        var tile = document.querySelector('.assign-room-tile[data-room-id="' + slotId + '"]');
+        if (!tile) return;
+
+        var roomNumber  = tile.dataset.roomNumber || '?';
+        var roomType    = tile.dataset.roomType   || '—';
+        var hotelName   = tile.dataset.hotelName  || '—';
+        var baseOcc     = tile.dataset.baseOcc    || '—';
+        var checkIn     = tile.dataset.checkin    || '';
+        var checkOut    = tile.dataset.checkout   || '';
+        var noteRaw     = tile.dataset.note       || '';
+
+        // 1 phòng có thể được nhiều đơn share (shared cross-order) → lấy tất cả.
+        var assignsHere = assignments.filter(function(a) { return a.holdBookingId === slotId; });
+        // Để các block legacy tham chiếu `assign`/`cust` không vỡ, dùng entry đầu tiên.
+        var assign = assignsHere[0] || null;
+        var cust   = assign ? customers.find(function(c) { return c.orderId === assign.orderId; }) : null;
+
+        document.getElementById('rdm-title').textContent =
+          'Phòng ' + roomNumber + ' – ' + hotelName;
+
+        // ── PRIORITY 1: lấy danh sách hành khách CỦA PHÒNG NÀY từ roomAssignments của khách
+        var perRoomHtml = '';
+        if (cust) {
+          var mapping = mapSlotToCustomerRoom(cust, slotId);
+          if (mapping && mapping.assignment && Array.isArray(mapping.assignment.passengerIdxs)) {
+            var paxByIdx = {};
+            (cust.passengers || []).forEach(function(p) { paxByIdx[p.idx] = p; });
+            var picked = mapping.assignment.passengerIdxs
+              .map(function(i) { return paxByIdx[i]; })
+              .filter(Boolean);
+            var usedCap = mapping.assignment.usedCapacity;
+            var titleSuffix = (usedCap !== undefined && usedCap !== null)
+              ? ' <span style="font-weight:400;color:#64748b;text-transform:none;letter-spacing:0">· sức chứa quy đổi ' + usedCap + '/' + (mapping.roomSelection.baseOccupancy || baseOcc) + '</span>'
+              : '';
+            perRoomHtml = '<div class="rdm-section-title"><i class="fa-solid fa-users" style="margin-right:4px"></i>Danh sách khách của phòng này' + titleSuffix + '</div>';
+            if (picked.length === 0) {
+              perRoomHtml += '<div class="rdm-unassigned"><i class="fa-solid fa-circle-info" style="margin-right:4px"></i>Khách chưa gán hành khách nào vào phòng này.</div>';
+            } else {
+              perRoomHtml += '<div class="rdm-pax-list">'
+                + picked.map(function(p) {
+                    var gender = p.gender === 'male' ? ' · Nam' : p.gender === 'female' ? ' · Nữ' : '';
+                    var age    = p.age !== undefined && p.age !== '' ? ' · ' + p.age + 't' : '';
+                    return '<div class="rdm-pax-row">' + typeLabel(p.type)
+                      + '<span class="rdm-pax-name">' + escHtmlText(p.name || '—') + '</span>'
+                      + '<span class="rdm-pax-meta">' + age + gender + '</span></div>';
+                  }).join('')
+                + '</div>';
+            }
+          }
+        }
+
+        // ── PRIORITY 1.5: shared mode — resolve hành khách từ atomAnchorIdxs ──
+        // Với đơn ở ghép đã có dữ liệu passengers + sharedRoomRequest đầy đủ,
+        // dùng bucket-position để xác định roomAssignment entry (giống private
+        // mode) rồi lấy atomAnchorIdxs → filter passengers tương ứng.
+        if (!perRoomHtml && cust && cust.accommodationMode === 'shared') {
+          var slotHoldSh = findHoldRoom(slotId);
+          if (slotHoldSh) {
+            var shHotelId  = slotHoldSh.hotel && slotHoldSh.hotel.hotelId ? String(slotHoldSh.hotel.hotelId) : '';
+            var shTypeId   = slotHoldSh.roomTypeId ? String(slotHoldSh.roomTypeId) : '';
+            var shCheckIn  = (slotHoldSh.checkIn  || '').split('T')[0];
+            var shCheckOut = (slotHoldSh.checkOut || '').split('T')[0];
+
+            var matchedRa = null;
+            var srArr = cust.sharedRoomRequest || [];
+            outer: for (var si = 0; si < srArr.length; si++) {
+              var sr = srArr[si];
+              var srFrom = (sr.fromDate || '').split('T')[0];
+              var srTo   = (sr.toDate   || '').split('T')[0];
+              if (srFrom !== shCheckIn || srTo !== shCheckOut) continue;
+              var allocsArr = sr.hotelAllocations || [];
+              for (var ai = 0; ai < allocsArr.length; ai++) {
+                var alloc = allocsArr[ai];
+                if (String(alloc.hotelId) !== shHotelId) continue;
+                // roomAssignments của alloc này — chỉ lấy cùng roomTypeId với slot
+                var raArr = (alloc.roomAssignments || []).filter(function(ra) {
+                  return String(ra.roomTypeId) === shTypeId;
+                });
+                if (!raArr.length) continue;
+                // Bucket-position: lấy tất cả assignments của order cùng hotel+type+dates, sort ổn định
+                var bucketSh = assignments.filter(function(a) {
+                  if (a.orderId !== cust.orderId) return false;
+                  var hr = findHoldRoom(a.holdBookingId);
+                  if (!hr) return false;
+                  var hHId = hr.hotel && hr.hotel.hotelId ? String(hr.hotel.hotelId) : '';
+                  var hTId = hr.roomTypeId ? String(hr.roomTypeId) : '';
+                  var hCi  = (hr.checkIn  || '').split('T')[0];
+                  var hCo  = (hr.checkOut || '').split('T')[0];
+                  return hHId === shHotelId && hTId === shTypeId && hCi === shCheckIn && hCo === shCheckOut;
+                });
+                bucketSh.sort(function(a, b) {
+                  return String(a.holdBookingId).localeCompare(String(b.holdBookingId));
+                });
+                var posSh = -1;
+                for (var bi = 0; bi < bucketSh.length; bi++) {
+                  if (String(bucketSh[bi].holdBookingId) === String(slotId)) { posSh = bi; break; }
+                }
+                if (posSh >= 0 && posSh < raArr.length) {
+                  matchedRa = raArr[posSh];
+                  break outer;
+                }
+              }
+            }
+
+            if (matchedRa && Array.isArray(matchedRa.atomAnchorIdxs) && matchedRa.atomAnchorIdxs.length) {
+              var anchorSet = {};
+              matchedRa.atomAnchorIdxs.forEach(function(idx) { anchorSet[idx] = true; });
+              var allPax = cust.passengers || [];
+              var adultIdxInRoom = {};
+              allPax.forEach(function(p) { if (p.type === 'adult' && anchorSet[p.idx]) adultIdxInRoom[p.idx] = true; });
+              var pickedSh = allPax.filter(function(p) {
+                if (p.type === 'adult') return !!anchorSet[p.idx];
+                return p.guardianIdx !== null && p.guardianIdx !== undefined && !!adultIdxInRoom[p.guardianIdx];
+              });
+              var usedCapSh = matchedRa.usedCapacity;
+              var titleSuffixSh = (usedCapSh !== undefined && usedCapSh !== null)
+                ? ' <span style="font-weight:400;color:#64748b;text-transform:none;letter-spacing:0">· sức chứa quy đổi ' + usedCapSh + '/' + baseOcc + '</span>'
+                : '';
+              perRoomHtml = '<div class="rdm-section-title"><i class="fa-solid fa-users" style="margin-right:4px"></i>Danh sách khách của phòng này' + titleSuffixSh + '</div>';
+              if (pickedSh.length === 0) {
+                perRoomHtml += '<div class="rdm-unassigned"><i class="fa-solid fa-circle-info" style="margin-right:4px"></i>Không tìm thấy hành khách cho phòng này.</div>';
+              } else {
+                perRoomHtml += '<div class="rdm-pax-list">'
+                  + pickedSh.map(function(p) {
+                      var gStr = p.gender === 'male' ? ' · Nam' : p.gender === 'female' ? ' · Nữ' : '';
+                      var aStr = p.age !== undefined && p.age !== '' ? ' · ' + p.age + 't' : '';
+                      return '<div class="rdm-pax-row">' + typeLabel(p.type)
+                        + '<span class="rdm-pax-name">' + escHtmlText(p.name || '—') + '</span>'
+                        + '<span class="rdm-pax-meta">' + aStr + gStr + '</span></div>';
+                    }).join('')
+                  + '</div>';
+              }
+            }
+          }
+        }
+
+        // ── PRIORITY 2: parse note snapshot — dùng khi không có passenger data đầy đủ.
+        // Note format (mới): "... | atomLabel1 || atomLabel2 || ..." — dấu " || " phân cách
+        // các atom, còn dấu ", " bên trong từng atomLabel (để list dependents) được giữ nguyên.
+        // Note format (cũ): "... | Tên (NL), Tên (TE), ..." — split theo ", ".
+        var passSnapshotHtml = '';
+        if (!perRoomHtml && noteRaw) {
+          var notePlain = noteRaw.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+          var sep = notePlain.indexOf(' | ');
+          if (sep !== -1) {
+            var paxStr = notePlain.substring(sep + 3);
+            // Thử split theo " || " (format mới) trước, nếu không có thì split theo ", " (format cũ).
+            var atomItems = paxStr.indexOf(' || ') !== -1
+              ? paxStr.split(' || ').map(function(s) { return s.trim(); }).filter(Boolean)
+              : paxStr.split(', ').map(function(s) { return s.trim(); }).filter(Boolean);
+            if (atomItems.length) {
+              passSnapshotHtml = '<div class="rdm-section-title"><i class="fa-solid fa-users" style="margin-right:4px"></i>Danh sách khách của phòng này</div>'
+                + '<div class="rdm-pax-list">'
+                + atomItems.map(function(item) {
+                    // Format cũ: "Tên (NL|TE|EB)"
+                    var m = item.match(/^(.+?)\s+\((NL|TE|EB)\)$/);
+                    if (m) {
+                      var typMap = { NL: 'adult', TE: 'child', EB: 'baby' };
+                      return '<div class="rdm-pax-row">' + typeLabel(typMap[m[2]] || 'adult') + '<span class="rdm-pax-name">' + escHtmlText(m[1]) + '</span></div>';
+                    }
+                    // Format mới (atomLabel): "Tên (+ TE/EB phụ1, ...)" — render như adult + dependents trong 1 row
+                    var mAtom = item.match(/^(.+?)(?:\s+\(\+\s*(.+?)\))?$/);
+                    var adultName = mAtom ? mAtom[1].trim() : item;
+                    var depsStr   = mAtom && mAtom[2] ? mAtom[2] : '';
+                    var rows = '<div class="rdm-pax-row">' + typeLabel('adult') + '<span class="rdm-pax-name">' + escHtmlText(adultName) + '</span></div>';
+                    if (depsStr) {
+                      // "TE Tên1, EB Tên2" → tách từng dep
+                      var deps = depsStr.split(/,\s*/);
+                      deps.forEach(function(d) {
+                        var dm = d.trim().match(/^(TE|EB)\s+(.+)$/);
+                        if (dm) {
+                          var dType = dm[1] === 'TE' ? 'child' : 'baby';
+                          rows += '<div class="rdm-pax-row">' + typeLabel(dType) + '<span class="rdm-pax-name">' + escHtmlText(dm[2].trim()) + '</span></div>';
+                        } else if (d.trim()) {
+                          rows += '<div class="rdm-pax-row"><span class="rdm-badge rdm-badge--adult">?</span><span class="rdm-pax-name">' + escHtmlText(d.trim()) + '</span></div>';
+                        }
+                      });
+                    }
+                    return rows;
+                  }).join('')
+                + '</div>';
+            }
+          }
+        }
+
+        // ── PRIORITY 3: fallback đơn cũ — toàn bộ hành khách của đơn (đánh dấu rõ là fallback).
+        var custDetailHtml = '';
+        if (!perRoomHtml && !passSnapshotHtml && cust && cust.passengers && cust.passengers.length) {
+          custDetailHtml = '<div class="rdm-section-title"><i class="fa-solid fa-id-card" style="margin-right:4px"></i>Hành khách của đơn (đơn cũ — chưa gán theo từng phòng)</div>'
+            + '<div class="rdm-pax-list">'
+            + cust.passengers.map(function(p) {
+                var gender = p.gender === 'male' ? ' · Nam' : p.gender === 'female' ? ' · Nữ' : '';
+                var age    = p.age !== undefined && p.age !== '' ? ' · ' + p.age + 't' : '';
+                return '<div class="rdm-pax-row">' + typeLabel(p.type)
+                  + '<span class="rdm-pax-name">' + escHtmlText(p.name || '—') + '</span>'
+                  + '<span class="rdm-pax-meta">' + age + gender + '</span></div>';
+              }).join('')
+            + '</div>';
+        }
+
+        var body = '';
+        body += '<div class="rdm-info-grid">'
+          + '<div class="rdm-info-row"><span class="rdm-info-label">Loại phòng</span><span class="rdm-info-val">' + escHtmlText(roomType) + '</span></div>'
+          + '<div class="rdm-info-row"><span class="rdm-info-label">Sức chứa</span><span class="rdm-info-val">' + baseOcc + ' người</span></div>'
+          + '<div class="rdm-info-row"><span class="rdm-info-label">Nhận phòng</span><span class="rdm-info-val">' + formatDate(checkIn) + '</span></div>'
+          + '<div class="rdm-info-row"><span class="rdm-info-label">Trả phòng</span><span class="rdm-info-val">' + formatDate(checkOut) + '</span></div>'
+          + '</div>';
+
+        if (assignsHere.length > 0) {
+          body += '<div class="rdm-section-title"><i class="fa-solid fa-user-check" style="margin-right:4px"></i>Khách đã được gán</div>';
+          body += assignsHere.map(function(a) {
+            var c = customers.find(function(x) { return x.orderId === a.orderId; });
+            var modeLabel = (c && c.accommodationMode === 'shared') || a.accommodationMode === 'shared'
+              ? '<span class="rdm-badge rdm-badge--shared">Ở ghép</span>'
+              : '<span class="rdm-badge rdm-badge--private">Ở riêng</span>';
+            var name = (c && c.guestName) || a.guestName || '—';
+            var code = (c && c.orderCode) || a.orderCode || '';
+            var phone = (c && c.phone) || a.phone || '';
+            return '<div class="rdm-cust-row">'
+              + modeLabel
+              + '<span class="rdm-cust-name">' + escHtmlText(name) + '</span>'
+              + '<span class="rdm-cust-code">#' + escHtmlText(code) + '</span>'
+              + (phone ? '<span class="rdm-cust-phone"><i class="fa-solid fa-phone" style="margin-right:3px"></i>' + escHtmlText(phone) + '</span>' : '')
+              + '</div>';
+          }).join('');
+        } else {
+          body += '<div class="rdm-unassigned"><i class="fa-solid fa-circle-info" style="margin-right:4px"></i>Chưa gán cho khách nào</div>';
+        }
+
+        // ── Multi-occupant: nếu có nhiều đơn share, render danh sách hành
+        //   khách của TỪNG đơn riêng để admin thấy đầy đủ ai đang ở phòng. ──
+        if (assignsHere.length > 1) {
+          var multiHtml = '<div class="rdm-section-title" style="margin-top:8px"><i class="fa-solid fa-people-group" style="margin-right:4px"></i>Danh sách khách (theo từng đơn)</div>';
+          assignsHere.forEach(function(a) {
+            var c2 = customers.find(function(x) { return x.orderId === a.orderId; });
+            if (!c2) return;
+            var paxByIdx2 = {};
+            (c2.passengers || []).forEach(function(p) { paxByIdx2[p.idx] = p; });
+
+            // Resolve atoms cho phòng này theo c2 + slotId (giống Priority 1.5).
+            var picked2 = [];
+            var slotHold2 = findHoldRoom(slotId);
+            if (slotHold2 && c2.accommodationMode === 'shared' && Array.isArray(c2.sharedRoomRequest)) {
+              var hId2 = slotHold2.hotel && slotHold2.hotel.hotelId ? String(slotHold2.hotel.hotelId) : '';
+              var tId2 = slotHold2.roomTypeId ? String(slotHold2.roomTypeId) : '';
+              var ci2  = (slotHold2.checkIn  || '').split('T')[0];
+              var co2  = (slotHold2.checkOut || '').split('T')[0];
+
+              var matchedRa2 = null;
+              outer2: for (var s2 = 0; s2 < c2.sharedRoomRequest.length; s2++) {
+                var sr2 = c2.sharedRoomRequest[s2];
+                var f2 = (sr2.fromDate || '').split('T')[0];
+                var t2 = (sr2.toDate   || '').split('T')[0];
+                if (f2 !== ci2 || t2 !== co2) continue;
+                for (var ai2 = 0; ai2 < (sr2.hotelAllocations || []).length; ai2++) {
+                  var alloc2 = sr2.hotelAllocations[ai2];
+                  if (String(alloc2.hotelId) !== hId2) continue;
+                  var raArr2 = (alloc2.roomAssignments || []).filter(function(x) {
+                    return String(x.roomTypeId) === tId2;
+                  });
+                  if (!raArr2.length) continue;
+                  // Tìm ra match theo bucket-position trong assignments của c2 cùng bucket
+                  var bucket2 = assignments.filter(function(x) {
+                    if (x.orderId !== c2.orderId) return false;
+                    var hr = findHoldRoom(x.holdBookingId);
+                    if (!hr) return false;
+                    var hHId = hr.hotel && hr.hotel.hotelId ? String(hr.hotel.hotelId) : '';
+                    var hTId = hr.roomTypeId ? String(hr.roomTypeId) : '';
+                    var hCi  = (hr.checkIn || '').split('T')[0];
+                    var hCo  = (hr.checkOut || '').split('T')[0];
+                    return hHId === hId2 && hTId === tId2 && hCi === ci2 && hCo === co2;
+                  });
+                  bucket2.sort(function(x, y) { return String(x.holdBookingId).localeCompare(String(y.holdBookingId)); });
+                  var pos2 = -1;
+                  for (var b2 = 0; b2 < bucket2.length; b2++) {
+                    if (String(bucket2[b2].holdBookingId) === String(slotId)) { pos2 = b2; break; }
+                  }
+                  if (pos2 >= 0 && pos2 < raArr2.length) {
+                    matchedRa2 = raArr2[pos2];
+                    break outer2;
+                  }
+                }
+              }
+              if (matchedRa2 && Array.isArray(matchedRa2.atomAnchorIdxs)) {
+                var anchorSet2 = {};
+                matchedRa2.atomAnchorIdxs.forEach(function(i) { anchorSet2[i] = true; });
+                var adultIn2 = {};
+                (c2.passengers || []).forEach(function(p) { if (p.type === 'adult' && anchorSet2[p.idx]) adultIn2[p.idx] = true; });
+                picked2 = (c2.passengers || []).filter(function(p) {
+                  if (p.type === 'adult') return !!anchorSet2[p.idx];
+                  return p.guardianIdx !== null && p.guardianIdx !== undefined && !!adultIn2[p.guardianIdx];
+                });
+              }
+            }
+
+            multiHtml += '<div style="margin-top:6px;padding:6px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0">'
+              + '<div style="font-size:12px;color:#475569;margin-bottom:4px">'
+              + '<b>' + escHtmlText(c2.guestName || '—') + '</b> · #' + escHtmlText(c2.orderCode || '') + '</div>';
+            if (picked2.length === 0) {
+              multiHtml += '<div class="rdm-unassigned" style="padding:4px"><i class="fa-solid fa-circle-info" style="margin-right:4px"></i>Không xác định được hành khách của đơn này trong phòng.</div>';
+            } else {
+              multiHtml += '<div class="rdm-pax-list">'
+                + picked2.map(function(p) {
+                    var g = p.gender === 'male' ? ' · Nam' : p.gender === 'female' ? ' · Nữ' : '';
+                    var ag = p.age !== undefined && p.age !== '' ? ' · ' + p.age + 't' : '';
+                    return '<div class="rdm-pax-row">' + typeLabel(p.type)
+                      + '<span class="rdm-pax-name">' + escHtmlText(p.name || '—') + '</span>'
+                      + '<span class="rdm-pax-meta">' + ag + g + '</span></div>';
+                  }).join('')
+                + '</div>';
+            }
+            multiHtml += '</div>';
+          });
+          body += multiHtml;
+        } else {
+          body += perRoomHtml || passSnapshotHtml || custDetailHtml;
+        }
+
+        document.getElementById('rdm-body').innerHTML = body;
+        rdmModal.style.display = 'flex';
       }
 
       refreshFilters();

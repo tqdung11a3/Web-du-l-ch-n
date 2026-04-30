@@ -45,7 +45,7 @@ const segmentSchema = new Schema(
     totalCapacity: { type: Number, default: 0 }, // tổng sức chứa của tất cả hotels
     status: {
       type: String,
-      enum: ["draft", "confirmed", "pending_approval"],
+      enum: ["draft", "confirmed", "pending_approval", "rejected"],
       default: "draft",
     },
   },
@@ -59,13 +59,26 @@ const roomAssignmentSchema = new Schema(
     orderCode:      { type: String, default: "" },
     guestName:      { type: String, default: "" },
     phone:          { type: String, default: "" },
-    numPeople:      { type: Number, default: 1 }, // sức chứa chuẩn / phòng (baseOccupancy loại phòng) cho slot giữ chỗ này
+    numPeople:      { type: Number, default: 1 }, // sức chứa quy đổi của phần atoms thuộc đơn này trong phòng (= ra.usedCapacity)
     hotelId:        { type: Types.ObjectId, ref: "Hotel", required: true },
     hotelName:      { type: String, default: "" },
     roomId:         { type: Types.ObjectId, required: true }, // phòng vật lý cụ thể
     roomNumber:     { type: String, default: "" },
     roomTypeName:   { type: String, default: "" },
     holdBookingId:  { type: Types.ObjectId, ref: "HotelBooking", default: null }, // booking giữ chỗ tương ứng
+
+    // ── Mở rộng: hỗ trợ ghép cross-order cho mode shared ──
+    accommodationMode: { type: String, enum: ["private", "shared"], default: "private" },
+    gender:            { type: String, enum: ["male", "female", null], default: null }, // shared: 'male'|'female'; private: null
+    atomLabels:        { type: [String], default: [] }, // labels của các atoms thuộc đơn này trong phòng
+
+    // Trạng thái nhận/trả phòng riêng của từng đơn (tách khỏi HotelBooking.status
+    // để nhiều khách share cùng 1 phòng vật lý có trạng thái độc lập).
+    guestStatus: {
+      type: String,
+      enum: ["confirmed", "checked_in", "checked_out"],
+      default: "confirmed",
+    },
   },
   { _id: true }
 );
@@ -86,7 +99,7 @@ const schema = new Schema(
 
     status: {
       type: String,
-      enum: ["draft", "confirmed", "pending_approval", "cancelled"],
+      enum: ["draft", "confirmed", "pending_approval", "rejected", "cancelled"],
       default: "draft",
     },
 

@@ -27,7 +27,7 @@ module.exports.verifyToken = async (req, res, next) => {
     // CHỌN THÊM role ở đây
     const existAccount = await AccountAdmin.findOne({ _id: id, email })
       .select(
-        "_id email fullName phone positionCompany avatar role companyId status isSuperAdmin"
+        "_id email fullName phone positionCompany avatar role companyId status isSuperAdmin tabAccessScope"
       )
       .exec();
 

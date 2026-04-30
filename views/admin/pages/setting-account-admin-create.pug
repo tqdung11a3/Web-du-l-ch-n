@@ -16,11 +16,19 @@ block main
       .inner-group
         label(for="phone" class="inner-label") Số điện thoại
         input(type="text" id="phone" name="phone")
+      //- Tạm ẩn khối Nhóm quyền
+      //- .inner-group
+      //-   label(for="role" class="inner-label") Nhóm quyền
+      //-   select(id="role" name="role")
+      //-     each item in roleList
+      //-       option(value=item.id) #{item.name}
       .inner-group
-        label(for="role" class="inner-label") Nhóm quyền
-        select(id="role" name="role")
-          each item in roleList
-            option(value=item.id) #{item.name}
+        label(for="tabAccessScope" class="inner-label") Phạm vi truy cập menu
+        select#tabAccessScope(name="tabAccessScope")
+          each opt in tabAccessScopeOptions
+            option(value=opt.value selected=(opt.value === "inherit")) #{opt.label}
+        small(style="display:block;margin-top:6px;color:#64748b;font-size:12px;")
+          | Chọn phạm vi menu cho tài khoản. “Theo nhóm quyền” dành khi hệ thống dùng lại cấu hình nhóm quyền (nếu có gán trên tài khoản).
       .inner-group
         label(for="positionCompany" class="inner-label") Chức vụ
         input(type="text" id="positionCompany" name="positionCompany")

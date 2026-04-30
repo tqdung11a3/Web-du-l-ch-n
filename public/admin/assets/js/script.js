@@ -109,6 +109,7 @@ if (listFilepondImage.length > 0) {
       files: files,
     });
   });
+  window.filePond = filePond;
 }
 // End Filepond Image
 
@@ -1191,7 +1192,10 @@ if (orderEditForm && orderEditForm.dataset.readOnly === "1") {
         status: status,
       };
 
-      fetch(`/${pathAdmin}/order/edit/${id}`, {
+      const patchUrl =
+        orderEditForm.getAttribute("data-patch-url") ||
+        `/${pathAdmin}/order/edit/${id}`;
+      fetch(patchUrl, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -1237,21 +1241,26 @@ if (settingWebsiteInfoForm) {
       const phone = event.target.phone.value;
       const email = event.target.email.value;
       const address = event.target.address.value;
-      const logo = filePond.logo.getFile()?.file;
-      const favicon = filePond.favicon.getFile()?.file;
-      const categoryIdSection4 = event.target.categoryIdSection4.value;
-
+      const logo = filePond.logo?.getFile?.()?.file;
       // Tạo FormData
       const formData = new FormData();
       formData.append("websiteName", websiteName);
       formData.append("phone", phone);
       formData.append("email", email);
       formData.append("address", address);
-      formData.append("logo", logo);
-      formData.append("favicon", favicon);
-      formData.append("categoryIdSection4", categoryIdSection4);
+      // Chỉ append khi user thực sự chọn file (tránh FormData cast undefined → "undefined")
+      if (logo instanceof Blob) formData.append("logo", logo);
+      // Lấy danh mục Section 4 từ hidden inputs (quản lý bởi tag picker)
+      document
+        .querySelectorAll('#s4-hidden input[name="categoryIdsSection4"]')
+        .forEach((inp) => {
+          if (inp.value) formData.append("categoryIdsSection4", inp.value);
+        });
 
-      fetch(`/${pathAdmin}/setting/website-info`, {
+      const patchUrl =
+        settingWebsiteInfoForm.getAttribute("data-patch-url") ||
+        `/${pathAdmin}/setting/website-info`;
+      fetch(patchUrl, {
         method: "PATCH",
         body: formData,
       })
@@ -1350,7 +1359,10 @@ if (settingAccountAdminCreateForm) {
       const fullName = event.target.fullName.value;
       const email = event.target.email.value;
       const phone = event.target.phone.value;
-      const role = event.target.role.value;
+      const role = event.target.role ? event.target.role.value : "";
+      const tabAccessScope = event.target.tabAccessScope
+        ? event.target.tabAccessScope.value
+        : "inherit";
       const positionCompany = event.target.positionCompany.value;
       const status = event.target.status.value;
       const password = event.target.password.value;
@@ -1360,7 +1372,8 @@ if (settingAccountAdminCreateForm) {
       formData.append("fullName", fullName);
       formData.append("email", email);
       formData.append("phone", phone);
-      formData.append("role", role);
+      if (event.target.role) formData.append("role", role);
+      formData.append("tabAccessScope", tabAccessScope);
       formData.append("positionCompany", positionCompany);
       formData.append("status", status);
       formData.append("password", password);
@@ -1463,7 +1476,10 @@ if (settingAccountAdminEditForm) {
       const fullName = event.target.fullName.value;
       const email = event.target.email.value;
       const phone = event.target.phone.value;
-      const role = event.target.role.value;
+      const role = event.target.role ? event.target.role.value : "";
+      const tabAccessScope = event.target.tabAccessScope
+        ? event.target.tabAccessScope.value
+        : "inherit";
       const positionCompany = event.target.positionCompany.value;
       const status = event.target.status.value;
       const password = event.target.password.value;
@@ -1474,7 +1490,8 @@ if (settingAccountAdminEditForm) {
       formData.append("fullName", fullName);
       formData.append("email", email);
       formData.append("phone", phone);
-      formData.append("role", role);
+      if (event.target.role) formData.append("role", role);
+      formData.append("tabAccessScope", tabAccessScope);
       formData.append("positionCompany", positionCompany);
       formData.append("status", status);
       formData.append("password", password);
@@ -1615,9 +1632,17 @@ if (settingRoleEditForm) {
 // Profile Edit Form
 const profileEditForm = document.querySelector("#profile-edit-form");
 if (profileEditForm) {
+  const isSuperAdminProfile = profileEditForm.classList.contains(
+    "profile-edit-form--super-admin"
+  );
+  const profilePatchUrl =
+    (profileEditForm.dataset.profilePatchUrl &&
+      String(profileEditForm.dataset.profilePatchUrl).trim()) ||
+    `/${pathAdmin}/profile/edit`;
+
   const validator = new JustValidate("#profile-edit-form");
 
-  validator
+  const chain = validator
     .addField("#fullName", [
       { rule: "required", errorMessage: "Vui lòng nhập họ tên!" },
       {
@@ -1642,8 +1667,15 @@ if (profileEditForm) {
         value: /^(0?)(3[2-9]|5[6|8|9]|7[0|6-9]|8[0-6|8|9]|9[0-4|6-9])[0-9]{7}$/,
         errorMessage: "Số điện thoại không đúng định dạng!",
       },
-    ])
-    .onSuccess(async (event) => {
+    ]);
+
+  if (!isSuperAdminProfile) {
+    chain.addField("#role", [
+      { rule: "required", errorMessage: "Vui lòng chọn nhóm quyền!" },
+    ]);
+  }
+
+  chain.onSuccess(async (event) => {
       const formEl = event.target;
       const submitBtn = formEl.querySelector('button[type="submit"]');
       submitBtn && (submitBtn.disabled = true);
@@ -1651,21 +1683,28 @@ if (profileEditForm) {
       const fullName = formEl.fullName.value.trim();
       const email = formEl.email.value.trim().toLowerCase(); // chuẩn hoá
       const phone = formEl.phone.value.trim();
+      const positionCompany = (formEl.positionCompany && formEl.positionCompany.value.trim()) || "";
+      const roleVal = formEl.role && formEl.role.value ? String(formEl.role.value).trim() : "";
 
-      // Chỉ lấy file nếu có
+      // Chỉ lấy file nếu có (filePond global + window.filePond sau khi init Filepond)
+      const pond = typeof filePond !== "undefined" ? filePond : window.filePond;
       const avatarFile =
-        window.filePond?.avatar && window.filePond.avatar.getFile?.()
-          ? window.filePond.avatar.getFile().file
+        pond && pond.avatar && pond.avatar.getFile && pond.avatar.getFile()
+          ? pond.avatar.getFile().file
           : null;
 
       const formData = new FormData();
       formData.append("fullName", fullName);
       formData.append("email", email);
       formData.append("phone", phone);
+      if (!isSuperAdminProfile) {
+        formData.append("positionCompany", positionCompany);
+        if (roleVal) formData.append("role", roleVal);
+      }
       if (avatarFile) formData.append("avatar", avatarFile); // chỉ append khi có file
 
       try {
-        const res = await fetch(`/${pathAdmin}/profile/edit`, {
+        const res = await fetch(profilePatchUrl, {
           method: "PATCH",
           body: formData,
           credentials: "same-origin",
@@ -1858,13 +1897,17 @@ if (adminTabSwitch) {
                          isRoomsListByHotel ||
                          isCreateRoom ||
                          isEditRoom;
-      
-      if (currentPath.includes("/hotel") && !shouldHide) {
-        // Hiển thị: xóa class hidden
+
+      // Admin chỉ tab Khách sạn: luôn coi như đang ở ngữ cảnh KS (không có hàng chuyển tab)
+      const hotelOnlyAdmin = document.body.classList.contains("admin-hotel-only");
+      const showHotelSelector =
+        !shouldHide &&
+        (currentPath.includes("/hotel") || hotelOnlyAdmin);
+
+      if (showHotelSelector) {
         hotelSelectorBar.classList.remove("hidden");
         console.log("Hotel Selector - Showing", hotelSelectorBar);
       } else {
-        // Ẩn: thêm class hidden
         hotelSelectorBar.classList.add("hidden");
         console.log("Hotel Selector - Hiding");
       }
@@ -2117,12 +2160,84 @@ if (sider) {
           isMatch = true;
         }
       }
+
+      // Ngoại lệ 7: Đổi mật khẩu — cùng nhóm "Thông tin cá nhân" với /profile/edit
+      if (!isMatch && hrefPath.includes("/profile/edit")) {
+        if (currentPath.includes("/profile/change-password")) {
+          isMatch = true;
+        }
+      }
+
+      // Ngoại lệ 8: Quản lý đơn hàng — list + edit/detail cùng active menu
+      if (!isMatch && hrefPath.includes("/order/list")) {
+        if (
+          currentPath === hrefPath ||
+          currentPath.includes("/order/edit/") ||
+          currentPath.includes("/order/detail/")
+        ) {
+          isMatch = true;
+        }
+      }
     }
     
     if (isMatch) {
       item.classList.add("active");
     }
   });
+
+  // Giữ vị trí cuộn sidebar sau khi chuyển trang (full reload) — Super Admin / Company Admin
+  const attachSiderScrollPersistence = (scrollKey) => {
+    const persistScroll = () => {
+      sessionStorage.setItem(scrollKey, String(Math.round(sider.scrollTop)));
+    };
+    const restoreScroll = () => {
+      const raw = sessionStorage.getItem(scrollKey);
+      if (raw == null) return;
+      const y = parseInt(raw, 10);
+      if (Number.isNaN(y) || y < 0) return;
+      const apply = () => {
+        sider.scrollTop = y;
+      };
+      requestAnimationFrame(() => {
+        apply();
+        requestAnimationFrame(apply);
+      });
+    };
+
+    let scrollDebounce;
+    sider.addEventListener(
+      "scroll",
+      () => {
+        clearTimeout(scrollDebounce);
+        scrollDebounce = setTimeout(persistScroll, 100);
+      },
+      { passive: true }
+    );
+
+    sider.addEventListener("click", (e) => {
+      const a = e.target.closest("a");
+      if (!a || !sider.contains(a)) return;
+      const href = a.getAttribute("href");
+      if (!href || href.startsWith("javascript:")) return;
+      persistScroll();
+    });
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", restoreScroll);
+    } else {
+      restoreScroll();
+    }
+    window.addEventListener("load", restoreScroll);
+    window.addEventListener("pageshow", (ev) => {
+      if (ev.persisted) restoreScroll();
+    });
+  };
+
+  if (isSuperAdminSider) {
+    attachSiderScrollPersistence("adminSuperAdminSiderScrollTop");
+  } else {
+    attachSiderScrollPersistence("adminCompanySiderScrollTop");
+  }
 }
 // End Sider
 
@@ -2996,7 +3111,18 @@ if (tourEditForm) {
       const category = f.category.value;
       const position = f.position.value;
       const status = f.status.value;
-      const avatarFile = filePond.avatar.getFile()?.file;
+      let avatarFile = filePond.avatar.getFile()?.file;
+      // Nếu FilePond đang giữ ảnh mặc định cũ (cùng tên file) thì bỏ qua
+      // để không gửi lại → tránh audit log báo "đổi ảnh đại diện" sai.
+      if (avatarFile) {
+        const avatarInput = f.querySelector('input[name="avatar"]');
+        const imageDefault = avatarInput
+          ?.closest("[image-default]")
+          ?.getAttribute("image-default");
+        if (imageDefault && imageDefault.includes(avatarFile.name)) {
+          avatarFile = null;
+        }
+      }
 
       // Giá
       let priceAdult = f.priceAdult.value;
@@ -3116,15 +3242,29 @@ if (tourEditForm) {
       const vehicle = f.vehicle.value;
       const information = tinymce.get("information").getContent();
 
-      const schedules = [];
-      tourEditForm.querySelectorAll(".inner-schedule-item").forEach((item) => {
-        const title =
-          item.querySelector(".inner-schedule-head input")?.value || "";
-        const textarea = item.querySelector(".inner-schedule-body textarea");
-        const tid = textarea?.id;
-        const description = tid ? tinymce.get(tid).getContent() : "";
-        schedules.push({ title, description });
-      });
+      const scheduleRo =
+        tourEditForm.getAttribute("data-schedule-readonly") === "1";
+      let schedules = [];
+      if (scheduleRo) {
+        const roEl = document.getElementById("tour-schedules-json-ro");
+        if (roEl && roEl.textContent) {
+          try {
+            const parsed = JSON.parse(roEl.textContent.trim());
+            schedules = Array.isArray(parsed) ? parsed : [];
+          } catch (_e) {
+            schedules = [];
+          }
+        }
+      } else {
+        tourEditForm.querySelectorAll(".inner-schedule-item").forEach((item) => {
+          const title =
+            item.querySelector(".inner-schedule-head input")?.value || "";
+          const textarea = item.querySelector(".inner-schedule-body textarea");
+          const tid = textarea?.id;
+          const description = tid ? tinymce.get(tid).getContent() : "";
+          schedules.push({ title, description });
+        });
+      }
 
       // FormData
       const formData = new FormData();
@@ -3202,7 +3342,10 @@ if (tourEditForm) {
       }
       // End images
 
-      fetch(`/${pathAdmin}/tour/edit/${id}`, {
+      const tourPatchUrl =
+        tourEditForm.getAttribute("data-patch-url") ||
+        `/${pathAdmin}/tour/edit/${id}`;
+      fetch(tourPatchUrl, {
         method: "PATCH",
         body: formData,
       })
@@ -3844,7 +3987,16 @@ if (hotelEditForm && hotelEditForm.dataset.readOnly === "1") {
         }
       });
 
-      const avatar = filePond.avatar.getFile()?.file;
+      let avatar = filePond.avatar.getFile()?.file;
+      if (avatar) {
+        const avatarInput = hotelEditForm.querySelector('input[name="avatar"]');
+        const imageDefault = avatarInput
+          ?.closest("[image-default]")
+          ?.getAttribute("image-default");
+        if (imageDefault && imageDefault.includes(avatar.name)) {
+          avatar = null;
+        }
+      }
 
       // --- Loại phòng (room types) ---
       // Form /admin/hotel/edit hiện không có modal / .hotel-room-row; loại phòng sửa ở trang quản lý riêng.
@@ -4129,7 +4281,10 @@ if (hotelEditForm && hotelEditForm.dataset.readOnly === "1") {
         });
       }
 
-      fetch(`/${pathAdmin}/hotel/edit/${id}`, {
+      const hotelPatchUrl =
+        hotelEditForm.getAttribute("data-patch-url") ||
+        `/${pathAdmin}/hotel/edit/${id}`;
+      fetch(hotelPatchUrl, {
         method: "PATCH",
         body: formData,
       })

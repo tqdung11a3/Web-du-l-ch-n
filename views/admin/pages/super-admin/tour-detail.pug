@@ -13,6 +13,15 @@ block main
         i.fa-solid.fa-arrow-left
         |  Quay lại
 
+  if typeof superAdminOverrideEditUrl !== 'undefined' && superAdminOverrideEditUrl
+    .box(style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:10px 14px;border-radius:6px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;")
+      div
+        i.fa-solid.fa-circle-info
+        |  Đang xem ở chế độ chỉ đọc của Super Admin.
+      a.button.button-primary(href=superAdminOverrideEditUrl style="background:#1e40af;color:#fff;border:0;padding:8px 14px;border-radius:4px;text-decoration:none;")
+        i.fa-solid.fa-pen
+        |  Chỉnh sửa với tư cách công ty này
+
   //- Section 8 — giữ đúng cấu trúc CSS giống /admin/tour/edit
   .section-8
     form(id="tour-edit-form" onsubmit="return false;")

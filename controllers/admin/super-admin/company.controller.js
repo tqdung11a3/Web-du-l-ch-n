@@ -3,6 +3,7 @@ const Company = require("../../../models/company.model");
 const AccountAdmin = require("../../../models/account-admin.model");
 const Tour = require("../../../models/tour.model");
 const Hotel = require("../../../models/hotel.model");
+const auditLogHelper = require("../../../helpers/audit-log.helper");
 
 /**
  * Danh sách tất cả công ty
@@ -132,6 +133,13 @@ module.exports.changeStatus = async (req, res) => {
       }
     );
 
+    await auditLogHelper.log(req, {
+      action: "company.change-status",
+      resourceType: "Company",
+      resourceId: id,
+      metadata: { status },
+    });
+
     res.json({
       code: "success",
       message: "Cập nhật trạng thái thành công!",
@@ -160,6 +168,12 @@ module.exports.deleteCompany = async (req, res) => {
         deletedBy: req.account.id,
       }
     );
+
+    await auditLogHelper.log(req, {
+      action: "company.delete",
+      resourceType: "Company",
+      resourceId: id,
+    });
 
     res.json({
       code: "success",

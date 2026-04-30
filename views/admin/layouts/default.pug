@@ -13,11 +13,16 @@ html
     link(rel="stylesheet", href="/admin/assets/css/hotel-customers.css")
     link(rel="stylesheet", href="/admin/assets/css/notification.css")
     
-    script(src="https://cdn.tiny.cloud/1/rijgljx4ucnbxnd0bua0bmwyynhvrpr0pmhir2pccx9jc8xe/tinymce/8/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous")
+    //- TinyMCE Community Edition (OSS) qua jsDelivr — không cần API key,
+    //- không bị giới hạn theo domain như bản Cloud (cdn.tiny.cloud).
+    //- Tránh hiện tượng editor bị "read-only" do "domain not registered" /
+    //- "API key required" của TinyMCE Cloud 8 khi chạy trên localhost.
+    script(src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin")
     script.
       const pathAdmin = "#{pathAdmin}";
     script(src="/admin/assets/js/tinymce-config.js") 
-  body
+  - var bodyHotelOnly = account && !account.isSuperAdmin && typeof isHotelOnlyAdmin !== "undefined" && isHotelOnlyAdmin
+  body(class=bodyHotelOnly ? "admin-hotel-only" : "")
     
     //- Header
     include ../partials/header.pug

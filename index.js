@@ -53,6 +53,23 @@ app.get("/dev/test-remind", async (req, res) => {
   res.send("Đã chạy job remind 1 lần, xem log console + hộp thư.");
 });
 
+// Global error logger để bắt mọi lỗi rơi xuống Express default handler
+app.use((err, req, res, next) => {
+  console.error(">>> [GLOBAL ERROR HANDLER]", req.method, req.originalUrl);
+  console.error(err && err.stack ? err.stack : err);
+  if (res.headersSent) return next(err);
+  const wantsJSON =
+    req.xhr ||
+    (req.headers.accept && req.headers.accept.includes("application/json")) ||
+    (req.headers["content-type"] || "").includes("multipart/form-data");
+  if (wantsJSON) {
+    return res
+      .status(500)
+      .json({ code: "error", message: err && err.message ? err.message : "Internal Server Error" });
+  }
+  return res.status(500).send("Internal Server Error");
+});
+
 app.listen(port, () => {
   console.log(`Website đang chạy ở cổng ${port}`);
   startReminderScheduler();

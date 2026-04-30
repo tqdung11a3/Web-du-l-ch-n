@@ -2,11 +2,25 @@ extends ../layouts/default.pug
 include ../mixins/options.pug
 
 block main
+  - var _soBanner = (typeof superAdminOverrideBanner !== 'undefined') ? superAdminOverrideBanner : null
   h1.box-title Chỉnh sửa tour
+
+  if _soBanner
+    .box(style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:10px 14px;border-radius:6px;margin-bottom:14px;display:flex;gap:10px;align-items:center;")
+      i.fa-solid.fa-user-shield
+      div
+        strong Super Admin Override. 
+        |  Bạn đang thao tác với tư cách công ty 
+        if _soBanner.companyName
+          strong(style="color:#78350f;")= _soBanner.companyName
+        else
+          code= _soBanner.companyId
+        | . Mọi thay đổi sẽ được ghi audit log.
 
   //- Section 8
   .section-8
-    form(id="tour-edit-form")
+    - var _tourPatchUrl = (_soBanner && _soBanner.companyId) ? `/${pathAdmin}/super-admin/as-company/${_soBanner.companyId}/tours/${tourDetail.id}` : null
+    form(id="tour-edit-form" data-patch-url=_tourPatchUrl data-schedule-readonly=((typeof tourScheduleReadOnly !== 'undefined' && tourScheduleReadOnly) ? '1' : '0'))
       .inner-group(style="display:none;")
         label(for="tourId" class="inner-label") Id
         input(type="hidden" id="tourId" name="id" value=tourDetail.id)
@@ -407,34 +421,50 @@ block main
 
       .inner-group.inner-two-col
         label(class="inner-label") Lịch trình tour
-        .inner-schedule
-          .inner-schedule-list
-            if (tourDetail.schedules.length > 0)
+        if typeof tourScheduleReadOnly !== 'undefined' && tourScheduleReadOnly
+          p(style="font-size:13px;color:#64748b;margin:0 0 10px 0;")
+            | Lịch trình do quản trị công ty cập nhật tại trang chỉnh sửa tour chuẩn (
+            code= `/${pathAdmin}/tour/edit/:id`
+            | ). Tại chế độ Super Admin chỉ xem, không chỉnh sửa.
+          script#tour-schedules-json-ro(type="application/json")= JSON.stringify(Array.isArray(tourDetail.schedules) ? tourDetail.schedules : [])
+          .inner-schedule-readonly
+            if tourDetail.schedules && tourDetail.schedules.length > 0
               each item in tourDetail.schedules
+                .inner-schedule-readonly-item(style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#f8fafc;")
+                  if item.title
+                    strong(style="display:block;margin-bottom:8px;color:#0f172a;")= item.title
+                  .inner-schedule-readonly-body(style="color:#334155;line-height:1.5;")!= item.description || ''
+            else
+              p(style="margin:0;color:#94a3b8;font-size:14px;") Chưa có lịch trình.
+        else
+          .inner-schedule
+            .inner-schedule-list
+              if (tourDetail.schedules.length > 0)
+                each item in tourDetail.schedules
+                  .inner-schedule-item
+                    .inner-schedule-head
+                      span(class="inner-schedule-button inner-move")
+                        <i class="fa-solid fa-up-down-left-right"></i>
+                      input(type="text" value=item.title)
+                      span(class="inner-schedule-button inner-remove")
+                        <i class="fa-regular fa-trash-can"></i>
+                      span(class="inner-schedule-button inner-more")
+                        <i class="fa-solid fa-angle-down"></i>
+                    .inner-schedule-body
+                      textarea(textarea-mce) #{item.description}
+              else
                 .inner-schedule-item
                   .inner-schedule-head
                     span(class="inner-schedule-button inner-move")
                       <i class="fa-solid fa-up-down-left-right"></i>
-                    input(type="text" value=item.title)
+                    input(type="text")
                     span(class="inner-schedule-button inner-remove")
                       <i class="fa-regular fa-trash-can"></i>
                     span(class="inner-schedule-button inner-more")
                       <i class="fa-solid fa-angle-down"></i>
                   .inner-schedule-body
-                    textarea(textarea-mce) #{item.description}
-            else
-              .inner-schedule-item
-                .inner-schedule-head
-                  span(class="inner-schedule-button inner-move")
-                    <i class="fa-solid fa-up-down-left-right"></i>
-                  input(type="text")
-                  span(class="inner-schedule-button inner-remove")
-                    <i class="fa-regular fa-trash-can"></i>
-                  span(class="inner-schedule-button inner-more")
-                    <i class="fa-solid fa-angle-down"></i>
-                .inner-schedule-body
-                  textarea(textarea-mce)
-          .inner-schedule-create + Thêm lịch trình
+                    textarea(textarea-mce)
+            .inner-schedule-create + Thêm lịch trình
 
       .inner-button.inner-two-col
         button Cập nhật

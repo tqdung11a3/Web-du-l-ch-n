@@ -2,6 +2,7 @@
 const mongoose = require("mongoose");
 const Review = require("../../models/review.model");
 const Tour = require("../../models/tour.model");
+const auditLogHelper = require("../../helpers/audit-log.helper");
 
 // Tính lại ratingAvg & ratingCount cho 1 tour
 async function recomputeTourRating(tourId) {
@@ -36,7 +37,7 @@ module.exports.list = async (req, res) => {
       Math.min(50, parseInt(req.query.limit || "10", 10))
     );
 
-    const filter = { tourId, deleted: false };
+    const filter = { tourId, deleted: false, hiddenBySuperAdmin: { $ne: true } };
     const [items, total] = await Promise.all([
       Review.find(filter)
         .sort({ createdAt: -1 })
@@ -126,6 +127,17 @@ module.exports.createOrUpdate = async (req, res) => {
 
     // Tính lại thống kê
     await recomputeTourRating(tourId);
+
+    const tourDoc = await Tour.findById(tourId).select("name companyId").lean();
+    auditLogHelper.log(req, {
+      action: "customer.review.create",
+      resourceType: "Review",
+      resourceId: doc._id,
+      resourceLabel: (tourDoc && tourDoc.name) || String(tourId),
+      asCompanyId: tourDoc?.companyId || null,
+      after: { rating, content: content ? content.slice(0, 200) : "" },
+      summary: `Khách đánh giá ${rating}★ cho tour "${(tourDoc && tourDoc.name) || ""}"`,
+    });
 
     return res.json({
       code: "success",

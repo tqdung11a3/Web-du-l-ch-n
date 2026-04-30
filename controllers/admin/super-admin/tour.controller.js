@@ -353,6 +353,15 @@ module.exports.detail = async (req, res) => {
         ? `/${pathAdmin}/super-admin/tours/company/${tourDetail.companyId._id}`
         : `/${pathAdmin}/super-admin/tours`;
 
+    // Link "Chỉnh sửa với tư cách công ty này" cho Super Admin
+    const overrideCompanyId =
+      tourDetail.companyId && tourDetail.companyId._id
+        ? String(tourDetail.companyId._id)
+        : null;
+    const superAdminOverrideEditUrl = overrideCompanyId
+      ? `/${pathAdmin}/super-admin/as-company/${overrideCompanyId}/tours/${tourDetail.id}`
+      : null;
+
     return res.render("admin/pages/super-admin/tour-detail", {
       pageTitle: `Tour: ${tourDetail.name}`,
       categoryList: categoryTree,
@@ -363,6 +372,7 @@ module.exports.detail = async (req, res) => {
       isInternationalTour,
       pathAdmin,
       toursListBackUrl,
+      superAdminOverrideEditUrl,
     });
   } catch (error) {
     console.error("Super Admin - Tour Detail Error:", error);

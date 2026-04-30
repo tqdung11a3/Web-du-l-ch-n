@@ -434,8 +434,11 @@ module.exports.getCartDetail = async (req, res) => {
     const tours = await Tour.find({
       _id: { $in: tourIds },
       deleted: false,
-      status: "active"
-    }).populate('companyId', 'name slug logo').lean();
+      status: "active",
+    })
+      .populate("companyId", "name slug logo")
+      .populate("departureCity", "name")
+      .lean();
     
     // Map tours với thông tin từ cart
     const toursMap = {};
@@ -459,8 +462,14 @@ module.exports.getCartDetail = async (req, res) => {
           ? moment(tour.departureDate).format("DD/MM/YYYY")
           : "");
       
-      // Get departure city name
-      const cityName = tour.departureCityName || "";
+      // Tên điểm khởi hành: populate departureCity; fallback field ảo nếu có
+      let cityName = "";
+      const dep = tour.departureCity;
+      if (dep && typeof dep === "object" && dep.name) {
+        cityName = dep.name;
+      } else if (typeof tour.departureCityName === "string" && tour.departureCityName.trim()) {
+        cityName = tour.departureCityName.trim();
+      }
       
       // Company info
       const company = tour.companyId || null;

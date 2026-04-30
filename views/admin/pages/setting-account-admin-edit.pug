@@ -19,15 +19,24 @@ block main
       .inner-group
         label(for="phone" class="inner-label") Số điện thoại
         input(type="text" id="phone" name="phone" value=accountDetail.phone)
+      //- Tạm ẩn khối Nhóm quyền
+      //- .inner-group
+      //-   label(for="role" class="inner-label") Nhóm quyền
+      //-   select(id="role" name="role")
+      //-     option(value="") -- Chọn nhóm quyền --
+      //-     each item in roleList
+      //-       option(
+      //-         value=item.id
+      //-         selected=(item.id == accountDetail.role ? true : false)
+      //-         ) #{item.name}
       .inner-group
-        label(for="role" class="inner-label") Nhóm quyền
-        select(id="role" name="role")
-          option(value="") -- Chọn nhóm quyền --
-          each item in roleList
-            option(
-              value=item.id
-              selected=(item.id == accountDetail.role ? true : false)
-              ) #{item.name}
+        label(for="tabAccessScope" class="inner-label") Phạm vi truy cập menu
+        - var _scope = accountDetail.tabAccessScope || "inherit"
+        select#tabAccessScope(name="tabAccessScope")
+          each opt in tabAccessScopeOptions
+            option(value=opt.value selected=(opt.value === _scope)) #{opt.label}
+        small(style="display:block;margin-top:6px;color:#64748b;font-size:12px;")
+          | Cấu hình bởi quản trị công ty. “Theo nhóm quyền” áp dụng khi tài khoản còn được gán nhóm quyền trong hệ thống.
       .inner-group
         label(for="positionCompany" class="inner-label") Chức vụ
         input(type="text" id="positionCompany" name="positionCompany" value=accountDetail.positionCompany)

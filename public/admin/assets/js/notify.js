@@ -5,7 +5,8 @@ var notify = new Notyf({
     x: 'right',
     y:'top'
   },
-  dismissible: true
+  dismissible: true,
+  ripple: false,
 });
 
 let existNotify = sessionStorage.getItem("notify");
