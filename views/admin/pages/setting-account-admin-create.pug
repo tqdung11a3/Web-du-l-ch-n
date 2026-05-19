@@ -23,12 +23,19 @@ block main
       //-     each item in roleList
       //-       option(value=item.id) #{item.name}
       .inner-group
-        label(for="tabAccessScope" class="inner-label") Phạm vi truy cập menu
+        label(for="tabAccessScope" class="inner-label") Phân quyền
+        - var _defScope = typeof tabAccessScopeDefault !== "undefined" ? tabAccessScopeDefault : "inherit"
         select#tabAccessScope(name="tabAccessScope")
           each opt in tabAccessScopeOptions
-            option(value=opt.value selected=(opt.value === "inherit")) #{opt.label}
-        small(style="display:block;margin-top:6px;color:#64748b;font-size:12px;")
-          | Chọn phạm vi menu cho tài khoản. “Theo nhóm quyền” dành khi hệ thống dùng lại cấu hình nhóm quyền (nếu có gán trên tài khoản).
+            option(value=opt.value selected=(opt.value === _defScope)) #{opt.label}
+      .inner-group#account-admin-assigned-hotel-wrap(style="display: none;")
+        label(for="assignedHotelId" class="inner-label") Khách sạn được phân công
+        select#assignedHotelId(name="assignedHotelId")
+          option(value="") -- Chọn khách sạn --
+          each h in (companyHotels || [])
+            option(value=h._id) #{h.name}
+        if !(companyHotels && companyHotels.length)
+          p.inner-note(style="margin-top:6px;font-size:13px;opacity:0.85;") Chưa có khách sạn nào trong công ty. Hãy tạo khách sạn trước khi gán nhân viên.
       .inner-group
         label(for="positionCompany" class="inner-label") Chức vụ
         input(type="text" id="positionCompany" name="positionCompany")

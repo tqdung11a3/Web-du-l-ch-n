@@ -4318,11 +4318,11 @@ button {
 .inner-room-extra-cost {
   margin-top: 6px;
   padding: 5px 10px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   border-radius: 6px;
   font-size: 12.5px;
-  color: #92400e;
+  color: #1e3a8a;
 }
 
 /* ── Room assignments hiển thị trong cart / order pages (private mode) ── */

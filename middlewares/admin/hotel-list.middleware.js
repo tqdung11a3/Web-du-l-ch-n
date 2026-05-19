@@ -8,7 +8,27 @@ const Hotel = require("../../models/hotel.model");
 module.exports.getHotelList = async (req, res, next) => {
   try {
     const account = req.account;
-    
+
+    // Nhân viên khách sạn: chỉ đúng một KS được phân công
+    if (
+      account &&
+      !account.isSuperAdmin &&
+      account.companyId &&
+      account.tabAccessScope === "hotel_staff" &&
+      account.assignedHotelId
+    ) {
+      const hotel = await Hotel.findOne({
+        _id: account.assignedHotelId,
+        companyId: account.companyId,
+        deleted: { $ne: true },
+      })
+        .select("_id name")
+        .lean();
+      res.locals.hotelList = hotel ? [hotel] : [];
+      res.locals.hotelListForSelector = hotel ? [hotel] : [];
+      return next();
+    }
+
     // Chỉ lấy danh sách nếu là company admin (không phải super admin)
     if (account && !account.isSuperAdmin && account.companyId) {
       const hotelList = await Hotel.find({

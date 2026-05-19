@@ -229,6 +229,14 @@ module.exports.detail = async (req, res) => {
       endDateStr:           d.endDate ? moment(d.endDate).format("YYYY-MM-DD") : "",
     }));
 
+    const isTourOnlyAdmin =
+      !req.account.isSuperAdmin &&
+      (req.account.tabAccessScope === "tour_only" ||
+        req.account.tabAccessScope === "tour_staff" ||
+        (req.tabAccess?.restricted === true &&
+          req.tabAccess?.hasTour &&
+          !req.tabAccess?.hasHotel));
+
     res.render("admin/pages/tour-hotel-detail", {
       pageTitle: "Cấu hình khung thời gian – Khách sạn",
       tour,
@@ -239,6 +247,7 @@ module.exports.detail = async (req, res) => {
       pathAdmin,
       moment,
       currentCompanyId: String(companyId),
+      isTourOnlyAdmin,
     });
   } catch (err) {
     console.error("[tour-hotel.detail]", err);
@@ -515,8 +524,19 @@ module.exports.confirmSegments = async (req, res) => {
 
         const isSameCompany = String(hotelDoc.companyId) === String(companyId);
 
-        if (isSameCompany) {
-          // ── Hotel cùng company: tạo booking giữ phòng ngay ──
+        // Tour-only admin không được auto-hold ngay cả khi cùng công ty:
+        // cần gửi link request để hotel admin / company admin có toàn quyền duyệt.
+        const isTourOnlyAdmin =
+          !req.account.isSuperAdmin &&
+          (req.account.tabAccessScope === "tour_only" ||
+            req.account.tabAccessScope === "tour_staff" ||
+            (req.tabAccess?.restricted === true &&
+              req.tabAccess?.hasTour &&
+              !req.tabAccess?.hasHotel));
+        const canAutoHold = isSameCompany && !isTourOnlyAdmin;
+
+        if (canAutoHold) {
+          // ── Hotel cùng company + người dùng có quyền KS: tạo booking giữ phòng ngay ──
           const existingBookings = await HotelBooking.find({
             "hotel.hotelId": hotelEntry.hotelId,
             status: { $nin: ["cancelled", "checked_out"] },
@@ -582,13 +602,15 @@ module.exports.confirmSegments = async (req, res) => {
             }
           }
         } else {
-          // ── Hotel khác company: thu thập để tạo HotelLinkRequest ──
+          // ── Hotel khác company HOẶC cùng công ty nhưng tour-only admin:
+          //    thu thập để tạo HotelLinkRequest chờ duyệt ──
           hasCrossCompanyHotel = true;
           const hotelKey = String(hotelDoc._id);
           if (!crossCompanyRequests[hotelKey]) {
             crossCompanyRequests[hotelKey] = {
               hotelDoc,
               requestedRooms: [],
+              isSameCompany,    // ghi nhận để notification gửi đúng link
             };
           }
           for (const ra of hotelEntry.roomAllocations) {
@@ -606,9 +628,10 @@ module.exports.confirmSegments = async (req, res) => {
       }
     }
 
-    // Tạo HotelLinkRequest cho mỗi hotel khác company
+    // Tạo HotelLinkRequest cho từng hotel cần duyệt
+    // (khác company HOẶC cùng company nhưng tour-only admin gửi)
     for (const hotelKey of Object.keys(crossCompanyRequests)) {
-      const { hotelDoc, requestedRooms } = crossCompanyRequests[hotelKey];
+      const { hotelDoc, requestedRooms, isSameCompany: sameComp } = crossCompanyRequests[hotelKey];
       if (requestedRooms.length === 0) continue;
 
       const toCompany = await Company.findById(hotelDoc.companyId).select("name").lean();
@@ -645,10 +668,12 @@ module.exports.confirmSegments = async (req, res) => {
           tourId: String(tourId),
         },
         summary: `Gửi yêu cầu liên kết khách sạn "${hotelDoc.name}" cho tour "${tourName}"`,
-        metadata: { requestedRooms: requestedRooms.length },
+        metadata: { requestedRooms: requestedRooms.length, sameCompany: !!sameComp },
       });
 
-      // Gửi notification cho company sở hữu khách sạn
+      // Gửi notification cho company sở hữu khách sạn.
+      // Khi cùng công ty nhưng tour-only admin gửi, vẫn trỏ về /hotel/link-requests
+      // để hotel admin / company admin toàn quyền trong công ty đó duyệt.
       await Notification.create({
         companyId: hotelDoc.companyId,
         type: "other",
@@ -674,7 +699,7 @@ module.exports.confirmSegments = async (req, res) => {
       message += `Đã giữ thành công ${totalRoomsBlocked} phòng cho khách sạn cùng công ty.`;
     }
     if (newLinkRequestIds.length > 0) {
-      message += ` Đã gửi ${newLinkRequestIds.length} yêu cầu duyệt tới công ty sở hữu khách sạn khác. Vui lòng chờ phê duyệt.`;
+      message += ` Đã gửi ${newLinkRequestIds.length} yêu cầu liên kết. Vui lòng chờ phía quản lý khách sạn phê duyệt.`;
     }
     if (warnings.length > 0) {
       message += ` Cảnh báo: ${warnings.join("; ")}`;

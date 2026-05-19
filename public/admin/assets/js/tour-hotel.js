@@ -18,6 +18,7 @@
   const departureMeta = JSON.parse(document.getElementById("departure-meta")?.textContent|| "{}");
   const pathAdmin     = JSON.parse(document.getElementById("path-admin")?.textContent    || '""');
   const currentCompanyId = JSON.parse(document.getElementById("current-company-id")?.textContent || '""');
+  const isTourOnlyAdmin  = JSON.parse(document.getElementById("is-tour-only-admin")?.textContent || "false");
 
   /** Thông báo góc màn hình (Notyf), thay alert */
   function toastError(msg) {
@@ -693,14 +694,28 @@
       if (!okWeak) return;
     }
 
-    // Khách sạn thuộc công ty khác với tour — thu thập tên công ty chủ KS (từ hotelsData)
+    // Thu thập các công ty chủ KS cần gửi yêu cầu duyệt.
+    // Với tour-only admin: tất cả KS (kể cả cùng công ty) đều cần duyệt.
+    // Với company admin / full: chỉ KS khác công ty mới cần duyệt.
     const partnerCompanyIds = new Set();
     const partnerCompanyNames = [];
+    let hasSameCompanyNeedingApproval = false;
+
     for (const seg of segments) {
       for (const h of seg.hotels || []) {
         const hotelData = hotelsData.find((hd) => String(hd._id) === String(h.hotelId));
         if (!hotelData || !currentCompanyId) continue;
-        if (String(hotelData.companyId) === String(currentCompanyId)) continue;
+
+        const isSame = String(hotelData.companyId) === String(currentCompanyId);
+
+        if (isTourOnlyAdmin && isSame) {
+          // Tour-only admin + cùng công ty: cũng cần link request
+          hasSameCompanyNeedingApproval = true;
+          continue;
+        }
+
+        if (isSame) continue; // company admin + cùng công ty: auto-hold, không cần cảnh báo
+
         const cid = String(hotelData.companyId);
         if (partnerCompanyIds.has(cid)) continue;
         partnerCompanyIds.add(cid);
@@ -708,18 +723,48 @@
         partnerCompanyNames.push(nm || "Công ty chủ khách sạn (chưa có tên)");
       }
     }
-    const hasCrossCompany = partnerCompanyNames.length > 0;
 
-    if (hasCrossCompany) {
-      const quoted = partnerCompanyNames.map((n) => `«${n}»`).join(", ");
-      const title =
-        partnerCompanyNames.length === 1
-          ? `Liên kết khách sạn — công ty ${quoted}`
-          : `Liên kết khách sạn — ${partnerCompanyNames.length} công ty đối tác`;
-      const message =
-        partnerCompanyNames.length === 1
-          ? `Trong cấu hình có khách sạn thuộc công ty ${quoted} (không cùng công ty với tour của bạn). Hệ thống sẽ gửi yêu cầu duyệt tới công ty ${quoted}. Phòng tại khách sạn cùng công ty với tour của bạn sẽ được giữ ngay.\n\nTiếp tục?`
-          : `Trong cấu hình có khách sạn thuộc các công ty đối tác: ${quoted} (không cùng công ty với tour của bạn). Hệ thống sẽ gửi yêu cầu duyệt tới từng công ty sở hữu khách sạn tương ứng. Phòng tại khách sạn cùng công ty với tour của bạn sẽ được giữ ngay.\n\nTiếp tục?`;
+    const hasCrossCompany = partnerCompanyNames.length > 0;
+    const needsAnyApproval = hasCrossCompany || hasSameCompanyNeedingApproval;
+
+    if (needsAnyApproval) {
+      let title, message;
+
+      if (isTourOnlyAdmin) {
+        // Tour-only admin: tất cả KS (kể cả cùng công ty) cần gửi yêu cầu duyệt
+        const allCompanyNames = [
+          ...(hasSameCompanyNeedingApproval ? ["(cùng công ty)"] : []),
+          ...partnerCompanyNames,
+        ];
+        const allCompaniesHaveExternalOnly = !hasSameCompanyNeedingApproval && hasCrossCompany;
+        if (!hasSameCompanyNeedingApproval && partnerCompanyNames.length === 1) {
+          const quoted = `«${partnerCompanyNames[0]}»`;
+          title = `Yêu cầu liên kết khách sạn — công ty ${quoted}`;
+          message = `Tất cả khách sạn trong cấu hình đều cần được phê duyệt trước khi giữ phòng. Hệ thống sẽ gửi yêu cầu tới công ty ${quoted}.\n\nTiếp tục?`;
+        } else if (!hasSameCompanyNeedingApproval && partnerCompanyNames.length > 1) {
+          const quoted = partnerCompanyNames.map((n) => `«${n}»`).join(", ");
+          title = `Yêu cầu liên kết khách sạn — ${partnerCompanyNames.length} công ty`;
+          message = `Tất cả khách sạn trong cấu hình đều cần được phê duyệt trước khi giữ phòng. Hệ thống sẽ gửi yêu cầu tới từng công ty: ${quoted}.\n\nTiếp tục?`;
+        } else {
+          // Có cả cùng công ty và/hoặc khác công ty
+          title = "Yêu cầu liên kết khách sạn";
+          const details = partnerCompanyNames.length > 0
+            ? ` và công ty đối tác: ${partnerCompanyNames.map((n) => `«${n}»`).join(", ")}`
+            : "";
+          message = `Tài khoản của bạn (Tour Admin) cần gửi yêu cầu duyệt cho tất cả khách sạn${details} — kể cả khách sạn cùng công ty. Phòng sẽ chỉ được giữ sau khi được phê duyệt.\n\nTiếp tục?`;
+        }
+      } else {
+        // Company admin: chỉ KS khác công ty mới cần duyệt
+        const quoted = partnerCompanyNames.map((n) => `«${n}»`).join(", ");
+        title =
+          partnerCompanyNames.length === 1
+            ? `Liên kết khách sạn — công ty ${`«${partnerCompanyNames[0]}»`}`
+            : `Liên kết khách sạn — ${partnerCompanyNames.length} công ty đối tác`;
+        message =
+          partnerCompanyNames.length === 1
+            ? `Trong cấu hình có khách sạn thuộc công ty «${partnerCompanyNames[0]}» (không cùng công ty với tour của bạn). Hệ thống sẽ gửi yêu cầu duyệt tới công ty «${partnerCompanyNames[0]}». Phòng tại khách sạn cùng công ty với tour của bạn sẽ được giữ ngay.\n\nTiếp tục?`
+            : `Trong cấu hình có khách sạn thuộc các công ty đối tác: ${quoted} (không cùng công ty với tour của bạn). Hệ thống sẽ gửi yêu cầu duyệt tới từng công ty sở hữu khách sạn tương ứng. Phòng tại khách sạn cùng công ty với tour của bạn sẽ được giữ ngay.\n\nTiếp tục?`;
+      }
 
       const okCross = await showThConfirm({
         title,

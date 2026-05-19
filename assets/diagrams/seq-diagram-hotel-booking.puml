@@ -1,0 +1,55 @@
+@startuml Seq_Goi_dat_phong_KS
+!theme plain
+
+title Hình — Biểu đồ trình tự: Đặt phòng khách sạn\n(HotelBooking + Cart)
+
+actor "Khách hàng" as Guest
+
+participant "HotelCart / Form đặt phòng\n<<boundary>>" as CartUi
+participant "HotelBookingPendingView <<boundary>>" as Pend
+participant "HotelBookingSuccessView <<boundary>>" as Ok
+
+participant "HotelBookingController <<controller>>" as HB
+
+participant "Cart <<entity>>" as Cart
+participant "Hotel <<entity>>" as Hotel
+participant "HotelBooking <<entity>>" as Booking
+
+participant "VNPay" as VNP
+
+== Tạo booking từ giỏ ==
+Guest -> CartUi : Chọn phòng, ngày, Thanh toán
+CartUi -> HB : POST /hotel-booking/create\n(createPost)
+HB -> Cart : findOne(userId / sessionId)
+Cart --> HB : cart + items[]
+HB -> Hotel : findById (kiểm tra KS, phòng)
+Hotel --> HB : hotel
+HB -> Booking : tạo một hoặc nhiều\nHotelBooking (save)
+Booking --> HB : documents
+HB -> Cart : deleteOne(cart)
+HB --> CartUi : JSON success + bookingCode…
+
+== Thanh toán VNPay ==
+Guest -> Pend : Trang chờ + thanh toán
+Pend -> HB : pending(req, res)
+HB -> Booking : find theo code + phone
+Booking --> Pend : render
+
+Guest -> Pend : Thanh toán VNPay
+Pend -> HB : GET payment-vnpay
+HB --> Pend : HTTP 302 redirect URL VNPay
+Guest -> VNP : Thanh toán trên cổng
+VNP -> HB : GET payment-vnpay-result
+HB -> Booking : verify chữ ký,\ncập nhật paymentStatus
+Booking --> HB : OK
+HB --> Ok : redirect success
+
+Guest -> Ok : Xem thành công
+Ok -> HB : success(req, res)
+HB --> Ok : render hotel-booking-success
+
+note over Cart, Booking
+  **Cart** (collection **carts**) chỉ phục vụ\nluồng đặt phòng KS; sau createPost\ngiỏ được xóa.
+end note
+
+@enduml

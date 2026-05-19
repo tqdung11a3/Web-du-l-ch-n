@@ -1,0 +1,135 @@
+@startuml Hinh_Goi_quan_ly_khach_san
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam roundcorner 8
+
+title Hình — Biểu đồ lớp: Gói quản lý khách sạn (Hotel Management Package)
+
+package "Gói quản lý khách sạn" {
+
+  class Hotel <<entity>> {
+    - _id: ObjectId
+    - companyId: ObjectId
+    - name: String
+    - province: ObjectId
+    - address: String
+    - phone: String
+    - starRating: Number
+    - basePrice: Number
+    - status: String
+    - avatar: String
+    - images: String[]
+    - shortDescription: String
+    - description: String
+    - amenities: Object[]
+    - facilities: Object[]
+    - roomTypes: RoomType[]
+    - rooms: IndividualRoom[]
+    - ageBands: AgeBand[]
+    - usefulInfo: Object
+    - deleted: Boolean
+    --
+    + (timestamps)
+  }
+
+  class RoomType <<entity>> {
+    - name: String
+    - basePrice: Number
+    - baseOccupancy: Number
+    - maxOccupancy: Number
+    - sizeM2: Number
+    - bedInfo: String
+    - images: String[]
+  }
+
+  class IndividualRoom <<entity>> {
+    - roomNumber: String
+    - floor: String
+    - roomTypeId: ObjectId
+    - status: String
+  }
+
+  class Company <<entity>> {
+    - _id: ObjectId
+    - name: String
+  }
+
+  class AgeBand <<entity>> {
+    - bandName: String
+    - minAge: Number
+    - maxAge: Number
+    - bandType: String
+  }
+
+  Hotel "1" *-- "0..*" RoomType : roomTypes
+  Hotel "1" *-- "0..*" IndividualRoom : rooms
+  Hotel "1" *-- "0..*" AgeBand : ageBands
+  Hotel --> Company : companyId
+
+  class AdminHotelController <<controller>> {
+    --
+    + list(req, res)
+    + create(req, res)
+    + createPost(req, res)
+    + edit(req, res)
+    + editPatch(req, res)
+    + trash(req, res)
+    + roomTypesManagePage(req, res)
+    + roomTypeCreatePost(req, res)
+    + roomsList(req, res)
+    + roomCreatePost(req, res)
+    + bookingList(req, res)
+    + bookingDetail(req, res)
+    + ...
+  }
+
+  class ClientHotelController <<controller>> {
+    --
+    + search(req, res)
+    + detail(req, res)
+    + roomSelect(req, res)
+    + compare(req, res)
+    + bookingGet(req, res)
+  }
+
+  AdminHotelController ..> Hotel : <<access>>
+  ClientHotelController ..> Hotel : <<access>>
+
+  class HotelSearchView <<boundary>> {
+    + renderSearch()
+    + applyFilters()
+  }
+
+  class HotelDetailView <<boundary>> {
+    + renderDetail()
+    + openRoomSelect()
+  }
+
+  class HotelCreateView <<boundary>> {
+    + renderForm()
+    + submitCreate()
+  }
+
+  class HotelEditView <<boundary>> {
+    + renderForm()
+    + submitUpdate()
+  }
+
+  class AdminHotelListView <<boundary>> {
+    + renderTable()
+  }
+
+  HotelSearchView ..> ClientHotelController : <<access>>
+  HotelDetailView ..> ClientHotelController : <<access>>
+  HotelCreateView ..> AdminHotelController : <<access>>
+  HotelEditView ..> AdminHotelController : <<access>>
+  AdminHotelListView ..> AdminHotelController : <<access>>
+}
+
+note bottom of Hotel
+  **Hotel** ánh xạ collection khách sạn; **RoomType** / **IndividualRoom**
+  là mảng lồng trong schema (tách lớp để thể hiện hợp thành).
+end note
+
+@enduml

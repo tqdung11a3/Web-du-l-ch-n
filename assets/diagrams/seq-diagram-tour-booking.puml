@@ -1,0 +1,55 @@
+@startuml Seq_Goi_dat_tour
+!theme plain
+
+title Hình — Biểu đồ trình tự: Đặt tour (Order)
+
+actor "Khách hàng" as Guest
+participant "VNPay <<boundary>>" as VNP
+
+participant "Giỏ / Chi tiết tour\n<<boundary>>" as Ui
+participant "OrderPendingView <<boundary>>" as Pend
+participant "OrderSuccessView <<boundary>>" as Ok
+
+participant "OrderController <<controller>>" as Ord
+
+participant "Order <<entity>>" as Order
+participant "Tour <<entity>>" as Tour
+participant "TourSegment /\nHotelBooking <<entity>>" as Other
+
+== Tạo đơn ==
+Guest -> Ui : Chọn tour, ngày, hành khách,\nhình thức lưu trú, Thanh toán
+Ui -> Ord : POST /order/create\n(createPost)
+Ord -> Tour : kiểm tra ghế, giá (đọc)
+Tour --> Ord : dữ liệu tour
+Ord -> Other : tạo/cập nhật TourSegment,\nHotelBooking giữ chỗ (nếu có)
+Other --> Ord : OK / lỗi
+Ord -> Order : new Order(...).save()
+Order --> Ord : đơn đã lưu (mã code)
+Ord --> Ui : JSON success / redirect pending
+
+== Chờ thanh toán & VNPay ==
+Guest -> Pend : Mở trang chờ thanh toán
+Pend -> Ord : pending(req, res)
+Ord -> Order : findOne({ code… })
+Order --> Ord : order
+Ord --> Pend : render + link thanh toán
+
+Guest -> Pend : Chọn thanh toán VNPay
+Pend -> Ord : GET payment-vnpay
+Ord --> Pend : HTTP 302 redirect URL VNPay
+Guest -> VNP : Thanh toán trên cổng
+VNP -> Ord : GET payment-vnpay-result\n(callback)
+Ord -> Order : cập nhật paymentStatus = paid (nếu thành công)
+Order --> Ord : OK
+Ord --> Ok : redirect success
+
+Guest -> Ok : Xem trang thành công
+Ok -> Ord : success(req, res)
+Ord -> Order : find đơn
+Ord --> Ok : render order-success
+
+note over Ui, Order
+  **Không** dùng collection **Cart** MongoDB\ncho đặt tour; payload nằm trong **body**\nvà snapshot trong **Order.items**.
+end note
+
+@enduml

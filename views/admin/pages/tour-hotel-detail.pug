@@ -130,6 +130,7 @@ block main
     script#departure-meta(type="application/json")!= JSON.stringify({ tourId: String(tour._id), departureDate: moment(selectedDeparture.departureDate).format('YYYY-MM-DD'), endDate: selectedDeparture.endDate ? moment(selectedDeparture.endDate).format('YYYY-MM-DD') : '' })
     script#path-admin(type="application/json")!= JSON.stringify(pathAdmin)
     script#current-company-id(type="application/json")!= JSON.stringify(currentCompanyId || '')
+    script#is-tour-only-admin(type="application/json")!= JSON.stringify(!!isTourOnlyAdmin)
 
     //- Template HTML cho 1 khung thời gian (dùng bởi JS)
     template#segment-template

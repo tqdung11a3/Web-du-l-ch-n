@@ -49,6 +49,14 @@ const schema = new Schema(
     note: { type: String, default: "" },
     responseNote: { type: String, default: "" },
 
+    /** Người đã thực hiện duyệt / từ chối (phía nhận yêu cầu). */
+    reviewedBy: {
+      accountId: { type: Types.ObjectId, ref: "AccountAdmin", default: null },
+      fullName:  { type: String, default: "" },
+    },
+    /** Thời điểm duyệt / từ chối. */
+    reviewedAt: { type: Date, default: null },
+
     holdBookingIds: { type: [Types.ObjectId], default: [] },
   },
   { timestamps: true, collection: "hotel_link_requests" }

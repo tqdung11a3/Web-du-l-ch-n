@@ -1,0 +1,153 @@
+@startuml Hinh_Bieu_do_lop_Goi_quan_ly_tour
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam roundcorner 8
+
+title Hình — Biểu đồ lớp: Gói quản lý tour (Tour Management Package)\n(Thiết kế theo mô hình EBC — khớp cấu trúc dự án Web du lịch / khách sạn)
+
+package "Gói quản lý tour" {
+
+  ' ========== ENTITY ==========
+  class Tour <<entity>> {
+    - _id: ObjectId
+    - companyId: ObjectId
+    - name: String
+    - slug: String
+    - category: String
+    - status: String
+    - avatar: String
+    - images: Object[]
+    - departureCity: ObjectId
+    - locations: LocationSpot[]
+    - priceNewAdult: Number
+    - priceNewChildren: Number
+    - priceNewBaby: Number
+    - discountPercent: Number
+    - departures: Departure[]
+    - accommodations: Accommodation[]
+    - highlights: String[]
+    - includes: String[]
+    - excludes: String[]
+    - ratingAvg: Number
+    - ratingCount: Number
+    - deleted: Boolean
+    --
+    + (schema Mongoose: timestamps)
+  }
+
+  class Departure <<entity>> {
+    - departureDate: Date
+    - endDate: Date
+    - seatsTotal: Number
+    - seatsRemaining: Number
+  }
+
+  class Accommodation <<entity>> {
+    - hotel: ObjectId
+    - note: String
+  }
+
+  class City <<entity>> {
+    - _id: ObjectId
+    - name: String
+  }
+
+  class Company <<entity>> {
+    - _id: ObjectId
+    - name: String
+  }
+
+  class LocationSpot <<entity>> {
+    - city: ObjectId
+    - spots: String[]
+  }
+
+  Tour "1" *-- "0..*" Departure : departures
+  Tour "1" *-- "0..*" Accommodation : accommodations
+  Tour "1" *-- "0..*" LocationSpot : locations
+  LocationSpot --> City : city
+  Tour --> Company : companyId
+  Tour --> City : departureCity
+
+  ' ========== CONTROL ==========
+  class AdminTourController <<controller>> {
+    --
+    + list(req, res)
+    + create(req, res)
+    + createPost(req, res)
+    + edit(req, res)
+    + editPatch(req, res)
+    + trash(req, res)
+    + deletePatch(req, res)
+    + undoPatch(req, res)
+    + listDiscounts()
+  }
+
+  class ClientTourController <<controller>> {
+    --
+    + detail(req, res)
+    + listDiscount(req, res)
+    + compare(req, res)
+  }
+
+  AdminTourController ..> Tour : <<access>>
+  ClientTourController ..> Tour : <<access>>
+
+  ' ========== BOUNDARY ==========
+  class TourListView <<boundary>> {
+    + renderList()
+    + filterByCategory()
+  }
+
+  class TourDetailView <<boundary>> {
+    + renderDetail()
+    + selectDeparture()
+  }
+
+  class TourCreateView <<boundary>> {
+    + renderForm()
+    + submitCreate()
+  }
+
+  class TourEditView <<boundary>> {
+    + renderForm()
+    + submitUpdate()
+  }
+
+  class AdminTourListView <<boundary>> {
+    + renderTable()
+    + openTrash()
+  }
+
+  TourListView ..> ClientTourController : <<access>>
+  TourDetailView ..> ClientTourController : <<access>>
+  TourCreateView ..> AdminTourController : <<access>>
+  TourEditView ..> AdminTourController : <<access>>
+  AdminTourListView ..> AdminTourController : <<access>>
+
+  ' ========== Tài khoản quản trị (luồng vào admin) ==========
+  class LoginView <<boundary>> {
+    - userName: String
+    - password: String
+    --
+    + submitLogin()
+  }
+
+  class AdminDashboardView <<boundary>> {
+    + renderHub()
+    + navigateToTourModule()
+  }
+
+  LoginView ..> AdminDashboardView : <<navigate>>
+  AdminDashboardView --> AdminTourListView : 1..1\nmở module tour
+
+}
+
+note bottom of Tour
+  Entity **Tour** ánh xạ collection **tours** (Mongoose).
+  **Departure** / **Accommodation** là khối lồng trong schema;
+  tách lớp trên sơ đồ để thể hiện quan hệ hợp thành.
+end note
+
+@enduml

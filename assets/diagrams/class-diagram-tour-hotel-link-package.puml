@@ -1,0 +1,138 @@
+@startuml Hinh_Goi_lien_ket_tour_khach_san
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam roundcorner 8
+
+title Hình — Biểu đồ lớp: Gói quản lý liên kết tour – khách sạn\n(Tour–Hotel Link & Allocation)
+
+package "Gói liên kết tour – khách sạn" {
+
+  class TourSegment <<entity>> {
+    - tourId: ObjectId
+    - companyId: ObjectId
+    - departureDate: Date
+    - endDate: Date
+    - segments: SegmentFrame[]
+    - assignments: RoomAssignment[]
+    - holdBookingIds: ObjectId[]
+    - linkRequestIds: ObjectId[]
+    - status: String
+    --
+    + (timestamps)
+  }
+
+  class HotelLinkRequest <<entity>> {
+    - fromCompanyId: ObjectId
+    - toCompanyId: ObjectId
+    - tourSegmentId: ObjectId
+    - tourId: ObjectId
+    - hotelId: ObjectId
+    - requestedRooms: Object[]
+    - approvedRooms: Object[]
+    - status: String
+    - note: String
+    - responseNote: String
+    - reviewedBy: Object
+    - holdBookingIds: ObjectId[]
+    --
+    + (timestamps)
+  }
+
+  class Tour <<entity>> {
+    - _id: ObjectId
+    - name: String
+  }
+
+  class Hotel <<entity>> {
+    - _id: ObjectId
+    - name: String
+  }
+
+  class Company <<entity>> {
+    - _id: ObjectId
+  }
+
+  TourSegment --> Tour : tourId
+  TourSegment --> Company : companyId
+  HotelLinkRequest --> TourSegment : tourSegmentId
+  HotelLinkRequest --> Tour : tourId
+  HotelLinkRequest --> Hotel : hotelId
+  HotelLinkRequest --> Company : fromCompanyId
+  HotelLinkRequest --> Company : toCompanyId
+
+  class TourHotelController <<controller>> {
+    --
+    + list(req, res)
+    + detail(req, res)
+    + hotelAvailability(req, res)
+    + suggestAllocation(req, res)
+    + saveSegments(req, res)
+    + confirmSegments(req, res)
+    + cancelSegments(req, res)
+    + assign(req, res)
+    + saveAssignments(req, res)
+  }
+
+  class HotelTourAssignmentController <<controller>> {
+    --
+    + list(req, res)
+    + detail(req, res)
+    + save(req, res)
+  }
+
+  class HotelLinkRequestController <<controller>> {
+    --
+    + listReceived(req, res)
+    + listSent(req, res)
+    + approve(req, res)
+    + reject(req, res)
+    + cancel(req, res)
+  }
+
+  TourHotelController ..> TourSegment : <<access>>
+  TourHotelController ..> Hotel : <<access>>
+  HotelTourAssignmentController ..> TourSegment : <<access>>
+  HotelLinkRequestController ..> HotelLinkRequest : <<access>>
+  HotelLinkRequestController ..> TourSegment : <<access>>
+
+  class TourHotelDetailView <<boundary>> {
+    + renderSegmentConfig()
+  }
+
+  class TourHotelAssignView <<boundary>> {
+    + renderRoomAssignment()
+  }
+
+  class HotelTourAssignmentListView <<boundary>> {
+    + renderSegmentList()
+  }
+
+  class HotelTourAssignmentDetailView <<boundary>> {
+    + renderAssignmentDetail()
+    + submitSave()
+  }
+
+  class HotelLinkRequestsSentView <<boundary>> {
+    + renderSentList()
+  }
+
+  class HotelLinkRequestsReceivedView <<boundary>> {
+    + renderInbox()
+    + openApproveReject()
+  }
+
+  TourHotelDetailView ..> TourHotelController : <<access>>
+  TourHotelAssignView ..> TourHotelController : <<access>>
+  HotelTourAssignmentListView ..> HotelTourAssignmentController : <<access>>
+  HotelTourAssignmentDetailView ..> HotelTourAssignmentController : <<access>>
+  HotelLinkRequestsSentView ..> HotelLinkRequestController : <<access>>
+  HotelLinkRequestsReceivedView ..> HotelLinkRequestController : <<access>>
+}
+
+note bottom of TourSegment
+  **TourSegment**: 1 tour × 1 kỳ khởi hành — cấu hình khung ngày–KS–giữ phòng;
+  **HotelLinkRequest**: xin dùng KS công ty khác cho segment đó.
+end note
+
+@enduml

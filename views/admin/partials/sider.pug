@@ -12,10 +12,11 @@ mixin menuTour()
       a(href=`/${pathAdmin}/user/list`) <i class="fa-solid fa-user"></i> Quản lý người dùng
     li
       a(href=`/${pathAdmin}/company/info`) <i class="fa-solid fa-building"></i> Công ty của tôi
-    li
-      a(href=`/${pathAdmin}/tour-hotel/list`) <i class="fa-solid fa-link"></i> Liên kết Tour – Khách sạn
-    li
-      a(href=`/${pathAdmin}/tour-hotel/link-requests`) <i class="fa-solid fa-paper-plane"></i> Yêu cầu đã gửi
+    if !isTourStaffAdmin
+      li
+        a(href=`/${pathAdmin}/tour-hotel/list`) <i class="fa-solid fa-link"></i> Liên kết Tour – Khách sạn
+      li
+        a(href=`/${pathAdmin}/tour-hotel/link-requests`) <i class="fa-solid fa-paper-plane"></i> Yêu cầu đã gửi
 
 mixin menuHotel(startHidden)
   ul.inner-menu.menu-hotel(style=startHidden ? "display: none;" : "")
@@ -23,8 +24,9 @@ mixin menuHotel(startHidden)
       a(href=`/${pathAdmin}/hotel/dashboard`) <i class="fa-solid fa-chart-line"></i> Dashboard
     li
       a(href=`/${pathAdmin}/hotel/list`) <i class="fa-solid fa-hotel"></i> Khách sạn
-    li
-      a(href=`/${pathAdmin}/hotel/link-requests`) <i class="fa-solid fa-handshake"></i> Yêu cầu nhận được
+    if !isHotelStaffAdmin
+      li
+        a(href=`/${pathAdmin}/hotel/link-requests`) <i class="fa-solid fa-handshake"></i> Yêu cầu nhận được
     li
       a(href=`/${pathAdmin}/hotel/booking/list`) <i class="fa-solid fa-calendar-check"></i> Đặt phòng
     li

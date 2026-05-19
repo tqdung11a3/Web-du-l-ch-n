@@ -1,0 +1,70 @@
+@startuml Seq_Goi_quan_ly_tour
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title Hình — Biểu đồ trình tự: Quản lý tour (admin)\n(Boundary–Control–Entity)
+
+actor "NVQL / Admin\ncông ty tour" as Admin
+
+participant "Main admin / menu <<boundary>>" as MainPg
+participant "AdminTourListView\n(tour-list.pug) <<boundary>>" as ListV
+participant "TourCreateView\n(tour-create.pug) <<boundary>>" as CreateV
+participant "TourEditView\n(tour-edit.pug) <<boundary>>" as EditV
+
+participant "AdminTourController <<controller>>" as Ctrl
+participant "Tour (Mongoose) <<entity>>" as Tour
+
+== Luồng mở danh sách tour ==
+Admin -> MainPg : Chọn module Tour
+MainPg -> ListV : Điều hướng GET /.../tour/list
+ListV -> Ctrl : list(req, res)
+Ctrl -> Tour : find(\nfilter theo companyId,\ntrạng thái deleted…)
+Tour --> Ctrl : danh sách documents
+Ctrl --> ListV : res.render('tour-list', { tours… })
+ListV --> Admin : Hiển thị bảng tour
+
+== Thao tác nghiệp vụ (alt) ==
+alt Thêm tour mới
+  Admin -> CreateV : Mở form tạo (GET create)
+  CreateV -> Ctrl : create(req, res)
+  Ctrl --> CreateV : render form trống
+  Admin -> CreateV : Gửi form (POST createPost)
+  CreateV -> Ctrl : createPost(req, res)
+  Ctrl -> Tour : new Tour(...).save()
+  Tour --> Ctrl : document đã lưu
+  Ctrl --> CreateV : redirect + thông báo
+  CreateV --> Admin : Trang danh sách / chi tiết
+else Chỉnh sửa tour
+  Admin -> ListV : Chọn "Sửa" (GET edit/:id)
+  ListV -> Ctrl : edit(req, res)
+  Ctrl -> Tour : findById(id)
+  Tour --> Ctrl : tour
+  Ctrl --> EditV : render('tour-edit', { tour })
+  Admin -> EditV : Lưu (PATCH/POST editPatch)
+  EditV -> Ctrl : editPatch(req, res)
+  Ctrl -> Tour : findByIdAndUpdate / save()
+  Tour --> Ctrl : OK
+  Ctrl --> EditV : redirect / JSON
+  EditV --> Admin : Cập nhật giao diện
+else Đưa vào thùng rác / khôi phục
+  Admin -> ListV : Xóa mềm / Hoàn tác
+  ListV -> Ctrl : deletePatch / undoPatch
+  Ctrl -> Tour : updateMany / updateOne
+  Tour --> Ctrl : OK
+  Ctrl --> ListV : redirect danh sách
+  ListV --> Admin : Danh sách mới
+else Khuyến mãi / giảm giá (module discount)
+  Admin -> ListV : Vào trang giảm giá tour
+  ListV -> Ctrl : listDiscounts / applyCompanyDiscount…
+  Ctrl -> Tour : updateOne (discountPercent…)
+  Tour --> Ctrl : OK
+  Ctrl --> ListV : render / redirect
+  ListV --> Admin : Bảng giá cập nhật
+end
+
+note over ListV, Tour
+  **Boundary** chỉ giao tiếp **Controller**;\n**Controller** truy cập **Tour**. Luồng HTTP SSR:\nthường `res.render` hoặc `redirect` thay cho `setUpdateUI`\ncủa ứng dụng SPA trong mẫu ví dụ.
+end note
+
+@enduml

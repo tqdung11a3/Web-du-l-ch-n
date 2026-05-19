@@ -7,6 +7,21 @@ block main
   .th-intro
     p Chọn tour-segment có phòng của khách sạn bạn đã được giữ chỗ để phân khách vào phòng. Lọc theo khách sạn bằng thanh chọn khách sạn ở đầu trang (giống Dashboard, Đặt phòng, v.v.).
 
+  form.th-search-form(method="GET" action=`/${pathAdmin}/hotel/tour-assignments`)
+    if selectedHotelId
+      input(type="hidden" name="hotelId" value=selectedHotelId)
+    .th-search-row
+      input.th-search-input(
+        type="text"
+        name="q"
+        placeholder="Tìm theo tên tour..."
+        value=(searchKeyword || "")
+      )
+      button.th-search-btn(type="submit")
+        i.fa-solid.fa-magnifying-glass
+        |  Tìm kiếm
+      a.th-search-reset(href=`/${pathAdmin}/hotel/tour-assignments${selectedHotelId ? ('?hotelId=' + encodeURIComponent(String(selectedHotelId))) : ''}`) Xóa lọc
+
   if !rows || rows.length === 0
     .th-empty
       i.fa-solid.fa-circle-info
@@ -60,3 +75,43 @@ block main
                 a.btn-assign-detail(href=`/${pathAdmin}/hotel/tour-assignments/${row.segmentId}${_htaListHotelQs}`)
                   i.fa-solid.fa-user-tag
                   |  Phân phòng
+
+  style.
+    .th-search-form {
+      margin: 12px 0 16px 0;
+    }
+    .th-search-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .th-search-input {
+      min-width: 260px;
+      height: 38px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 0 12px;
+      font-size: 14px;
+    }
+    .th-search-btn {
+      height: 38px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 14px;
+      background: #2d3e90;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .th-search-reset {
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      color: #374151;
+      text-decoration: none;
+      font-size: 13px;
+    }

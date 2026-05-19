@@ -45,7 +45,7 @@ mixin tourHoldGroupContent(group, unassignedBookings, unassignedIds, showDetailI
         a.btn-tour-hold-detail(href=`/${pathAdmin}/hotel/booking/tour-holds/detail/${group.segmentId}?hotelId=${selectedHotelId || ''}`)
           i.fa-solid.fa-eye
           |  Xem chi tiết
-      if unassignedIds.length > 0
+      if unassignedIds.length > 0 && !isHotelStaffAdmin
         button.btn-release-holds(
           type="button"
           data-panel-id="release-panel-" + group.segmentId
@@ -107,7 +107,7 @@ mixin tourHoldGroupContent(group, unassignedBookings, unassignedIds, showDetailI
                 i.fa-solid.fa-door-open(style="font-size:11px")
                 |  #{singleTf.totalRooms} phòng
         +tourHoldBookingTable(group.bookings)
-  if unassignedIds.length > 0
+  if unassignedIds.length > 0 && !isHotelStaffAdmin
     .release-confirm-panel(id="release-panel-" + group.segmentId style="display:none")
       .release-confirm-panel__header
         i.fa-solid.fa-triangle-exclamation
@@ -225,7 +225,7 @@ mixin tourHoldBookingTable(bookingsList)
                   button.th-status-option(type="button" data-status="checked_in" onclick=b.isAssigned ? 'selectStatusOption(this)' : '') Đã nhận phòng
                   button.th-status-option(type="button" data-status="checked_out" onclick=b.isAssigned ? 'selectStatusOption(this)' : '') Đã trả phòng
           td.th-action-cell
-            if effectiveStatus === 'confirmed' && !b.isAssigned
+            if effectiveStatus === 'confirmed' && !b.isAssigned && !isHotelStaffAdmin
               button.btn-release-single(type="button" data-booking-id=b.id onclick="releaseOneHold(this)" title="Giải phóng phòng này")
                 i.fa-solid.fa-unlock
                 |  Giải phóng

@@ -1,0 +1,70 @@
+@startuml Seq_Goi_quan_ly_khach_san
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title Hình — Biểu đồ trình tự: Quản lý khách sạn (admin)\n(Boundary–Control–Entity)
+
+actor "NVQL / Admin\ncông ty KS" as Admin
+
+participant "Main admin / menu <<boundary>>" as MainPg
+participant "AdminHotelListView\n(hotel-list.pug) <<boundary>>" as ListV
+participant "HotelCreateView\n(hotel-create.pug) <<boundary>>" as CreateV
+participant "HotelEditView\n(hotel-edit.pug) <<boundary>>" as EditV
+
+participant "AdminHotelController <<controller>>" as Ctrl
+participant "Hotel (Mongoose) <<entity>>" as Hotel
+
+== Luồng mở danh sách khách sạn ==
+Admin -> MainPg : Chọn module Khách sạn
+MainPg -> ListV : Điều hướng GET /.../hotel/list
+ListV -> Ctrl : list(req, res)
+Ctrl -> Hotel : find(\nfilter theo companyId,\ntrạng thái deleted…)
+Hotel --> Ctrl : danh sách documents
+Ctrl --> ListV : res.render('hotel-list', { hotels… })
+ListV --> Admin : Hiển thị bảng khách sạn
+
+== Thao tác nghiệp vụ (alt) ==
+alt Thêm khách sạn mới
+  Admin -> CreateV : Mở form tạo (GET create)
+  CreateV -> Ctrl : create(req, res)
+  Ctrl --> CreateV : render form trống
+  Admin -> CreateV : Gửi form (POST createPost,\nmultipart ảnh)
+  CreateV -> Ctrl : createPost(req, res)
+  Ctrl -> Hotel : new Hotel(...).save()
+  Hotel --> Ctrl : document đã lưu
+  Ctrl --> CreateV : redirect + thông báo
+  CreateV --> Admin : Trang danh sách / chi tiết
+else Chỉnh sửa khách sạn
+  Admin -> ListV : Chọn "Sửa" (GET edit/:id)
+  ListV -> Ctrl : edit(req, res)
+  Ctrl -> Hotel : findById(id)
+  Hotel --> Ctrl : hotel
+  Ctrl --> EditV : render('hotel-edit', { hotel })
+  Admin -> EditV : Lưu (PATCH/POST editPatch)
+  EditV -> Ctrl : editPatch(req, res)
+  Ctrl -> Hotel : findByIdAndUpdate / save()
+  Hotel --> Ctrl : OK
+  Ctrl --> EditV : redirect / JSON
+  EditV --> Admin : Cập nhật giao diện
+else Đưa vào thùng rác / khôi phục
+  Admin -> ListV : Xóa mềm / Hoàn tác
+  ListV -> Ctrl : deletePatch / undoPatch
+  Ctrl -> Hotel : updateMany / updateOne
+  Hotel --> Ctrl : OK
+  Ctrl --> ListV : redirect danh sách
+  ListV --> Admin : Danh sách mới
+else Quản lý loại phòng / phòng vật lý\n(module trong admin KS)
+  Admin -> ListV : Vào quản lý loại phòng /\nthêm phòng cụ thể
+  ListV -> Ctrl : roomTypesManagePage /\nroomCreate / roomCreatePost …
+  Ctrl -> Hotel : findById / cập nhật\nroomTypes[], rooms[]
+  Hotel --> Ctrl : OK
+  Ctrl --> ListV : render / redirect
+  ListV --> Admin : Bảng loại phòng & phòng cập nhật
+end
+
+note over ListV, Hotel
+  **Boundary** chỉ giao tiếp **AdminHotelController**;\n**Controller** truy cập **Hotel**. Luồng SSR:\n`res.render` hoặc `redirect` (tương đương cập nhật UI sau thao tác).
+end note
+
+@enduml

@@ -1,0 +1,134 @@
+@startuml ER_He_thong_du_lich_KS
+!theme plain
+skinparam linetype ortho
+skinparam roundcorner 8
+title Biểu đồ E-R - He thong dat tour va khach san\n(khai niem - MongoDB / Mongoose)
+
+skinparam entity {
+  BackgroundColor #FAFAFA
+  BorderColor #333333
+}
+
+entity Company {
+  *_id : ObjectId <<PK>>
+  --
+  name : String
+}
+
+entity AccountAdmin {
+  *_id : ObjectId <<PK>>
+  --
+  companyId : ObjectId <<FK>>
+  assignedHotelId : ObjectId <<FK>>
+}
+
+entity AccountUser {
+  *_id : ObjectId <<PK>>
+  --
+  email : String
+}
+
+entity City {
+  *_id : ObjectId <<PK>>
+}
+
+entity Tour {
+  *_id : ObjectId <<PK>>
+  --
+  companyId : ObjectId <<FK>>
+  departureCity : ObjectId <<FK>>
+  accommodations_hotel_ref : nhung
+}
+
+entity Hotel {
+  *_id : ObjectId <<PK>>
+  --
+  companyId : ObjectId <<FK>>
+  province : ObjectId <<FK>>
+  roomTypes_rooms : nhung
+}
+
+entity TourSegment {
+  *_id : ObjectId <<PK>>
+  --
+  tourId : ObjectId <<FK>>
+  companyId : ObjectId <<FK>>
+}
+
+entity HotelLinkRequest {
+  *_id : ObjectId <<PK>>
+  --
+  fromCompanyId : ObjectId <<FK>>
+  toCompanyId : ObjectId <<FK>>
+  tourSegmentId : ObjectId <<FK>>
+  tourId : ObjectId <<FK>>
+  hotelId : ObjectId <<FK>>
+}
+
+entity Order {
+  *_id : ObjectId <<PK>>
+  --
+  userId : ObjectId <<FK>>
+  items_snapshot : nhung
+}
+
+entity HotelBooking {
+  *_id : ObjectId <<PK>>
+  --
+  userId : ObjectId <<FK>>
+  tourSegmentId : ObjectId <<FK>>
+  orderCode : String
+}
+
+entity Cart {
+  *_id : ObjectId <<PK>>
+  --
+  userId : ObjectId <<FK>>
+  hotelId : ObjectId <<FK>>
+}
+
+entity Notification {
+  *_id : ObjectId <<PK>>
+  --
+  companyId : ObjectId <<FK>>
+}
+
+Company ||--o{ AccountAdmin
+Company ||--o{ Tour
+Company ||--o{ Hotel
+Company ||--o{ Notification
+
+Tour }o--|| Company
+Tour }o--o| City
+Tour ||--o{ TourSegment
+
+Hotel }o--|| Company
+Hotel }o--o| City
+
+TourSegment }o--|| Tour
+TourSegment }o--|| Company
+
+HotelLinkRequest }o--|| TourSegment
+HotelLinkRequest }o--|| Tour
+HotelLinkRequest }o--|| Hotel
+Company ||--o{ HotelLinkRequest : fromCompany
+Company ||--o{ HotelLinkRequest : toCompany
+
+AccountUser ||--o{ Order
+AccountUser ||--o{ HotelBooking
+AccountUser ||--o{ Cart
+
+Hotel ||--o{ Cart
+Hotel ||--o{ HotelBooking : snapshot hotelId
+
+TourSegment ||--o{ HotelBooking : optional
+
+Order .. HotelBooking : orderCode
+
+note as N1
+  **Tour.accommodations**: moi phan tu ref **Hotel** (M:N khai niem).
+  **Order.items**: snapshot tourId - khong bat buoc FK Mongo.
+  **Cart**: chi cho gio phong KS; Order tour khong dung Cart.
+end note
+
+@enduml

@@ -151,10 +151,14 @@ module.exports.allowBoth = (req, res, next) => {
 module.exports.loadRolePermissions = async (req, res, next) => {
   res.locals.isTourOnlyAdmin = false;
   res.locals.isHotelOnlyAdmin = false;
+  res.locals.isTourStaffAdmin = false;
+  res.locals.isHotelStaffAdmin = false;
   req.tabAccess = {
     hasTour: false,
     hasHotel: false,
     restricted: false,
+    isTourStaff: false,
+    isHotelStaff: false,
   };
 
   const account = req.account;
@@ -179,6 +183,25 @@ module.exports.loadRolePermissions = async (req, res, next) => {
     req.tabAccess = { hasTour: false, hasHotel: true, restricted: true };
     res.locals.isTourOnlyAdmin = false;
     res.locals.isHotelOnlyAdmin = true;
+    return next();
+  }
+  if (scope === "tour_staff") {
+    req.tabAccess = { hasTour: true, hasHotel: false, restricted: true, isTourStaff: true };
+    res.locals.isTourOnlyAdmin = true;
+    res.locals.isHotelOnlyAdmin = false;
+    res.locals.isTourStaffAdmin = true;
+    return next();
+  }
+  if (scope === "hotel_staff") {
+    req.tabAccess = {
+      hasTour: false,
+      hasHotel: true,
+      restricted: true,
+      isHotelStaff: true,
+    };
+    res.locals.isTourOnlyAdmin = false;
+    res.locals.isHotelOnlyAdmin = true;
+    res.locals.isHotelStaffAdmin = true;
     return next();
   }
 

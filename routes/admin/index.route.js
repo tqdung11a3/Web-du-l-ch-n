@@ -119,6 +119,24 @@ router.use(
   roleMiddleware.loadRolePermissions,
   notificationMiddleware.getUnreadCount,
   hotelListMiddleware.getHotelList,
+  (req, res, next) => {
+    if (req.tabAccess && req.tabAccess.isHotelStaff) {
+      const wantsJSON =
+        req.xhr ||
+        (req.headers.accept && req.headers.accept.includes("application/json"));
+      if (wantsJSON) {
+        return res.status(403).json({
+          code: "error",
+          message: "Bạn không có quyền truy cập chức năng này!",
+        });
+      }
+      return res.render("admin/pages/error-403", {
+        pageTitle: "403 Forbidden",
+        message: "Bạn không có quyền truy cập khu vực này!",
+      });
+    }
+    next();
+  },
   roleMiddleware.requirePermission("hotel-access"),
   hotelLinkRequestRoutes
 );
@@ -145,6 +163,25 @@ router.use(
   roleMiddleware.loadRolePermissions,
   notificationMiddleware.getUnreadCount,
   hotelListMiddleware.getHotelList,
+  (req, res, next) => {
+    // tour_staff không được truy cập module Liên kết Tour – Khách sạn
+    if (req.tabAccess && req.tabAccess.isTourStaff) {
+      const wantsJSON =
+        req.xhr ||
+        (req.headers.accept && req.headers.accept.includes("application/json"));
+      if (wantsJSON) {
+        return res.status(403).json({
+          code: "error",
+          message: "Bạn không có quyền truy cập chức năng này!",
+        });
+      }
+      return res.render("admin/pages/error-403", {
+        pageTitle: "403 Forbidden",
+        message: "Bạn không có quyền truy cập khu vực này!",
+      });
+    }
+    next();
+  },
   roleMiddleware.requirePermission("tour-access"),
   tourHotelRoutes
 );

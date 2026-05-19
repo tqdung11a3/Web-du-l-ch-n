@@ -1,0 +1,75 @@
+@startuml Seq_Goi_lien_ket_tour_KS
+!theme plain
+
+title Hình — Biểu đồ trình tự: Liên kết tour – khách sạn\n(phân segment, phân công, yêu cầu liên kết)
+
+actor "Admin\ncông ty tour" as TourAdm
+actor "Admin\ncông ty KS" as HotelAdm
+
+participant "TourHotelDetailView <<boundary>>" as THDetail
+participant "TourHotelAssignView <<boundary>>" as THAssign
+participant "HotelTourAssignment\nList/Detail <<boundary>>" as HTAView
+participant "HotelLinkRequests\nSent/Received <<boundary>>" as LnkView
+
+participant "TourHotelController <<controller>>" as THC
+participant "HotelTourAssignmentController <<controller>>" as HTAC
+participant "HotelLinkRequestController <<controller>>" as HLR
+
+participant "TourSegment <<entity>>" as Seg
+participant "HotelLinkRequest <<entity>>" as Req
+participant "Hotel <<entity>>" as Hotel
+
+== Cấu hình segment & xác nhận (phía tour) ==
+TourAdm -> THDetail : Mở /tour-hotel/detail/:tourId
+THDetail -> THC : detail(req, res)
+THC -> Seg : findOne / find (theo tour + departure)
+Seg --> THC : tourSegment
+THC --> THDetail : render cấu hình khung ngày–KS
+
+TourAdm -> THDetail : Lưu segment / Xác nhận (POST API)
+THDetail -> THC : saveSegments / confirmSegments
+THC -> Seg : updateOne, assign hotels…
+Seg --> THC : OK
+THC --> THDetail : JSON success / redirect
+
+== Phân công phòng cho khách (tour) ==
+TourAdm -> THAssign : GET /tour-hotel/assign/:segmentId
+THAssign -> THC : assign(req, res)
+THC -> Seg : findById(segmentId)
+Seg --> THC : segment + assignments
+THC --> THAssign : render bảng phân công
+
+TourAdm -> THAssign : Lưu phân công (POST saveAssignments)
+THAssign -> THC : saveAssignments(req, res)
+THC -> Seg : cập nhật assignments[]
+Seg --> THC : OK
+THC --> THAssign : JSON / redirect
+
+== Phân công phía khách sạn ==
+HotelAdm -> HTAView : GET /hotel/tour-assignments
+HTAView -> HTAC : list(req, res)
+HTAC -> Seg : find({ hotel trong segment… })
+Seg --> HTAC : danh sách
+HTAC --> HTAView : render danh sách
+
+HotelAdm -> HTAView : Chi tiết segment + POST save
+HTAView -> HTAC : detail / save(req, res)
+HTAC -> Seg : đọc/ghi assignments, booking giữ chỗ
+Seg --> HTAC : OK
+HTAC --> HTAView : redirect / JSON
+
+== Yêu cầu liên kết KS công ty khác ==
+TourAdm -> LnkView : Gửi / xem yêu cầu đã gửi
+LnkView -> HLR : listSent(req, res)
+HLR -> Req : find({ fromCompanyId… })
+Req --> HLR : requests[]
+HLR --> LnkView : render
+
+HotelAdm -> LnkView : Hộp thư yêu cầu nhận / Duyệt
+LnkView -> HLR : listReceived / approve / reject
+HLR -> Req : update status, approvedRooms…
+HLR -> Seg : recomputeTourSegmentStatus (nội bộ)
+Req --> HLR : OK
+HLR --> LnkView : redirect
+
+@enduml

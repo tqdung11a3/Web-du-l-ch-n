@@ -6,9 +6,52 @@ const multer = require("multer");
 const cloudinaryHelper = require("../../helpers/cloudinary.helper");
 const upload = multer({ storage: cloudinaryHelper.storage });
 const hotelListMiddleware = require("../../middlewares/admin/hotel-list.middleware");
+const { pathAdmin } = require("../../config/variable.config");
+
+/** Nhân viên KS: không tạo / xóa khách sạn (chỉ vận hành KS được phân công) */
+function forbidHotelStaffHotelCrud(req, res, next) {
+  const a = req.account;
+  if (a && !a.isSuperAdmin && a.tabAccessScope === "hotel_staff") {
+    const wantsJSON =
+      req.xhr ||
+      (req.headers.accept && req.headers.accept.includes("application/json"));
+    if (wantsJSON) {
+      return res.status(403).json({
+        code: "error",
+        message: "Bạn không có quyền thực hiện thao tác này!",
+      });
+    }
+    return res.status(403).render("admin/pages/error-403", {
+      pageTitle: "403 Forbidden",
+      message: "Bạn không có quyền truy cập chức năng này!",
+    });
+  }
+  next();
+}
 
 // Middleware: Lấy danh sách khách sạn cho tất cả routes
 router.use(hotelListMiddleware.getHotelList);
+
+// Nhân viên KS chỉ được quản lý đúng khách sạn được phân công
+router.use((req, res, next) => {
+  const account = req.account;
+  if (
+    account &&
+    !account.isSuperAdmin &&
+    account.tabAccessScope === "hotel_staff" &&
+    account.assignedHotelId
+  ) {
+    const rid =
+      String(req.query.hotelId || "") ||
+      String(req.params.hotelId || "");
+    if (rid && String(rid) !== String(account.assignedHotelId)) {
+      return res.redirect(
+        `/${pathAdmin}/hotel/dashboard?hotelId=${account.assignedHotelId}`
+      );
+    }
+  }
+  next();
+});
 
 // ========== HOTEL CRUD CHÍNH ==========
 
@@ -63,10 +106,11 @@ router.post("/booking/update-assignment-status", hotelController.updateAssignmen
 router.get("/list", hotelController.list);
 
 // Tạo khách sạn
-router.get("/create", hotelController.create);
+router.get("/create", forbidHotelStaffHotelCrud, hotelController.create);
 
 router.post(
   "/create",
+  forbidHotelStaffHotelCrud,
   upload.fields([
     { name: "avatar", maxCount: 1 },
     { name: "images", maxCount: 10 },
@@ -78,7 +122,7 @@ router.post(
 );
 
 // Thùng rác
-router.get("/trash", hotelController.trash);
+router.get("/trash", forbidHotelStaffHotelCrud, hotelController.trash);
 
 // Chỉnh sửa khách sạn
 router.get("/edit/:id", hotelController.edit);
@@ -96,11 +140,11 @@ router.patch(
 );
 
 // Xoá mềm / khôi phục / xoá hẳn
-router.patch("/delete/:id", hotelController.deletePatch);
-router.patch("/undo/:id", hotelController.undoPatch);
-router.delete("/destroy/:id", hotelController.destroyDelete);
+router.patch("/delete/:id", forbidHotelStaffHotelCrud, hotelController.deletePatch);
+router.patch("/undo/:id", forbidHotelStaffHotelCrud, hotelController.undoPatch);
+router.delete("/destroy/:id", forbidHotelStaffHotelCrud, hotelController.destroyDelete);
 
-// Đổi trạng thái nhiều bản ghi
+// Đổi trạng thái nhiều bản ghi (controller chặn xóa/hủy với nhân viên KS)
 router.patch("/change-multi", hotelController.changeMultiPatch);
 
 // ========== QUẢN LÝ LOẠI PHÒNG (TỪ SIDEBAR) ==========

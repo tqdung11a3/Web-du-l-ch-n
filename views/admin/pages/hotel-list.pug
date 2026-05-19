@@ -46,21 +46,31 @@ block main
   //- SECTION 5 – HÀNH ĐỘNG HÀNG LOẠT + TÌM KIẾM + TẠO MỚI
   .section-5
     .inner-wrap
-      +change-status(
-        `/${pathAdmin}/hotel/change-multi`,
-        [
-          { label: "Hoạt động",      value: "active" },
-          { label: "Ngừng hiển thị", value: "inactive" },
-          { label: "Xóa",            value: "delete" }
-        ]
-      )
+      if !isHotelStaffAdmin
+        +change-status(
+          `/${pathAdmin}/hotel/change-multi`,
+          [
+            { label: "Hoạt động",      value: "active" },
+            { label: "Ngừng hiển thị", value: "inactive" },
+            { label: "Xóa",            value: "delete" }
+          ]
+        )
+      else
+        +change-status(
+          `/${pathAdmin}/hotel/change-multi`,
+          [
+            { label: "Hoạt động",      value: "active" },
+            { label: "Ngừng hiển thị", value: "inactive" }
+          ]
+        )
       .inner-search
         i.fa-solid.fa-magnifying-glass
         input(type="text" placeholder="Tìm kiếm theo tên khách sạn..." search)
-      .inner-button-create
-        a(href=`/${pathAdmin}/hotel/create`) + Thêm khách sạn
-      .inner-button-trash
-        a(href=`/${pathAdmin}/hotel/trash`) Thùng rác
+      if !isHotelStaffAdmin
+        .inner-button-create
+          a(href=`/${pathAdmin}/hotel/create`) + Thêm khách sạn
+        .inner-button-trash
+          a(href=`/${pathAdmin}/hotel/trash`) Thùng rác
 
   //- SECTION 6 – BẢNG DANH SÁCH
   .section-6
@@ -150,12 +160,13 @@ block main
                   .inner-buttons
                     a(href=`/${pathAdmin}/hotel/edit/${item.id}` class="inner-edit")
                       i.fa-regular.fa-pen-to-square
-                    button(
-                      class="inner-delete"
-                      button-delete
-                      data-api=`/${pathAdmin}/hotel/delete/${item.id}`
-                    )
-                      i.fa-regular.fa-trash-can
+                    if !isHotelStaffAdmin
+                      button(
+                        class="inner-delete"
+                        button-delete
+                        data-api=`/${pathAdmin}/hotel/delete/${item.id}`
+                      )
+                        i.fa-regular.fa-trash-can
           else
             tr
               td(colspan="11") Không có khách sạn nào.

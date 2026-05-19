@@ -13,18 +13,6 @@
         value=(query && query.q) || ""
       )
     .inner-group
-      .inner-label Điểm đi
-      select(name="locationFrom")
-        option(value="") -- Chọn điểm đi --
-        each item in cityList
-          option(value=item.id) #{item.name}
-    .inner-group
-      .inner-label Điểm đến
-      select(name="locationTo")
-        option(value="") -- Chọn điểm đến --
-        each item in cityList
-          option(value=item.name) #{item.name}
-    .inner-group
       .inner-label Ngày khởi hành
       input(
         name="departureDate"  

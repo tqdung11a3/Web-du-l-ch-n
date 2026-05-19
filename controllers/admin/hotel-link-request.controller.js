@@ -180,6 +180,8 @@ function enrichRequests(list) {
     r.departureDateDisplay = moment(r.departureDate).format("DD/MM/YYYY");
     r.endDateDisplay = r.endDate ? moment(r.endDate).format("DD/MM/YYYY") : "—";
     r.createdAtDisplay = moment(r.createdAt).format("DD/MM/YYYY HH:mm");
+    r.reviewedAtDisplay = r.reviewedAt ? moment(r.reviewedAt).format("DD/MM/YYYY HH:mm") : null;
+    r.reviewerName = r.reviewedBy?.fullName || null;
     r.totalRequestedRooms = r.requestedRooms.reduce((s, rr) => s + rr.assignedRooms, 0);
     r.totalApprovedRooms = (r.approvedRooms || []).reduce((s, ar) => s + ar.approvedRooms, 0);
     for (const rr of r.requestedRooms) {
@@ -463,6 +465,12 @@ module.exports.approve = async (req, res) => {
       linkReq.status = "partially_approved";
     }
 
+    linkReq.reviewedBy = {
+      accountId: req.account._id,
+      fullName:  req.account.fullName || req.account.username || "",
+    };
+    linkReq.reviewedAt = new Date();
+
     await linkReq.save();
 
     // Cập nhật holdBookingIds của tourSegment
@@ -582,6 +590,11 @@ module.exports.reject = async (req, res) => {
 
     linkReq.status = "rejected";
     linkReq.responseNote = responseNote || "";
+    linkReq.reviewedBy = {
+      accountId: req.account._id,
+      fullName:  req.account.fullName || req.account.username || "",
+    };
+    linkReq.reviewedAt = new Date();
     await linkReq.save();
 
     auditLogHelper.log(req, {

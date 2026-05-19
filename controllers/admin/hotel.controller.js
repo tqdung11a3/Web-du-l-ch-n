@@ -1861,6 +1861,18 @@ module.exports.destroyDelete = async (req, res) => {
 module.exports.changeMultiPatch = async (req, res) => {
   try {
     const { value, ids } = req.body;
+    if (
+      req.account &&
+      !req.account.isSuperAdmin &&
+      req.account.tabAccessScope === "hotel_staff" &&
+      ["delete", "undo", "destroy"].includes(String(value))
+    ) {
+      return res.json({
+        code: "error",
+        message: "Bạn không có quyền thực hiện thao tác này!",
+      });
+    }
+
     const companyId = req.account && req.account.companyId;
 
     const baseFilter = { _id: { $in: ids } };
@@ -4519,6 +4531,17 @@ module.exports.deleteBooking = async (req, res) => {
 
 module.exports.releaseHolds = async (req, res) => {
   try {
+    if (
+      req.account &&
+      !req.account.isSuperAdmin &&
+      req.account.tabAccessScope === "hotel_staff"
+    ) {
+      return res.json({
+        code: "error",
+        message: "Bạn không có quyền giải phóng phòng giữ tour.",
+      });
+    }
+
     const { bookingIds } = req.body;
     const companyId = req.account?.companyId || null;
 

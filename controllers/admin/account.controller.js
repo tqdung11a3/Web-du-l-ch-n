@@ -39,11 +39,18 @@ async function getCompanyAdminLoginRedirect(account) {
     return `${base}/hotel/dashboard`;
   }
 
+  if (scope === "hotel_staff") {
+    const hid = account.assignedHotelId;
+    return hid
+      ? `${base}/hotel/dashboard?hotelId=${hid}`
+      : firstHotelDashboardUrl();
+  }
+
   if (scope === "hotel_only") {
     return firstHotelDashboardUrl();
   }
 
-  if (scope === "tour_only" || scope === "full") {
+  if (scope === "tour_only" || scope === "full" || scope === "tour_staff") {
     return `${base}/dashboard`;
   }
 

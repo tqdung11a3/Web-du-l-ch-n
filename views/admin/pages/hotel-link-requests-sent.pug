@@ -104,6 +104,19 @@ block main
                       - const approved = (req.approvedRooms || []).find(a => String(a.roomTypeId) === String(rr.roomTypeId))
                       td= approved ? approved.approvedRooms : 0
 
+            //- Người duyệt / từ chối (phía công ty nhận)
+            if req.status !== 'pending' && req.status !== 'cancelled' && req.reviewerName
+              .lr-reviewer-info(class=(req.status === 'rejected' ? 'lr-reviewer-info--rejected' : ''))
+                i.fa-solid.fa-user-check
+                if req.status === 'rejected'
+                  |  Từ chối bởi: 
+                else
+                  |  Duyệt bởi: 
+                strong= req.reviewerName
+                span  (công ty «#{req.toCompanyName}»)
+                if req.reviewedAtDisplay
+                  span.lr-reviewer-time  — #{req.reviewedAtDisplay}
+
             if req.responseNote
               - var _autoTag = hotelLinkAutoBySenderTag || ''
               - var _isAutoSender = _autoTag && req.responseNote.indexOf(_autoTag) === 0
@@ -207,6 +220,16 @@ block main
     .lr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .lr-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; font-weight: 600; color: #334155; border-bottom: 1px solid #e2e8f0; }
     .lr-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+    .lr-reviewer-info {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      margin-top: 10px; padding: 7px 12px;
+      background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;
+      font-size: 13px; color: #166534;
+    }
+    .lr-reviewer-info--rejected { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+    .lr-reviewer-info--rejected i { color: #dc2626; }
+    .lr-reviewer-info i { color: #16a34a; }
+    .lr-reviewer-time { color: #6b7280; font-size: 12px; }
     .lr-note { margin-top: 10px; padding: 10px 12px; background: #fffbeb; border-radius: 6px; font-size: 13px; color: #78350f; border: 1px solid #fde68a; }
     .lr-note i { margin-right: 6px; vertical-align: top; margin-top: 2px; }
     .lr-note-head { margin: 0 0 6px 0; font-size: 13px; line-height: 1.45; }

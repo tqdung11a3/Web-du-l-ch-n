@@ -1,0 +1,86 @@
+@startuml Hinh_Goi_dat_tour
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam roundcorner 8
+
+title Hình — Biểu đồ lớp: Gói đặt tour (Tour Booking / Order)
+
+package "Gói đặt tour" {
+
+  class Order <<entity>> {
+    - code: String
+    - fullName: String
+    - phone: String
+    - email: String
+    - items: Object[]
+    - subTotal: Number
+    - discount: Number
+    - total: Number
+    - paymentMethod: String
+    - paymentStatus: String
+    - status: String
+    - userId: ObjectId
+    - isTemporaryHold: Boolean
+    - holdExpiresAt: Date
+    - transferProofImages: String[]
+    - deleted: Boolean
+    --
+    + (timestamps)
+    --
+    .. items[] chứa snapshot tour, hành khách,
+    lưu trú private/shared, phân bổ KS ..
+  }
+
+  class AccountUser <<entity>> {
+    - _id: ObjectId
+    - email: String
+    - fullName: String
+  }
+
+  class Tour <<entity>> {
+    - _id: ObjectId
+  }
+
+  Order --> AccountUser : userId
+  Order ..> Tour : items[].tourId\n(snapshot)
+
+  class OrderController <<controller>> {
+    --
+    + createPost(req, res)
+    + pending(req, res)
+    + success(req, res)
+    + paymentVNPay(req, res)
+    + paymentVNPayResult(req, res)
+    + cancelHold(req, res)
+    + saveTransferProof(req, res)
+    + checkPaymentStatus(req, res)
+  }
+
+  OrderController ..> Order : <<access>>
+
+  class CartUnifiedView <<boundary>> {
+    + renderCart()
+    + proceedCheckout()
+  }
+
+  class OrderPendingView <<boundary>> {
+    + renderPending()
+    + triggerVNPay()
+  }
+
+  class OrderSuccessView <<boundary>> {
+    + renderSuccess()
+  }
+
+  CartUnifiedView ..> OrderController : <<access>>
+  OrderPendingView ..> OrderController : <<access>>
+  OrderSuccessView ..> OrderController : <<access>>
+}
+
+note bottom of Order
+  Đơn tour **không** đọc collection **Cart** (giỏ MongoDB chỉ cho KS);
+  dữ liệu đặt gửi qua **POST /order/create** (body) → tạo **Order**.
+end note
+
+@enduml

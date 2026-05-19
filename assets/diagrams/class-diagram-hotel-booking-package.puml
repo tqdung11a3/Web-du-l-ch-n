@@ -1,0 +1,106 @@
+@startuml Hinh_Goi_dat_phong_khach_san
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam roundcorner 8
+
+title Hình — Biểu đồ lớp: Gói đặt phòng khách sạn (Hotel Booking)
+
+package "Gói đặt phòng khách sạn" {
+
+  class HotelBooking <<entity>> {
+    - code: String
+    - userId: ObjectId
+    - guest: Object
+    - checkIn: Date
+    - checkOut: Date
+    - roomTypeId: ObjectId
+    - roomId: ObjectId
+    - orderTotal: Number
+    - paymentStatus: String
+    - paymentMethod: String
+    - status: String
+    - hotel: Object
+    - isTemporaryHold: Boolean
+    - holdExpiresAt: Date
+    - tourSegmentId: ObjectId
+    - orderCode: String
+    --
+    + (timestamps)
+  }
+
+  class Cart <<entity>> {
+    - userId: ObjectId
+    - sessionId: String
+    - hotelId: ObjectId
+    - items: CartItem[]
+  }
+
+  class CartItem <<entity>> {
+    - roomTypeId: ObjectId
+    - quantity: Number
+    - checkInDate: String
+    - checkOutDate: String
+    - pricePerNight: Number
+  }
+
+  class Hotel <<entity>> {
+    - _id: ObjectId
+    - name: String
+  }
+
+  class AccountUser <<entity>> {
+    - _id: ObjectId
+  }
+
+  Cart "1" *-- "0..*" CartItem : items
+  Cart --> Hotel : hotelId
+  HotelBooking --> AccountUser : userId
+  HotelBooking --> Hotel : hotel.hotelId\n(snapshot)
+  HotelBooking ..> Cart : tạo từ giỏ\n(createPost)
+
+  class HotelBookingController <<controller>> {
+    --
+    + createPost(req, res)
+    + pending(req, res)
+    + success(req, res)
+    + paymentVNPay(req, res)
+    + paymentVNPayResult(req, res)
+    + cancelHold(req, res)
+    + saveTransferProof(req, res)
+    + checkPaymentStatus(req, res)
+  }
+
+  HotelBookingController ..> HotelBooking : <<access>>
+  HotelBookingController ..> Cart : <<access>>
+
+  class HotelBookingFormView <<boundary>> {
+    + renderBookingForm()
+  }
+
+  class HotelBookingPendingView <<boundary>> {
+    + renderPending()
+    + payVNPay()
+  }
+
+  class HotelBookingSuccessView <<boundary>> {
+    + renderSuccess()
+  }
+
+  class HotelCartView <<boundary>> {
+    + renderHotelCart()
+    + submitCheckout()
+  }
+
+  HotelCartView ..> HotelBookingController : <<access>>
+  HotelBookingFormView ..> HotelBookingController : <<access>>
+  HotelBookingPendingView ..> HotelBookingController : <<access>>
+  HotelBookingSuccessView ..> HotelBookingController : <<access>>
+}
+
+note bottom of Cart
+  **POST /hotel-booking/create** đọc **Cart** theo user/session,
+  tạo **HotelBooking**, sau đó xóa giỏ.
+end note
+
+@enduml

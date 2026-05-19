@@ -9,9 +9,10 @@ block main
     a(href=`/${pathAdmin}/setting/website-info` class="inner-item")
       .inner-icon <i class="fa-solid fa-info"></i>
       .inner-text Thông tin website
-    a(href=`/${pathAdmin}/setting/account-admin/list` class="inner-item")
-      .inner-icon <i class="fa-solid fa-user-tie"></i>
-      .inner-text Tài khoản quản trị
+    if !hideAccountAdminTile
+      a(href=`/${pathAdmin}/setting/account-admin/list` class="inner-item")
+        .inner-icon <i class="fa-solid fa-user-tie"></i>
+        .inner-text Tài khoản quản trị
     //- Tạm ẩn mục Nhóm quyền
     //- a(href=`/${pathAdmin}/setting/role/list` class="inner-item")
     //-   .inner-icon <i class="fa-solid fa-user-gear"></i>

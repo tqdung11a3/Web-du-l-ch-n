@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 920" font-family="Georgia, 'Times New Roman', serif" font-size="13">
+  <defs>
+    <marker id="m-end" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L8,4 z" fill="#1e293b"/>
+    </marker>
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#fafafa"/>
+
+  <text x="760" y="36" text-anchor="middle" font-size="17" font-weight="bold" fill="#0f172a">
+    Bieu do E-R (Chen) - He thong dat tour va khach san (da cong ty)
+  </text>
+  <text x="760" y="56" text-anchor="middle" font-size="11" fill="#64748b">
+    MongoDB / Mongoose - cac collection chinh va quan he nghiep vu (khai niem)
+  </text>
+
+  <style>
+    .entity { fill: #ffffff; stroke: #0f172a; stroke-width: 2; filter: url(#soft-shadow); }
+    .entity-strong { fill: #f8fafc; stroke: #0f172a; stroke-width: 3; }
+    .rel-diamond { fill: #fff7ed; stroke: #c2410c; stroke-width: 1.8; }
+    .attr { fill: #eef2ff; stroke: #4338ca; stroke-width: 1.2; }
+    .attr-multivalued { fill: #eef2ff; stroke: #4338ca; stroke-width: 2.5; }
+    .edge { stroke: #334155; stroke-width: 1.3; fill: none; marker-end: url(#m-end); }
+    .edge-plain { stroke: #334155; stroke-width: 1.2; fill: none; }
+    .card { font-size: 11px; fill: #b45309; font-weight: bold; }
+    .pk { text-decoration: underline; font-weight: bold; }
+    .lbl-sm { font-size: 11px; fill: #334155; }
+  </style>
+
+  <!-- COMPANY -->
+  <rect class="entity" x="620" y="88" width="140" height="44" rx="4"/>
+  <text x="690" y="114" text-anchor="middle" font-weight="bold">CONG_TY</text>
+  <text x="690" y="128" text-anchor="middle" class="lbl-sm">(Company)</text>
+  <ellipse class="attr" cx="540" cy="72" rx="52" ry="22"/>
+  <text x="540" y="76" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="588" y1="82" x2="628" y2="98"/>
+  <ellipse class="attr" cx="820" cy="72" rx="48" ry="22"/>
+  <text x="820" y="76" text-anchor="middle" font-size="11">name</text>
+  <line class="edge-plain" x1="772" y1="82" x2="752" y2="98"/>
+
+  <!-- ROLE -->
+  <rect class="entity" x="980" y="88" width="120" height="44" rx="4"/>
+  <text x="1040" y="114" text-anchor="middle" font-weight="bold">VAI_TRO</text>
+  <text x="1040" y="128" text-anchor="middle" class="lbl-sm">(Role)</text>
+  <ellipse class="attr" cx="1125" cy="58" rx="48" ry="20"/>
+  <text x="1125" y="62" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="1088" y1="72" x2="1068" y2="92"/>
+  <ellipse class="attr-multivalued" cx="1185" cy="145" rx="62" ry="22"/>
+  <text x="1185" y="149" text-anchor="middle" font-size="11">permissions</text>
+  <line class="edge-plain" x1="1135" y1="125" x2="1148" y2="138"/>
+
+  <!-- ACCOUNT_ADMIN -->
+  <rect class="entity" x="820" y="200" width="160" height="48" rx="4"/>
+  <text x="900" y="228" text-anchor="middle" font-weight="bold">TAI_KHOAN_QUAN_TRI</text>
+  <text x="900" y="242" text-anchor="middle" class="lbl-sm">(AccountAdmin)</text>
+  <ellipse class="attr" cx="760" cy="188" rx="52" ry="20"/>
+  <text x="760" y="192" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="806" y1="196" x2="828" y2="212"/>
+  <ellipse class="attr" cx="720" cy="268" rx="72" ry="20"/>
+  <text x="720" y="272" text-anchor="middle" font-size="10">tabAccessScope</text>
+  <line class="edge-plain" x1="785" y1="248" x2="755" y2="258"/>
+
+  <!-- thuoc CT: Company (1) -- Admin (N) -->
+  <polygon class="rel-diamond" points="690,152 740,182 690,212 640,182"/>
+  <text x="690" y="174" text-anchor="middle" font-size="10" font-weight="bold">thuoc</text>
+  <line class="edge" x1="690" y1="152" x2="690" y2="132"/>
+  <text x="705" y="138" class="card">1</text>
+  <line class="edge" x1="690" y1="212" x2="900" y2="224"/>
+  <text x="785" y="212" class="card">N</text>
+
+  <!-- co_vai: Role (1) -- Admin (N) -->
+  <polygon class="rel-diamond" points="940,152 990,182 940,212 890,182"/>
+  <text x="940" y="174" text-anchor="middle" font-size="10" font-weight="bold">co_vai</text>
+  <line class="edge" x1="940" y1="152" x2="1040" y2="132"/>
+  <text x="988" y="138" class="card">1</text>
+  <line class="edge" x1="940" y1="212" x2="900" y2="224"/>
+  <text x="918" y="218" class="card">N</text>
+
+  <!-- HOTEL -->
+  <rect class="entity" x="180" y="320" width="130" height="44" rx="4"/>
+  <text x="245" y="348" text-anchor="middle" font-weight="bold">KHACH_SAN</text>
+  <text x="245" y="362" text-anchor="middle" class="lbl-sm">(Hotel)</text>
+  <ellipse class="attr" cx="110" cy="308" rx="48" ry="20"/>
+  <text x="110" y="312" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="156" y1="316" x2="188" y2="328"/>
+  <ellipse class="attr" cx="130" cy="385" rx="56" ry="20"/>
+  <text x="130" y="389" text-anchor="middle" font-size="11">companyId</text>
+  <line class="edge-plain" x1="178" y1="368" x2="155" y2="378"/>
+
+  <!-- van_hanh: Company - Hotel -->
+  <polygon class="rel-diamond" points="430,240 480,270 430,300 380,270"/>
+  <text x="430" y="262" text-anchor="middle" font-size="10" font-weight="bold">van_hanh</text>
+  <line class="edge" x1="430" y1="240" x2="690" y2="132"/>
+  <text x="540" y="175" class="card">1</text>
+  <line class="edge" x1="430" y1="300" x2="245" y2="320"/>
+  <text x="330" y="305" class="card">N</text>
+
+  <!-- TOUR -->
+  <rect class="entity" x="600" y="320" width="120" height="44" rx="4"/>
+  <text x="660" y="348" text-anchor="middle" font-weight="bold">TOUR</text>
+  <ellipse class="attr" cx="660" cy="288" rx="48" ry="20"/>
+  <text x="660" y="292" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="660" y1="308" x2="660" y2="320"/>
+
+  <!-- phat_hanh: Company - Tour -->
+  <polygon class="rel-diamond" points="660,240 710,270 660,300 610,270"/>
+  <text x="660" y="262" text-anchor="middle" font-size="10" font-weight="bold">phat_hanh</text>
+  <line class="edge" x1="660" y1="240" x2="690" y2="132"/>
+  <text x="675" y="195" class="card">1</text>
+  <line class="edge" x1="660" y1="300" x2="660" y2="320"/>
+  <text x="675" y="312" class="card">N</text>
+
+  <!-- TOUR_SEGMENT -->
+  <rect class="entity-strong" x="560" y="458" width="200" height="52" rx="4"/>
+  <text x="660" y="486" text-anchor="middle" font-weight="bold">DOAN_KHOI_HANH</text>
+  <text x="660" y="502" text-anchor="middle" class="lbl-sm">(TourSegment)</text>
+  <ellipse class="attr" cx="500" cy="446" rx="52" ry="20"/>
+  <text x="500" y="450" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="548" y1="454" x2="575" y2="470"/>
+  <ellipse class="attr-multivalued" cx="820" cy="483" rx="78" ry="22"/>
+  <text x="820" y="479" text-anchor="middle" font-size="10">assignments[]</text>
+  <text x="820" y="491" text-anchor="middle" font-size="9" fill="#64748b">(phan cong)</text>
+  <line class="edge-plain" x1="758" y1="484" x2="785" y2="484"/>
+
+  <!-- lich_khoi_hanh: Tour (1) - TourSegment (N) -->
+  <polygon class="rel-diamond" points="660,378 710,408 660,438 610,408"/>
+  <text x="660" y="396" text-anchor="middle" font-size="10" font-weight="bold">lich_khoi_hanh</text>
+  <line class="edge" x1="660" y1="378" x2="660" y2="364"/>
+  <text x="675" y="368" class="card">1</text>
+  <line class="edge-plain" x1="660" y1="438" x2="660" y2="458"/>
+  <text x="675" y="448" class="card">N</text>
+
+  <!-- ACCOUNT_USER -->
+  <rect class="entity" x="1040" y="320" width="150" height="44" rx="4"/>
+  <text x="1115" y="348" text-anchor="middle" font-weight="bold">TAI_KHOAN_KHACH</text>
+  <text x="1115" y="362" text-anchor="middle" class="lbl-sm">(AccountUser)</text>
+  <ellipse class="attr" cx="1240" cy="308" rx="52" ry="20"/>
+  <text x="1240" y="312" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="1194" y1="318" x2="1178" y2="332"/>
+
+  <!-- ORDER -->
+  <rect class="entity" x="1010" y="458" width="110" height="44" rx="4"/>
+  <text x="1065" y="486" text-anchor="middle" font-weight="bold">DON_DAT_TOUR</text>
+  <text x="1065" y="500" text-anchor="middle" class="lbl-sm">(Order)</text>
+  <ellipse class="attr" cx="1185" cy="446" rx="48" ry="20"/>
+  <text x="1185" y="450" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="1141" y1="458" x2="1118" y2="472"/>
+  <ellipse class="attr-multivalued" cx="920" cy="558" rx="52" ry="22"/>
+  <text x="920" y="554" text-anchor="middle" font-size="10">items[]</text>
+  <text x="920" y="566" text-anchor="middle" font-size="9" fill="#64748b">snapshot</text>
+  <line class="edge-plain" x1="1010" y1="493" x2="965" y2="543"/>
+
+  <!-- dat: User (1) - Order (N) -->
+  <polygon class="rel-diamond" points="1115,378 1165,408 1115,438 1065,408"/>
+  <text x="1115" y="396" text-anchor="middle" font-size="10" font-weight="bold">dat</text>
+  <line class="edge" x1="1115" y1="378" x2="1115" y2="364"/>
+  <text x="1128" y="368" class="card">1</text>
+  <line class="edge-plain" x1="1115" y1="438" x2="1065" y2="458"/>
+  <text x="1088" y="442" class="card">N</text>
+
+  <!-- HOTEL_BOOKING -->
+  <rect class="entity" x="340" y="618" width="170" height="52" rx="4"/>
+  <text x="425" y="646" text-anchor="middle" font-weight="bold">DAT_PHONG_KS</text>
+  <text x="425" y="662" text-anchor="middle" class="lbl-sm">(HotelBooking)</text>
+  <ellipse class="attr" cx="260" cy="606" rx="52" ry="20"/>
+  <text x="260" y="610" text-anchor="middle" font-size="11"><tspan class="pk">_id</tspan></text>
+  <line class="edge-plain" x1="308" y1="616" x2="352" y2="636"/>
+  <ellipse class="attr" cx="420" cy="706" rx="88" ry="22"/>
+  <text x="420" y="702" text-anchor="middle" font-size="10">roomId / tourSegmentId</text>
+  <text x="420" y="714" text-anchor="middle" font-size="9" fill="#64748b">(optional FK)</text>
+  <line class="edge-plain" x1="425" y1="670" x2="425" y2="690"/>
+
+  <!-- nhan_dat: Hotel - HotelBooking -->
+  <polygon class="rel-diamond" points="280,518 330,548 280,578 230,548"/>
+  <text x="280" y="536" text-anchor="middle" font-size="10" font-weight="bold">nhan_dat</text>
+  <line class="edge" x1="280" y1="518" x2="245" y2="364"/>
+  <text x="250" y="430" class="card">1</text>
+  <line class="edge" x1="280" y1="578" x2="380" y2="618"/>
+  <text x="320" y="603" class="card">N</text>
+
+  <!-- giu_cho: TourSegment - HotelBooking (tour hold) -->
+  <polygon class="rel-diamond" points="480,548 530,578 480,608 430,578"/>
+  <text x="480" y="566" text-anchor="middle" font-size="10" font-weight="bold">giu_cho</text>
+  <text x="480" y="578" text-anchor="middle" font-size="9">(tour)</text>
+  <line class="edge" x1="480" y1="548" x2="620" y2="510"/>
+  <text x="540" y="525" class="card">1</text>
+  <line class="edge" x1="480" y1="608" x2="410" y2="636"/>
+  <text x="438" y="628" class="card">N</text>
+
+  <!-- lien_quan: Order - HotelBooking (orderCode / tour) -->
+  <polygon class="rel-diamond" points="780,548 830,578 780,608 730,578"/>
+  <text x="780" y="566" text-anchor="middle" font-size="10" font-weight="bold">lien_quan</text>
+  <text x="780" y="578" text-anchor="middle" font-size="9">don tour</text>
+  <line class="edge" x1="780" y1="548" x2="1065" y2="502"/>
+  <text x="910" y="520" class="card">1</text>
+  <line class="edge" x1="780" y1="608" x2="510" y2="656"/>
+  <text x="630" y="638" class="card">N</text>
+
+  <!-- Legend -->
+  <rect x="1020" y="678" width="460" height="210" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" rx="6"/>
+  <text x="1250" y="704" text-anchor="middle" font-weight="bold" fill="#0f172a">Chu thich (Ky phap Chen)</text>
+  <rect x="1040" y="722" width="70" height="28" class="entity"/>
+  <text x="1075" y="740" text-anchor="middle" font-size="11">Thuc the</text>
+  <rect x="1040" y="754" width="90" height="30" class="entity-strong"/>
+  <text x="1085" y="774" text-anchor="middle" font-size="10">Nhom / diem nhan</text>
+  <polygon class="rel-diamond" points="1045,812 1075,832 1045,852 1015,832"/>
+  <text x="1075" y="834" font-size="11">Quan he</text>
+  <ellipse class="attr" cx="1095" cy="874" rx="40" ry="18"/>
+  <text x="1135" y="878" font-size="11">Thuoc tinh</text>
+  <ellipse class="attr-multivalued" cx="1225" cy="874" rx="52" ry="18"/>
+  <text x="1285" y="878" font-size="11">Da tri / nhung</text>
+  <text x="1160" y="815" font-size="11" fill="#334155">Vien doi = segment + assignments (nhap nhieu)</text>
+  <text x="1160" y="835" font-size="11" fill="#334155">Gach chan = khoa chinh (PK)</text>
+</svg>

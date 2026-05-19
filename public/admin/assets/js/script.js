@@ -1283,6 +1283,22 @@ const settingAccountAdminCreateForm = document.querySelector(
   "#setting-account-admin-create-form"
 );
 if (settingAccountAdminCreateForm) {
+  const scopeSelect = settingAccountAdminCreateForm.querySelector(
+    "#tabAccessScope"
+  );
+  const hotelWrap = settingAccountAdminCreateForm.querySelector(
+    "#account-admin-assigned-hotel-wrap"
+  );
+  const syncHotelStaffFields = () => {
+    if (!scopeSelect || !hotelWrap) return;
+    const show = scopeSelect.value === "hotel_staff";
+    hotelWrap.style.display = show ? "" : "none";
+  };
+  syncHotelStaffFields();
+  if (scopeSelect) {
+    scopeSelect.addEventListener("change", syncHotelStaffFields);
+  }
+
   const validator = new JustValidate("#setting-account-admin-create-form");
 
   validator
@@ -1374,6 +1390,12 @@ if (settingAccountAdminCreateForm) {
       formData.append("phone", phone);
       if (event.target.role) formData.append("role", role);
       formData.append("tabAccessScope", tabAccessScope);
+      if (tabAccessScope === "hotel_staff" && event.target.assignedHotelId) {
+        formData.append(
+          "assignedHotelId",
+          event.target.assignedHotelId.value
+        );
+      }
       formData.append("positionCompany", positionCompany);
       formData.append("status", status);
       formData.append("password", password);
@@ -1403,6 +1425,22 @@ const settingAccountAdminEditForm = document.querySelector(
   "#setting-account-admin-edit-form"
 );
 if (settingAccountAdminEditForm) {
+  const scopeSelectEdit = settingAccountAdminEditForm.querySelector(
+    "#tabAccessScope"
+  );
+  const hotelWrapEdit = settingAccountAdminEditForm.querySelector(
+    "#account-admin-assigned-hotel-wrap"
+  );
+  const syncHotelStaffFieldsEdit = () => {
+    if (!scopeSelectEdit || !hotelWrapEdit) return;
+    const show = scopeSelectEdit.value === "hotel_staff";
+    hotelWrapEdit.style.display = show ? "" : "none";
+  };
+  syncHotelStaffFieldsEdit();
+  if (scopeSelectEdit) {
+    scopeSelectEdit.addEventListener("change", syncHotelStaffFieldsEdit);
+  }
+
   const validator = new JustValidate("#setting-account-admin-edit-form");
 
   validator
@@ -1492,6 +1530,12 @@ if (settingAccountAdminEditForm) {
       formData.append("phone", phone);
       if (event.target.role) formData.append("role", role);
       formData.append("tabAccessScope", tabAccessScope);
+      if (tabAccessScope === "hotel_staff" && event.target.assignedHotelId) {
+        formData.append(
+          "assignedHotelId",
+          event.target.assignedHotelId.value
+        );
+      }
       formData.append("positionCompany", positionCompany);
       formData.append("status", status);
       formData.append("password", password);
@@ -1669,7 +1713,7 @@ if (profileEditForm) {
       },
     ]);
 
-  if (!isSuperAdminProfile) {
+  if (!isSuperAdminProfile && profileEditForm.querySelector("#role")) {
     chain.addField("#role", [
       { rule: "required", errorMessage: "Vui lòng chọn nhóm quyền!" },
     ]);
@@ -2168,7 +2212,30 @@ if (sider) {
         }
       }
 
-      // Ngoại lệ 8: Quản lý đơn hàng — list + edit/detail cùng active menu
+      // Ngoại lệ 8: Cài đặt chung — setting/list + website-info + account-admin/role
+      if (!isMatch && hrefPath.includes("/setting/list")) {
+        if (
+          currentPath === hrefPath ||
+          currentPath.includes("/setting/website-info") ||
+          currentPath.includes("/setting/account-admin/") ||
+          currentPath.includes("/setting/role/")
+        ) {
+          isMatch = true;
+        }
+      }
+
+      // Ngoại lệ 9: Quản lý tour — list + create/edit cùng active menu
+      if (!isMatch && hrefPath.includes("/tour/list")) {
+        if (
+          currentPath === hrefPath ||
+          currentPath.includes("/tour/create") ||
+          currentPath.includes("/tour/edit/")
+        ) {
+          isMatch = true;
+        }
+      }
+
+      // Ngoại lệ 10: Quản lý đơn hàng — list + edit/detail cùng active menu
       if (!isMatch && hrefPath.includes("/order/list")) {
         if (
           currentPath === hrefPath ||

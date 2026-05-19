@@ -37,11 +37,13 @@ module.exports.list = async (req, res) => {
         pageTitle: "Phân phòng cho tour",
         rows: [],
         selectedHotelId: "",
+        searchKeyword: req.query.q || "",
         pathAdmin,
       });
     }
 
     const selectedHotelId = (req.query.hotelId || "").trim();
+    const q = (req.query.q || "").trim().toLowerCase();
     const scopeHotelIds = selectedHotelId && hotelIds.includes(selectedHotelId)
       ? [selectedHotelId]
       : hotelIds;
@@ -57,6 +59,7 @@ module.exports.list = async (req, res) => {
         pageTitle: "Phân phòng cho tour",
         rows: [],
         selectedHotelId,
+        searchKeyword: req.query.q || "",
         pathAdmin,
       });
     }
@@ -146,10 +149,15 @@ module.exports.list = async (req, res) => {
         return 0;
       });
 
+    const filteredRows = q
+      ? rows.filter((r) => String(r.tourName || "").toLowerCase().includes(q))
+      : rows;
+
     return res.render("admin/pages/hotel-tour-assignment-list", {
       pageTitle: "Phân phòng cho tour",
-      rows,
+      rows: filteredRows,
       selectedHotelId,
+      searchKeyword: req.query.q || "",
       pathAdmin,
     });
   } catch (err) {

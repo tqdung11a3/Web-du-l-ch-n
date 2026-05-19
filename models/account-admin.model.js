@@ -42,8 +42,22 @@ const schema = new mongoose.Schema(
      */
     tabAccessScope: {
       type: String,
-      enum: ["inherit", "full", "tour_only", "hotel_only"],
+      enum: [
+        "inherit",
+        "full",
+        "tour_only",
+        "hotel_only",
+        "tour_staff",
+        "hotel_staff",
+      ],
       default: "inherit",
+    },
+
+    /** Khách sạn được phân công — chỉ dùng khi tabAccessScope === "hotel_staff". */
+    assignedHotelId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hotel",
+      default: null,
     },
   },
   {
