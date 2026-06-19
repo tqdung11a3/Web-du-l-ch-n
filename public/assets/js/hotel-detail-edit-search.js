@@ -1,361 +1,470 @@
 // public/assets/js/hotel-detail-edit-search.js
 
-(function() {
-  'use strict';
-  
-  // Kiểm tra xem đã attach listener chưa
-  if (window.hotelDetailEditSearchAttached) {
-    return;
-  }
+(function () {
+  "use strict";
+
+  if (window.hotelDetailEditSearchAttached) return;
   window.hotelDetailEditSearchAttached = true;
-  
-  const editBtn = document.getElementById('editSearchBtn');
-  const modal = document.getElementById('editSearchModal');
-  const closeBtn = modal?.querySelector('.edit-search-modal__close');
-  const overlay = modal?.querySelector('.edit-search-modal__overlay');
-  const form = document.getElementById('editSearchForm');
-  const guestBtn = document.getElementById('editGuestBtn');
-  const guestsPopup = document.getElementById('editGuestsPopup');
-  const roomsContainer = document.getElementById('editRoomsContainer');
-  const addRoomBtn = document.getElementById('editAddRoomBtn');
-  const guestsDoneBtn = document.getElementById('editGuestsDoneBtn');
-  const guestText = document.getElementById('editGuestText');
-  const roomsInput = document.getElementById('editRoomsInput');
-  const adultsInput = document.getElementById('editAdultsInput');
-  const childrenInput = document.getElementById('editChildrenInput');
-  const roomsDataInput = document.getElementById('editRoomsDataInput');
-  
+
+  const HGRU = window.HotelGuestRoomsUtils;
+  const AGE = HGRU ? HGRU.AGE : {
+    ADULT_MIN: 12,
+    GUARDIAN_MIN: 18,
+    CHILD_MIN: 3,
+    CHILD_MAX: 12,
+    BABY_MIN: 0,
+    BABY_MAX: 2,
+    ADULT_DEFAULT: 18,
+    CHILD_DEFAULT: 6,
+    BABY_DEFAULT: 1,
+  };
+
+  const GUEST_TYPES = [
+    {
+      key: "adults",
+      label: "Người lớn",
+      hint: "Từ 12 tuổi trở lên",
+      minAge: AGE.ADULT_MIN,
+      maxAge: 120,
+      defaultAge: AGE.ADULT_DEFAULT,
+      minCount: 1,
+    },
+    {
+      key: "children",
+      label: "Trẻ em",
+      hint: "Từ 3 đến 12 tuổi",
+      minAge: AGE.CHILD_MIN,
+      maxAge: AGE.CHILD_MAX,
+      defaultAge: AGE.CHILD_DEFAULT,
+      minCount: 0,
+    },
+    {
+      key: "babies",
+      label: "Em bé",
+      hint: "Từ 0 đến 2 tuổi",
+      minAge: AGE.BABY_MIN,
+      maxAge: AGE.BABY_MAX,
+      defaultAge: AGE.BABY_DEFAULT,
+      minCount: 0,
+    },
+  ];
+
+  const editBtn = document.getElementById("editSearchBtn");
+  const modal = document.getElementById("editSearchModal");
+  const closeBtn = modal?.querySelector(".edit-search-modal__close");
+  const overlay = modal?.querySelector(".edit-search-modal__overlay");
+  const form = document.getElementById("editSearchForm");
+  const guestBtn = document.getElementById("editGuestBtn");
+  const guestsPopup = document.getElementById("editGuestsPopup");
+  const roomsContainer = document.getElementById("editRoomsContainer");
+  const addRoomBtn = document.getElementById("editAddRoomBtn");
+  const guestsDoneBtn = document.getElementById("editGuestsDoneBtn");
+  const guestText = document.getElementById("editGuestText");
+  const roomsInput = document.getElementById("editRoomsInput");
+  const adultsInput = document.getElementById("editAdultsInput");
+  const childrenInput = document.getElementById("editChildrenInput");
+  const babiesInput = document.getElementById("editBabiesInput");
+  const roomsDataInput = document.getElementById("editRoomsDataInput");
+
   if (!editBtn || !modal || !form) return;
-  
-  // ==================== MODAL OPEN/CLOSE ====================
-  editBtn.addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    modal.style.display = 'block';
-    document.body.style.overflow = 'hidden';
-    
-    // Parse roomsData từ URL hoặc hidden input
-    parseRoomsDataFromURL();
-  });
-  
-  function closeModal() {
-    modal.style.display = 'none';
-    document.body.style.overflow = '';
-    guestsPopup.setAttribute('aria-hidden', 'true');
-    guestBtn.setAttribute('aria-expanded', 'false');
-  }
-  
-  if (closeBtn) {
-    closeBtn.addEventListener('click', closeModal);
-  }
-  
-  if (overlay) {
-    overlay.addEventListener('click', closeModal);
-  }
-  
-  // ==================== CANCEL BUTTON (RESET SEARCH) ====================
-  const cancelBtn = modal?.querySelector('.btn-cancel');
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      // Reset: redirect về URL hotel detail mà không có query parameters
-      const currentUrl = window.location.pathname;
-      // Chỉ giữ lại hotel ID, xóa tất cả query parameters
-      window.location.href = currentUrl;
-    });
-  }
-  
-  // Close on Escape key
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && modal.style.display === 'block') {
-      closeModal();
-    }
-  });
-  
-  // ==================== GUESTS POPUP ====================
+
   let roomsData = [];
-  
+
+  function normalizeRoom(raw) {
+    return HGRU ? HGRU.normalizeRoom(raw) : raw;
+  }
+
+  function normalizeRoomsData(data) {
+    return HGRU ? HGRU.normalizeRoomsData(data) : data;
+  }
+
+  function allGuests(room) {
+    return [...(room.adults || []), ...(room.children || []), ...(room.babies || [])];
+  }
+
+  function roomHasGuardian18(room) {
+    return allGuests(room).some((g) => Number(g.age) >= AGE.GUARDIAN_MIN);
+  }
+
+  function validateGuestAge(type, age) {
+    const n = Number(age);
+    if (!Number.isFinite(n)) return false;
+    if (type === "adults") return n >= AGE.ADULT_MIN;
+    if (type === "children") return n >= AGE.CHILD_MIN && n <= AGE.CHILD_MAX;
+    if (type === "babies") return n >= AGE.BABY_MIN && n <= AGE.BABY_MAX;
+    return false;
+  }
+
   function parseRoomsDataFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
-    const roomsDataStr = urlParams.get('roomsData');
-    
+    const roomsDataStr = urlParams.get("roomsData");
+
     if (roomsDataStr) {
       try {
-        roomsData = JSON.parse(decodeURIComponent(roomsDataStr));
+        roomsData = normalizeRoomsData(
+          JSON.parse(decodeURIComponent(roomsDataStr))
+        );
       } catch (e) {
-        console.warn('Failed to parse roomsData:', e);
+        console.warn("Failed to parse roomsData:", e);
         roomsData = [];
       }
     } else {
-      // Fallback: parse từ rooms, adults, children
-      const rooms = parseInt(urlParams.get('rooms') || roomsInput.value || '1', 10);
-      const adults = parseInt(urlParams.get('adults') || adultsInput.value || '1', 10);
-      const children = parseInt(urlParams.get('children') || childrenInput.value || '0', 10);
-      
-      roomsData = [{
-        adults: adults,
-        children: Array(children).fill(0).map(() => ({ age: 0 }))
-      }];
+      const rooms = parseInt(urlParams.get("rooms") || roomsInput?.value || "1", 10);
+      const adults = parseInt(urlParams.get("adults") || adultsInput?.value || "1", 10);
+      const children = parseInt(urlParams.get("children") || childrenInput?.value || "0", 10);
+      const babies = parseInt(urlParams.get("babies") || babiesInput?.value || "0", 10);
+
+      const firstRoom = normalizeRoom({
+        adults,
+        children: Array.from({ length: children }, () => ({ age: AGE.CHILD_DEFAULT })),
+        babies: Array.from({ length: babies }, () => ({ age: AGE.BABY_DEFAULT })),
+      });
+
+      roomsData = [firstRoom];
+      for (let i = 1; i < rooms; i++) {
+        roomsData.push({
+          adults: [{ age: AGE.ADULT_DEFAULT }],
+          children: [],
+          babies: [],
+        });
+      }
     }
-    
-    if (roomsData.length === 0) {
-      roomsData = [{ adults: 1, children: [] }];
+
+    if (!roomsData.length) {
+      roomsData = [{ adults: [{ age: AGE.ADULT_DEFAULT }], children: [], babies: [] }];
     }
-    
+
     renderRooms();
-    updateSummary();
   }
-  
+
+  function renderGuestAgeInputs(roomIndex, typeKey, cfg, guests) {
+    return (guests || [])
+      .map(
+        (guest, guestIndex) => `
+        <div class="guests-popup__guest-item" data-room="${roomIndex}" data-type="${typeKey}" data-index="${guestIndex}">
+          <span class="guests-popup__guest-label">${cfg.label} ${guestIndex + 1}</span>
+          <input
+            type="number"
+            class="guests-popup__age-input${validateGuestAge(typeKey, guest.age) ? "" : " is-invalid"}"
+            min="${cfg.minAge}"
+            max="${cfg.maxAge}"
+            step="1"
+            value="${guest.age}"
+            data-room="${roomIndex}"
+            data-type="${typeKey}"
+            data-index="${guestIndex}"
+            aria-label="Tuổi ${cfg.label} ${guestIndex + 1}"
+          />
+          <button type="button" class="guests-popup__btn guests-popup__btn--remove-guest"
+            data-room="${roomIndex}" data-type="${typeKey}" data-index="${guestIndex}" title="Xóa">×</button>
+        </div>`
+      )
+      .join("");
+  }
+
+  function renderRoom(roomIndex, room) {
+    const sections = GUEST_TYPES.map((cfg) => {
+      const guests = room[cfg.key] || [];
+      return `
+        <div class="guests-popup__type-block guests-popup__type-block--${cfg.key}">
+          <div class="guests-popup__row">
+            <div class="guests-popup__left">
+              <strong>${cfg.label}</strong>
+              <small>${cfg.hint}</small>
+            </div>
+            <div class="guests-popup__right">
+              <button type="button" class="guests-popup__btn" data-room="${roomIndex}" data-type="${cfg.key}" data-action="dec">−</button>
+              <input type="text" class="guests-popup__input" value="${guests.length}" readonly tabindex="-1">
+              <button type="button" class="guests-popup__btn" data-room="${roomIndex}" data-type="${cfg.key}" data-action="inc">+</button>
+            </div>
+          </div>
+          <div class="guests-popup__guests-list">
+            ${renderGuestAgeInputs(roomIndex, cfg.key, cfg, guests)}
+          </div>
+        </div>`;
+    }).join("");
+
+    const guardianOk = roomHasGuardian18(room);
+    const warnHtml = guardianOk
+      ? ""
+      : `<div class="guests-popup__room-warn" data-room-warn="${roomIndex}">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          Phòng phải có ít nhất 1 khách từ ${AGE.GUARDIAN_MIN} tuổi trở lên.
+        </div>`;
+
+    return `
+      <div class="guests-popup__room" data-room-index="${roomIndex}">
+        <div class="guests-popup__room-header">
+          <strong>Phòng ${roomIndex + 1}</strong>
+          ${roomIndex > 0 ? `<button type="button" class="guests-popup__btn--remove-room" data-room="${roomIndex}">×</button>` : ""}
+        </div>
+        ${sections}
+        ${warnHtml}
+      </div>`;
+  }
+
   function renderRooms() {
     if (!roomsContainer) return;
-    
-    roomsContainer.innerHTML = '';
-    
-    roomsData.forEach((room, roomIndex) => {
-      const roomDiv = document.createElement('div');
-      roomDiv.className = 'edit-guests-room';
-      roomDiv.innerHTML = `
-        <div class="edit-guests-room__header">
-          <span>Phòng ${roomIndex + 1}</span>
-          ${roomIndex > 0 ? '<button type="button" class="edit-guests-room__remove" data-room-index="' + roomIndex + '">Xóa</button>' : ''}
-        </div>
-        <div class="edit-guests-room__controls">
-          <div class="edit-guests-room__control">
-            <label>Người lớn</label>
-            <div class="edit-guests-room__counter">
-              <button type="button" class="edit-guests-room__btn" data-action="decrease-adults" data-room="${roomIndex}">-</button>
-              <span class="edit-guests-room__value" data-room="${roomIndex}" data-type="adults">${room.adults || 1}</span>
-              <button type="button" class="edit-guests-room__btn" data-action="increase-adults" data-room="${roomIndex}">+</button>
-            </div>
-          </div>
-          <div class="edit-guests-room__control">
-            <label>Trẻ em</label>
-            <div class="edit-guests-room__counter">
-              <button type="button" class="edit-guests-room__btn" data-action="decrease-children" data-room="${roomIndex}">-</button>
-              <span class="edit-guests-room__value" data-room="${roomIndex}" data-type="children">${room.children?.length || 0}</span>
-              <button type="button" class="edit-guests-room__btn" data-action="increase-children" data-room="${roomIndex}">+</button>
-            </div>
-          </div>
-        </div>
-        ${(room.children && room.children.length > 0) ? `
-          <div class="edit-guests-room__ages">
-            ${room.children.map((child, childIndex) => `
-              <div class="edit-guests-room__age-item">
-                <label>Trẻ em ${childIndex + 1}: <span class="age-label-text">tuổi</span></label>
-                <select class="edit-guests-room__age-select" data-room="${roomIndex}" data-child="${childIndex}">
-                  ${Array.from({ length: 18 }, (_, i) => `
-                    <option value="${i}" ${child.age === i ? 'selected' : ''}>${i === 0 ? 'Dưới 1' : i}</option>
-                  `).join('')}
-                </select>
-              </div>
-            `).join('')}
-          </div>
-        ` : ''}
-      `;
-      roomsContainer.appendChild(roomDiv);
-    });
-    
-    // Attach event listeners
-    attachRoomEventListeners();
+    roomsContainer.innerHTML = roomsData
+      .map((room, index) => renderRoom(index, room))
+      .join("");
+    updateSummary();
   }
-  
-  function attachRoomEventListeners() {
-    // Remove room
-    roomsContainer.querySelectorAll('.edit-guests-room__remove').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const roomIndex = parseInt(this.dataset.roomIndex, 10);
-        roomsData.splice(roomIndex, 1);
-        renderRooms();
-        updateSummary();
-      });
-    });
-    
-    // Increase/decrease adults
-    roomsContainer.querySelectorAll('[data-action="increase-adults"]').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const roomIndex = parseInt(this.dataset.room, 10);
-        if (!roomsData[roomIndex]) roomsData[roomIndex] = { adults: 1, children: [] };
-        roomsData[roomIndex].adults = (roomsData[roomIndex].adults || 1) + 1;
-        renderRooms();
-        updateSummary();
-      });
-    });
-    
-    roomsContainer.querySelectorAll('[data-action="decrease-adults"]').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const roomIndex = parseInt(this.dataset.room, 10);
-        if (roomsData[roomIndex] && roomsData[roomIndex].adults > 1) {
-          roomsData[roomIndex].adults--;
-          renderRooms();
-          updateSummary();
-        }
-      });
-    });
-    
-    // Increase/decrease children
-    roomsContainer.querySelectorAll('[data-action="increase-children"]').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const roomIndex = parseInt(this.dataset.room, 10);
-        if (!roomsData[roomIndex]) roomsData[roomIndex] = { adults: 1, children: [] };
-        if (!roomsData[roomIndex].children) roomsData[roomIndex].children = [];
-        roomsData[roomIndex].children.push({ age: 0 });
-        renderRooms();
-        updateSummary();
-      });
-    });
-    
-    roomsContainer.querySelectorAll('[data-action="decrease-children"]').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const roomIndex = parseInt(this.dataset.room, 10);
-        if (roomsData[roomIndex] && roomsData[roomIndex].children && roomsData[roomIndex].children.length > 0) {
-          roomsData[roomIndex].children.pop();
-          renderRooms();
-          updateSummary();
-        }
-      });
-    });
-    
-    // Age select
-    roomsContainer.querySelectorAll('.edit-guests-room__age-select').forEach(select => {
-      select.addEventListener('change', function(e) {
-        e.stopPropagation();
-        const roomIndex = parseInt(this.dataset.room, 10);
-        const childIndex = parseInt(this.dataset.child, 10);
-        if (roomsData[roomIndex] && roomsData[roomIndex].children && roomsData[roomIndex].children[childIndex]) {
-          roomsData[roomIndex].children[childIndex].age = parseInt(this.value, 10);
-          updateSummary();
-        }
-      });
-    });
-  }
-  
+
   function updateSummary() {
-    const totalRooms = roomsData.length;
-    const totalAdults = roomsData.reduce((sum, r) => sum + (r.adults || 1), 0);
-    const totalChildren = roomsData.reduce((sum, r) => sum + (r.children?.length || 0), 0);
-    
+    const counts = HGRU
+      ? HGRU.countGuests(roomsData)
+      : roomsData.reduce(
+          (acc, r) => {
+            acc.rooms += 1;
+            acc.adults += (r.adults || []).length;
+            acc.children += (r.children || []).length;
+            acc.babies += (r.babies || []).length;
+            return acc;
+          },
+          { rooms: 0, adults: 0, children: 0, babies: 0 }
+        );
+
     if (guestText) {
-      guestText.textContent = `${totalRooms} phòng - ${totalAdults} người lớn${totalChildren > 0 ? `, ${totalChildren} trẻ em` : ''}`;
+      let summary = `${counts.rooms} phòng - ${counts.adults} người lớn`;
+      if (counts.children > 0) summary += `, ${counts.children} trẻ em`;
+      if (counts.babies > 0) summary += `, ${counts.babies} em bé`;
+      guestText.textContent = summary;
     }
-    
-    if (roomsInput) roomsInput.value = totalRooms;
-    if (adultsInput) adultsInput.value = totalAdults;
-    if (childrenInput) childrenInput.value = totalChildren;
-    if (roomsDataInput) roomsDataInput.value = encodeURIComponent(JSON.stringify(roomsData));
+
+    if (roomsInput) roomsInput.value = String(counts.rooms);
+    if (adultsInput) adultsInput.value = String(counts.adults);
+    if (childrenInput) childrenInput.value = String(counts.children);
+    if (babiesInput) babiesInput.value = String(counts.babies);
+    if (roomsDataInput) {
+      roomsDataInput.value = encodeURIComponent(JSON.stringify(roomsData));
+    }
   }
-  
-  // Toggle guests popup
-  if (guestBtn && guestsPopup) {
-    guestBtn.addEventListener('click', function(e) {
-      e.preventDefault();
+
+  function getTypeConfig(typeKey) {
+    return GUEST_TYPES.find((t) => t.key === typeKey);
+  }
+
+  function changeQuantity(roomIndex, typeKey, delta) {
+    const room = roomsData[roomIndex];
+    const cfg = getTypeConfig(typeKey);
+    if (!room || !cfg) return;
+
+    if (!Array.isArray(room[typeKey])) room[typeKey] = [];
+    const list = room[typeKey];
+    const newLen = list.length + delta;
+    if (newLen < cfg.minCount) return;
+
+    if (delta > 0) list.push({ age: cfg.defaultAge });
+    else if (list.length > cfg.minCount) list.pop();
+
+    renderRooms();
+  }
+
+  function removeGuest(roomIndex, typeKey, guestIndex) {
+    const room = roomsData[roomIndex];
+    const cfg = getTypeConfig(typeKey);
+    if (!room || !cfg || !room[typeKey]) return;
+    if (room[typeKey].length <= cfg.minCount) return;
+    room[typeKey].splice(guestIndex, 1);
+    renderRooms();
+  }
+
+  function changeGuestAge(roomIndex, typeKey, guestIndex, age) {
+    const room = roomsData[roomIndex];
+    if (!room || !room[typeKey] || !room[typeKey][guestIndex]) return;
+    room[typeKey][guestIndex].age = age;
+
+    const warnEl = guestsPopup?.querySelector(`[data-room-warn="${roomIndex}"]`);
+    const ok = roomHasGuardian18(room);
+    if (warnEl) {
+      warnEl.style.display = ok ? "none" : "";
+    } else if (!ok) {
+      renderRooms();
+      return;
+    }
+    updateSummary();
+  }
+
+  function attachRoomEvents() {
+    if (!roomsContainer) return;
+
+    roomsContainer.addEventListener("click", (e) => {
       e.stopPropagation();
-      const isExpanded = this.getAttribute('aria-expanded') === 'true';
-      this.setAttribute('aria-expanded', !isExpanded);
-      guestsPopup.setAttribute('aria-hidden', isExpanded);
-    });
-    
-    // Close popup when clicking outside
-    document.addEventListener('click', function(e) {
-      if (!guestsPopup.contains(e.target) && !guestBtn.contains(e.target)) {
-        guestsPopup.setAttribute('aria-hidden', 'true');
-        guestBtn.setAttribute('aria-expanded', 'false');
+
+      const qtyBtn = e.target.closest("button.guests-popup__btn[data-type][data-action]");
+      if (qtyBtn) {
+        changeQuantity(
+          parseInt(qtyBtn.dataset.room, 10),
+          qtyBtn.dataset.type,
+          qtyBtn.dataset.action === "inc" ? 1 : -1
+        );
+        return;
+      }
+
+      const removeRoomBtn = e.target.closest("button.guests-popup__btn--remove-room");
+      if (removeRoomBtn) {
+        const idx = parseInt(removeRoomBtn.dataset.room, 10);
+        if (idx > 0 && roomsData.length > 1) {
+          roomsData.splice(idx, 1);
+          renderRooms();
+        }
+        return;
+      }
+
+      const removeGuestBtn = e.target.closest("button.guests-popup__btn--remove-guest");
+      if (removeGuestBtn) {
+        removeGuest(
+          parseInt(removeGuestBtn.dataset.room, 10),
+          removeGuestBtn.dataset.type,
+          parseInt(removeGuestBtn.dataset.index, 10)
+        );
       }
     });
-    
-    // Prevent popup from closing when clicking inside
-    guestsPopup.addEventListener('click', function(e) {
-      e.stopPropagation();
-    });
-  }
-  
-  // Add room
-  if (addRoomBtn) {
-    addRoomBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      roomsData.push({ adults: 1, children: [] });
-      renderRooms();
-      updateSummary();
+
+    roomsContainer.addEventListener("input", (e) => {
+      const input = e.target.closest(".guests-popup__age-input");
+      if (!input) return;
+      changeGuestAge(
+        parseInt(input.dataset.room, 10),
+        input.dataset.type,
+        parseInt(input.dataset.index, 10),
+        parseInt(input.value, 10)
+      );
     });
   }
 
-  // Close guests popup via Done button
-  if (guestsDoneBtn) {
-    guestsDoneBtn.addEventListener('click', function(e) {
+  attachRoomEvents();
+
+  editBtn.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    modal.style.display = "block";
+    document.body.style.overflow = "hidden";
+    parseRoomsDataFromURL();
+  });
+
+  function closeModal() {
+    modal.style.display = "none";
+    document.body.style.overflow = "";
+    if (guestsPopup) guestsPopup.setAttribute("aria-hidden", "true");
+    if (guestBtn) guestBtn.setAttribute("aria-expanded", "false");
+  }
+
+  if (closeBtn) closeBtn.addEventListener("click", closeModal);
+  if (overlay) overlay.addEventListener("click", closeModal);
+
+  const cancelBtn = modal?.querySelector(".btn-cancel");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", function (e) {
       e.preventDefault();
       e.stopPropagation();
-      guestsPopup.setAttribute('aria-hidden', 'true');
-      guestBtn.setAttribute('aria-expanded', 'false');
+      window.location.href = window.location.pathname;
     });
   }
-  
-  // ==================== FORM SUBMIT ====================
-  // kiểm tra nếu form có action thì thêm action vào form
-  if (form) {
-    form.addEventListener('submit', function(e) {
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && modal.style.display === "block") closeModal();
+  });
+
+  if (guestBtn && guestsPopup) {
+    guestBtn.addEventListener("click", function (e) {
       e.preventDefault();
-      
+      e.stopPropagation();
+      const isExpanded = this.getAttribute("aria-expanded") === "true";
+      this.setAttribute("aria-expanded", String(!isExpanded));
+      guestsPopup.setAttribute("aria-hidden", String(isExpanded));
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!guestsPopup.contains(e.target) && !guestBtn.contains(e.target)) {
+        guestsPopup.setAttribute("aria-hidden", "true");
+        guestBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+
+    guestsPopup.addEventListener("click", (e) => e.stopPropagation());
+  }
+
+  if (addRoomBtn) {
+    addRoomBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      roomsData.push({
+        adults: [{ age: AGE.ADULT_DEFAULT }],
+        children: [],
+        babies: [],
+      });
+      renderRooms();
+    });
+  }
+
+  if (guestsDoneBtn) {
+    guestsDoneBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      guestsPopup.setAttribute("aria-hidden", "true");
+      guestBtn.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  if (form) {
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+
       const formData = new FormData(form);
       const params = new URLSearchParams();
-      
-      // Add dates
-      const checkInDate = formData.get('checkInDate');
-      const checkOutDate = formData.get('checkOutDate');
-      if (checkInDate) params.set('checkInDate', checkInDate);
-      if (checkOutDate) params.set('checkOutDate', checkOutDate);
-      
-      // Add rooms data
-      const roomsDataStr = roomsDataInput.value;
-      if (roomsDataStr) params.set('roomsData', roomsDataStr);
-      
-      // Add rooms, adults, children (for backward compatibility)
-      params.set('rooms', roomsInput.value || '1');
-      params.set('adults', adultsInput.value || '1');
-      params.set('children', childrenInput.value || '0');
-      
-      // Lưu vị trí cuộn hiện tại để khôi phục sau khi reload
-      try {
-        sessionStorage.setItem('hotelDetailScrollY', String(window.scrollY || window.pageYOffset || 0));
-      } catch (e) { /* ignore */ }
 
-      // Reload page with new params
-      const currentUrl = window.location.pathname;
-      const newUrl = currentUrl + (params.toString() ? '?' + params.toString() : '');
+      const checkInDate = formData.get("checkInDate");
+      const checkOutDate = formData.get("checkOutDate");
+      if (checkInDate) params.set("checkInDate", checkInDate);
+      if (checkOutDate) params.set("checkOutDate", checkOutDate);
+
+      const roomsDataStr = roomsDataInput?.value;
+      if (roomsDataStr) params.set("roomsData", roomsDataStr);
+
+      params.set("rooms", roomsInput?.value || "1");
+      params.set("adults", adultsInput?.value || "1");
+      params.set("children", childrenInput?.value || "0");
+      params.set("babies", babiesInput?.value || "0");
+
+      try {
+        sessionStorage.setItem(
+          "hotelDetailScrollY",
+          String(window.scrollY || window.pageYOffset || 0)
+        );
+      } catch (err) {
+        /* ignore */
+      }
+
+      const newUrl =
+        window.location.pathname +
+        (params.toString() ? "?" + params.toString() : "");
       window.location.href = newUrl;
     });
   }
-  
-  // Khôi phục vị trí cuộn sau khi reload (nếu có lưu)
+
   (function restoreScrollPosition() {
     try {
-      const savedY = sessionStorage.getItem('hotelDetailScrollY');
+      const savedY = sessionStorage.getItem("hotelDetailScrollY");
       if (savedY === null) return;
-      sessionStorage.removeItem('hotelDetailScrollY');
+      sessionStorage.removeItem("hotelDetailScrollY");
       const targetY = parseInt(savedY, 10);
       if (!targetY) return;
 
-      // Chờ DOM và ảnh render xong rồi mới scroll
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-          window.scrollTo({ top: targetY, behavior: 'instant' });
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", function () {
+          window.scrollTo({ top: targetY, behavior: "instant" });
         });
       } else {
-        // requestAnimationFrame để scroll sau khi browser paint lần đầu
-        requestAnimationFrame(function() {
-          window.scrollTo({ top: targetY, behavior: 'instant' });
+        requestAnimationFrame(function () {
+          window.scrollTo({ top: targetY, behavior: "instant" });
         });
       }
-    } catch (e) { /* ignore */ }
+    } catch (err) {
+      /* ignore */
+    }
   })();
 
-  // Initialize on page load
   parseRoomsDataFromURL();
 })();
-

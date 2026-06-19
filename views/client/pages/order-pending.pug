@@ -1,5 +1,7 @@
 extends ../layouts/default.pug
 
+include ../partials/order-baby-seats-mixins
+
 block main
   .order-pending-page
     .container
@@ -102,6 +104,8 @@ block main
                             .pending-tour-ages
                               each age, idx in item.babyAges
                                 span.pending-tour-age-tag Em bé #{idx + 1}: #{age} tuổi
+                    if item.babySeatsDisplay && item.babySeatsDisplay.lines && item.babySeatsDisplay.lines.length
+                      +babySeatsSummary(item.babySeatsDisplay)
                     if item.accommodationMode === 'shared' && item.sharedRoomRequest && item.sharedRoomRequest.length > 0
                       .pending-tour-rooms
                         .pending-tour-rooms__title
@@ -152,12 +156,8 @@ block main
                                   span.pending-passenger-gender
                                     i.fa-solid.fa-venus(style="color:#ec4899")
                                     |  Nữ
-                                if p.type !== 'adult'
-                                  - var guardian = adultByIdx[p.guardianIdx];
-                                  span.pending-passenger-guardian
-                                    i.fa-solid.fa-link(style="margin-right:3px")
-                                    |  Ở cùng: 
-                                    strong #{guardian ? (guardian.name || ('Người lớn #' + (guardian.idx + 1))) : '—'}
+                                +babySeatPassengerRow(p)
+                                +roomGuardianRow(p, adultByIdx)
                     else if item.roomSelections && item.roomSelections.length > 0
                       -
                         var paxByIdxPrivate = {};
@@ -224,6 +224,8 @@ block main
                                   span.pending-passenger-gender
                                     i.fa-solid.fa-venus(style="color:#ec4899")
                                     |  Nữ
+                                +babySeatPassengerRow(p)
+                                +roomGuardianRow(p, adultByIdxPrivate)
                     if item.extraRoomCost && item.extraRoomCost > 0
                       .pending-tour-extra-cost
                         i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")

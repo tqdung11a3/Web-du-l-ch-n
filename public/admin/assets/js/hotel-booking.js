@@ -171,21 +171,64 @@
                             <span>${booking.tourDeparture}${booking.tourEndDate ? ' → ' + booking.tourEndDate : ''}</span>
                           </div>
                         ` : ''}
+                        ${isTourHold && tourAssigned && !isMultiSharedTour ? (() => {
+                          const accMode = booking.accommodationMode || '';
+                          const st = effectiveStatus;
+                          const stLabel = st === 'checked_in' ? 'Đã nhận phòng' : st === 'checked_out' ? 'Đã trả phòng' : 'Chưa nhận phòng';
+                          const stCls   = st === 'checked_in' ? 'bip-status--checkedin' : st === 'checked_out' ? 'bip-status--checkedout' : 'bip-status--waiting';
+                          const stIcon  = st === 'checked_in' ? 'fa-door-open' : st === 'checked_out' ? 'fa-circle-check' : 'fa-clock';
+                          return `
+                            <div class="detail-row" style="margin-top:4px">
+                              <i class="fa-solid fa-door-closed"></i>
+                              <span><strong>Hình thức:</strong>
+                                <span style="background:#f1f5f9;color:#475569;padding:1px 8px;border-radius:6px;font-size:12px;margin-left:4px">${accMode === 'private' ? 'Ở riêng' : accMode === 'shared' ? 'Ở ghép' : '—'}</span>
+                              </span>
+                            </div>
+                            <div class="detail-row" style="margin-top:4px">
+                              <i class="fa-solid ${stIcon}"></i>
+                              <span><strong>Trạng thái:</strong>
+                                <span class="${stCls}" style="margin-left:4px;font-size:13px"><i class="fa-solid ${stIcon}" style="font-size:10px;margin-right:3px"></i>${stLabel}</span>
+                              </span>
+                            </div>
+                          `;
+                        })() : ''}
                         ${booking.roomsDetails && booking.roomsDetails.length > 0 && !isTourHold ? `
                           <div class="detail-row">
                             <i class="fa-solid fa-users"></i>
                             <span><strong>Chi tiết từng phòng:</strong></span>
                           </div>
                           <div class="rooms-details-list" style="margin-left: 24px; margin-top: 8px;">
-                            ${booking.roomsDetails.map(detail => `
+                            ${booking.roomsDetails.map(detail => {
+                              const parts = [];
+                              if (detail.adults > 0) {
+                                let s = `${detail.adults} người lớn`;
+                                if (detail.adultsAges) s += ` (${detail.adultsAges})`;
+                                parts.push(s);
+                              }
+                              if (detail.children > 0) {
+                                let s = `${detail.children} trẻ em`;
+                                if (detail.childrenAges && detail.childrenAges !== 'Không có') {
+                                  s += ` (${detail.childrenAges})`;
+                                }
+                                parts.push(s);
+                              }
+                              if (detail.babies > 0) {
+                                let s = `${detail.babies} em bé`;
+                                if (detail.babiesAges && detail.babiesAges !== 'Không có') {
+                                  s += ` (${detail.babiesAges})`;
+                                }
+                                parts.push(s);
+                              }
+                              return `
                               <div class="room-detail-item" style="margin-bottom: 8px; font-size: 14px; color: #555;">
-                                <strong>Phòng ${detail.roomIndex}:</strong> ${detail.adults} người lớn, ${detail.children} trẻ em${detail.children > 0 ? ` (${detail.childrenAges})` : ''}
-                              </div>
-                            `).join('')}
+                                <strong>Phòng ${detail.roomIndex}:</strong> ${parts.join(', ') || '—'}
+                              </div>`;
+                            }).join('')}
                           </div>
                         ` : ''}
                         ${(() => {
-                          if (!isTourHold || !Array.isArray(booking.roomPassengers) || booking.roomPassengers.length === 0) return '';
+                          if (!isTourHold || !tourAssigned) return '';
+                          if (!Array.isArray(booking.roomPassengers) || booking.roomPassengers.length === 0) return '';
                           const typeMap = { adult: 'Người lớn', child: 'Trẻ em', baby: 'Em bé' };
                           const clsMap  = { adult: 'rm-pax--adult', child: 'rm-pax--child', baby: 'rm-pax--baby' };
                           const title = booking.accommodationMode === 'shared'

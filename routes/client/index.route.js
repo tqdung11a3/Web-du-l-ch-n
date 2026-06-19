@@ -14,12 +14,15 @@ const reviewRoutes = require("./review.route");
 const hotelRoutes = require("./hotel.route");
 const newsRoutes = require("./news.route");
 const uploadRoutes = require("./upload.route");
+const notificationRoutes = require("./notification.route");
 const settingMiddleware = require("../../middlewares/client/setting.middleware");
 const categoryMiddleware = require("../../middlewares/client/category.middleware");
 const cityMiddleware = require("../../middlewares/client/city.middleware");
+const clientNotificationMiddleware = require("../../middlewares/client/notification.middleware");
 router.use(settingMiddleware.websiteInfo);
 router.use(categoryMiddleware.list);
 router.use(cityMiddleware.list);
+router.use(clientNotificationMiddleware.attachUnreadCount);
 
 router.use("/account", accountRoutes);
 router.use("/", homeRoutes);
@@ -36,5 +39,6 @@ router.use("/review", reviewRoutes);
 router.use("/hotel", hotelRoutes);
 router.use("/news", newsRoutes);
 router.use("/upload", uploadRoutes);
+router.use("/notifications", notificationRoutes);
 
 module.exports = router;

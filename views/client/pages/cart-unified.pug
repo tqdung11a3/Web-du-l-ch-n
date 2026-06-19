@@ -171,11 +171,14 @@ block main
                         .guests-info
                           - const totalAdults = item.adults || 0
                           - const totalChildren = item.children || 0
+                          - const totalBabies = item.babies || 0
                           p.guests-summary
                             i.fa-regular.fa-user
                             |  #{totalAdults} người lớn
                             if totalChildren > 0
                               | , #{totalChildren} trẻ em
+                            if totalBabies > 0
+                              | , #{totalBabies} em bé
                         
                         //- Hiển thị chi tiết từng phòng (nếu có)
                         if item.roomsDetails && Array.isArray(item.roomsDetails) && item.roomsDetails.length > 0
@@ -183,17 +186,33 @@ block main
                             each roomDetail, roomIdx in item.roomsDetails
                               .room-detail-item
                                 strong Phòng #{roomIdx + 1}: 
-                                - const roomAdults = roomDetail.adults || 0
-                                - const roomChildren = Array.isArray(roomDetail.children) ? roomDetail.children : []
-                                - const roomChildrenCount = roomChildren.length
-                                span #{roomAdults} người lớn
-                                if roomChildrenCount > 0
-                                  | , #{roomChildrenCount} trẻ em (
-                                  each child, childIdx in roomChildren
-                                    if childIdx > 0
-                                      | , 
-                                    |#{child.age || 0} tuổi
-                                  | )
+                                if roomDetail.adultCount > 0
+                                  span #{roomDetail.adultCount} người lớn
+                                  if roomDetail.adults && roomDetail.adults.length
+                                    |  (
+                                    each a, ai in roomDetail.adults
+                                      if ai > 0
+                                        | , 
+                                      |#{a.age} tuổi
+                                    | )
+                                if roomDetail.childCount > 0
+                                  | , #{roomDetail.childCount} trẻ em
+                                  if roomDetail.children && roomDetail.children.length
+                                    |  (
+                                    each c, ci in roomDetail.children
+                                      if ci > 0
+                                        | , 
+                                      |#{c.age} tuổi
+                                    | )
+                                if roomDetail.babyCount > 0
+                                  | , #{roomDetail.babyCount} em bé
+                                  if roomDetail.babies && roomDetail.babies.length
+                                    |  (
+                                    each b, bi in roomDetail.babies
+                                      if bi > 0
+                                        | , 
+                                      |#{b.age} tuổi
+                                    | )
                         
                         .item-price-per-night
                           - const priceStr = Number(item.pricePerNight || 0).toLocaleString('vi-VN');

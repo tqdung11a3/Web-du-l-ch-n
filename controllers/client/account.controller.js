@@ -3,6 +3,11 @@ const AccountUser = require("../../models/account-user.model");
 const Order = require("../../models/order.model");
 const City = require("../../models/city.model");
 const HotelBooking = require("../../models/hotel-booking.model");
+const TourSegment  = require("../../models/tour-segment.model");
+const {
+  resolvePassengersForAtomLabels,
+  resolveSharedRoomDisplayStatus,
+} = require("../../helpers/shared-room-passengers.helper");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const moment = require("moment");
@@ -121,6 +126,7 @@ module.exports.profile = async (req, res) => {
 
   // Tab đang chọn
   const tab = (req.query.tab || "info").toLowerCase();
+  const highlight = req.query.highlight || null;
   const now = moment().startOf("day");
 
   let upcoming = [];
@@ -228,12 +234,14 @@ module.exports.profile = async (req, res) => {
 
         flat.push({
           orderCode: o.code,
+          orderId: String(o._id),
           paymentStatus: o.paymentStatus,
           orderStatus: o.status,
           name: it.name,
           slug: it.slug,
           avatar: it.avatar,
           companySlug: it.slug ? (companySlugMap[it.slug] || null) : null,
+          accommodationMode: it.accommodationMode || "private",
 
           // dùng field mới cho rõ nghĩa
           departureCityName,
@@ -248,6 +256,11 @@ module.exports.profile = async (req, res) => {
           total: lineTotal,
           extraRoomCost,
           roomSelections: Array.isArray(it.roomSelections) ? it.roomSelections : [],
+          // passengers để render danh sách khách/phòng (private)
+          passengers: Array.isArray(it.passengers) ? it.passengers : [],
+          // assignments sẽ được gắn sau (ở ghép → sharedAssignments, ở riêng → privateAssignments)
+          sharedAssignments: [],
+          privateAssignments: [],
           createdAt: o.createdAt,
         });
       }
@@ -255,66 +268,290 @@ module.exports.profile = async (req, res) => {
 
     totalTours = flat.length;
 
+    // 4a) Gắn phân công phòng cho các đơn ở ghép (shared)
+    const sharedItems = flat.filter((r) => r.accommodationMode === "shared");
+    if (sharedItems.length > 0) {
+      const sharedOrderIds = sharedItems.map((r) => r.orderId);
+
+      // Tìm tất cả TourSegment có assignment thuộc ít nhất 1 trong các orderId này
+      const segs = await TourSegment.find({
+        "assignments.orderId": { $in: sharedOrderIds },
+      })
+        .select("departureDate assignments")
+        .lean();
+
+      // Thu thập holdBookingIds để load HotelBooking.status
+      const holdBookingIds = [];
+      for (const seg of segs) {
+        for (const a of seg.assignments || []) {
+          if (a.holdBookingId) holdBookingIds.push(a.holdBookingId);
+        }
+      }
+      const holdStatusMap = {};
+      if (holdBookingIds.length > 0) {
+        const holdDocs = await HotelBooking.find({ _id: { $in: holdBookingIds } })
+          .select("_id status")
+          .lean();
+        for (const hb of holdDocs) holdStatusMap[String(hb._id)] = hb.status;
+      }
+
+      // Gom assignments theo orderId để tra nhanh
+      const assignByOrderId = {};
+      for (const seg of segs) {
+        for (const a of seg.assignments || []) {
+          const oid = String(a.orderId);
+          if (!assignByOrderId[oid]) assignByOrderId[oid] = [];
+          assignByOrderId[oid].push({
+            hotelName:    a.hotelName    || "",
+            roomNumber:   a.roomNumber   || "",
+            roomTypeName: a.roomTypeName || "",
+            accommodationMode: a.accommodationMode || "shared",
+            guestStatus:  a.guestStatus  || "confirmed",
+            bookingStatus: a.holdBookingId ? (holdStatusMap[String(a.holdBookingId)] || "confirmed") : "confirmed",
+            numPeople:    a.numPeople    || 1,
+            atomLabels:   Array.isArray(a.atomLabels) ? a.atomLabels : [],
+            guestName:    a.guestName    || "",
+          });
+        }
+      }
+
+      for (const r of sharedItems) {
+        const rawAssigns = assignByOrderId[r.orderId] || [];
+        r.sharedAssignments = rawAssigns.map((a) => {
+          const labels = a.atomLabels || [];
+          let passengers = [];
+          if (labels.length > 0 && (r.passengers || []).length > 0) {
+            passengers = resolvePassengersForAtomLabels(
+              r.passengers,
+              labels
+            );
+          }
+          if (passengers.length === 0 && a.guestName) {
+            passengers = [{ name: a.guestName, type: "adult" }];
+          }
+          const displayStatus = resolveSharedRoomDisplayStatus(
+            a.guestStatus,
+            a.bookingStatus
+          );
+          return { ...a, passengers, displayStatus };
+        });
+      }
+    }
+
+    // 4b) Gắn phân công phòng cho các đơn ở riêng (private)
+    const privateItems = flat.filter((r) => r.accommodationMode !== "shared");
+    if (privateItems.length > 0) {
+      const privateOrderIds = privateItems.map((r) => r.orderId);
+
+      const privSegs = await TourSegment.find({
+        "assignments.orderId": { $in: privateOrderIds },
+        "assignments.accommodationMode": "private",
+      })
+        .select("assignments")
+        .lean();
+
+      // Gom theo orderId → mảng assignments (đã admin lưu)
+      const privAssignByOrderId = {};
+      for (const seg of privSegs) {
+        for (const a of seg.assignments || []) {
+          if (a.accommodationMode !== "private") continue;
+          const oid = String(a.orderId);
+          if (!privAssignByOrderId[oid]) privAssignByOrderId[oid] = [];
+          privAssignByOrderId[oid].push({
+            hotelName:    a.hotelName    || "",
+            roomNumber:   a.roomNumber   || "",
+            roomTypeName: a.roomTypeName || "",
+            holdBookingId: a.holdBookingId ? String(a.holdBookingId) : null,
+            numPeople:    a.numPeople    || 1,
+            guestStatus:  a.guestStatus  || "confirmed",
+          });
+        }
+      }
+
+      // Load HotelBooking.status cho private holds
+      const privHoldIds = [];
+      for (const arr of Object.values(privAssignByOrderId)) {
+        for (const a of arr) {
+          if (a.holdBookingId) privHoldIds.push(a.holdBookingId);
+        }
+      }
+      const privHoldStatusMap = {};
+      if (privHoldIds.length > 0) {
+        const privHolds = await HotelBooking.find({ _id: { $in: privHoldIds } })
+          .select("_id status")
+          .lean();
+        for (const hb of privHolds) privHoldStatusMap[String(hb._id)] = hb.status;
+      }
+
+      for (const r of privateItems) {
+        const rawAssigns = privAssignByOrderId[r.orderId] || [];
+        if (rawAssigns.length === 0) continue;
+
+        // Ghép danh sách khách vào từng phòng từ order item passengers + roomAssignments
+        // roomSelections[].roomAssignments[i].passengerIdxs → passengers[].name
+        // Mỗi TourSegment assignment tương ứng 1 phòng vật lý (theo thứ tự holdBookingId)
+        // Vì không có mapping holdBookingId ↔ roomAssignments index trực tiếp,
+        // ta gom tất cả passengers theo roomSelections[].roomAssignments thành 1 danh sách
+        // rồi phân cho từng phòng theo số người (numPeople) từ admin assignment.
+        const passengerMap = {};
+        for (const p of r.passengers || []) {
+          passengerMap[p.idx] = p;
+        }
+
+        // Tất cả logical slot assignments từ order (booking time)
+        const allLogicalSlots = [];
+        for (const rs of r.roomSelections || []) {
+          for (const ra of rs.roomAssignments || []) {
+            allLogicalSlots.push({
+              roomTypeId: rs.roomTypeId,
+              roomTypeName: rs.roomTypeName,
+              hotelId: rs.hotelId,
+              hotelName: rs.hotelName,
+              fromDate: rs.fromDate,
+              toDate: rs.toDate,
+              passengerIdxs: Array.isArray(ra.passengerIdxs) ? ra.passengerIdxs : [],
+            });
+          }
+        }
+
+        // Match admin assignments với logical slots theo hotel+roomType
+        r.privateAssignments = rawAssigns.map((a, i) => {
+          // Tìm logical slot tương ứng (cùng hotel+roomType, theo thứ tự)
+          const slot = allLogicalSlots.filter(
+            (s) => s.hotelName === a.hotelName || s.roomTypeName === a.roomTypeName
+          )[0] || allLogicalSlots[i] || null;
+
+          const passengers = slot
+            ? slot.passengerIdxs
+                .map((idx) => passengerMap[idx])
+                .filter(Boolean)
+                .map((p) => ({
+                  name: p.name || "Hành khách",
+                  type: p.type || "adult",
+                  age: p.age,
+                }))
+            : [];
+
+          return {
+            hotelName:    a.hotelName,
+            roomNumber:   a.roomNumber,
+            roomTypeName: a.roomTypeName,
+            numPeople:    a.numPeople,
+            guestStatus:  a.guestStatus,
+            bookingStatus: a.holdBookingId
+              ? (privHoldStatusMap[a.holdBookingId] || "confirmed")
+              : "confirmed",
+            passengers,
+          };
+        });
+      }
+    }
+
     // 4) Phân loại upcoming / history
     for (const r of flat) {
-      const isCanceled = r.orderStatus === "canceled";
+      const isCanceled = r.orderStatus === "cancel";
+      const isDone     = r.orderStatus === "done";
 
       if (!r.departureDate) {
-        // nếu không có ngày, cho vào history để tránh kẹt trạng thái
         history.push(r);
       } else {
         const depDate = moment(r.departureDate).startOf("day");
-        const isUpcoming = depDate.isAfter(now); // Ngày khởi hành > hôm nay (tương lai)
-        
-        // Chuyến đi sắp tới: ngày khởi hành > thời gian hiện tại (và không bị hủy)
-        if (!isCanceled && isUpcoming) {
-          upcoming.push(r);
-        } 
-        // Lịch sử: đã khởi hành (ngày khởi hành <= hôm nay) hoặc bị hủy
-        else {
+        const isUpcoming = depDate.isAfter(now);
+
+        // Lịch sử: đã bị hủy, hoặc đã hoàn thành, hoặc ngày khởi hành đã qua
+        if (isCanceled || isDone || !isUpcoming) {
           history.push(r);
+        } else {
+          upcoming.push(r);
         }
       }
     }
 
-    // 5) Lấy lịch sử đặt phòng khách sạn
-    const rawBookings = await HotelBooking.find({ 
+    // 5) Lấy lịch sử đặt phòng khách sạn (populate hotel để lấy roomTypes & rooms)
+    const rawBookings = await HotelBooking.find({
       userId: me._id,
-      deleted: { $ne: true }
+      deleted: { $ne: true },
     })
+      .populate("hotel.hotelId", "name rooms roomTypes thumbnail address")
       .sort({ createdAt: -1 })
       .lean();
 
-    // Group bookings theo base code (HB123, HB123-1, HB123-2 -> gộp thành 1 đơn)
+    // Group bookings theo base code
+    // base code = code bỏ suffix -R\d+, -\d+
     const bookingGroups = {};
-    rawBookings.forEach(booking => {
-      // Extract base code (loại bỏ -1, -2, -3 nếu có)
-      const baseCode = booking.code.replace(/-\d+$/, '');
-      if (!bookingGroups[baseCode]) {
-        bookingGroups[baseCode] = [];
-      }
+    rawBookings.forEach((booking) => {
+      let baseCode = booking.code.replace(/-R\d+(-\d+)?$/, "");
+      while (baseCode.match(/-\d+$/)) baseCode = baseCode.replace(/-\d+$/, "");
+      if (!bookingGroups[baseCode]) bookingGroups[baseCode] = [];
       bookingGroups[baseCode].push(booking);
     });
 
     // Format dữ liệu hotel bookings (mỗi group = 1 đơn)
     for (const [baseCode, group] of Object.entries(bookingGroups)) {
       const firstBooking = group[0];
-      const checkInDate = firstBooking.checkIn ? moment(firstBooking.checkIn).format("DD/MM/YYYY") : "—";
-      const checkOutDate = firstBooking.checkOut ? moment(firstBooking.checkOut).format("DD/MM/YYYY") : "—";
+      const checkInDate = firstBooking.checkIn
+        ? moment(firstBooking.checkIn).format("DD/MM/YYYY")
+        : "—";
+      const checkOutDate = firstBooking.checkOut
+        ? moment(firstBooking.checkOut).format("DD/MM/YYYY")
+        : "—";
       const nights = firstBooking.totalNights || 0;
-      
-      // Tính tổng rooms, adults, children từ TẤT CẢ bookings trong group
+
       const totalRooms = group.reduce((sum, b) => sum + (b.rooms || 1), 0);
       const totalAdults = group.reduce((sum, b) => sum + (b.adults || 1), 0);
       const totalChildren = group.reduce((sum, b) => sum + (b.children || 0), 0);
-      const totalAmount = group.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-      const orderTotal = firstBooking.orderTotal || totalAmount;
-      
+      const orderTotal =
+        firstBooking.orderTotal ||
+        group.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+      // Lấy số phòng vật lý từ hotel.rooms nếu đã xếp phòng
+      const hotelDoc =
+        firstBooking.hotel?.hotelId &&
+        typeof firstBooking.hotel.hotelId === "object"
+          ? firstBooking.hotel.hotelId
+          : null;
+      const hotelRooms = hotelDoc?.rooms || [];
+      const hotelRoomTypes = hotelDoc?.roomTypes || [];
+
+      const assignedRooms = group
+        .filter((b) => b.roomId)
+        .map((b) => {
+          const room = hotelRooms.find(
+            (r) => String(r._id) === String(b.roomId)
+          );
+          const rt = hotelRoomTypes.find(
+            (t) => String(t._id) === String(b.roomTypeId)
+          );
+          return {
+            roomNumber: room
+              ? room.number || room.roomNumber || "—"
+              : "—",
+            floor: room ? room.floor || "" : "",
+            roomType: rt ? rt.name || rt.title || "" : "",
+          };
+        });
+
+      const HOTEL_STATUS_LABELS = {
+        pending: "Chờ xác nhận",
+        confirmed: "Đã xác nhận",
+        checked_in: "Đã nhận phòng",
+        checked_out: "Đã trả phòng",
+        cancelled: "Đã hủy",
+      };
+
+      const PAYMENT_LABELS = {
+        paid: "Đã thanh toán",
+        unpaid: "Chưa thanh toán",
+      };
+
       hotelBookings.push({
-        code: baseCode, // Dùng base code (không có suffix)
-        hotelName: firstBooking.hotel?.name || "Khách sạn không xác định",
-        hotelThumbnail: firstBooking.hotel?.thumbnail || "",
-        hotelAddress: firstBooking.hotel?.address || "",
+        code: baseCode,
+        hotelName:
+          hotelDoc?.name || firstBooking.hotel?.name || "Khách sạn không xác định",
+        hotelThumbnail:
+          hotelDoc?.thumbnail || firstBooking.hotel?.thumbnail || "",
+        hotelAddress:
+          hotelDoc?.address || firstBooking.hotel?.address || "",
         checkInDate,
         checkOutDate,
         nights,
@@ -323,9 +560,14 @@ module.exports.profile = async (req, res) => {
         children: totalChildren,
         totalAmount: orderTotal,
         paymentStatus: firstBooking.paymentStatus,
+        paymentStatusLabel:
+          PAYMENT_LABELS[firstBooking.paymentStatus] || firstBooking.paymentStatus,
         paymentMethod: firstBooking.paymentMethod,
         status: firstBooking.status,
+        statusLabel: HOTEL_STATUS_LABELS[firstBooking.status] || firstBooking.status,
         createdAt: firstBooking.createdAt,
+        assignedRooms, // số phòng vật lý đã xếp
+        isHighlighted: highlight === baseCode,
       });
     }
   }
@@ -333,7 +575,8 @@ module.exports.profile = async (req, res) => {
   res.render("client/pages/profile", {
     pageTitle: "Tài khoản của bạn",
     user: { ...me, totalTours },
-    tab, // để pug biết tab nào đang active
+    tab,
+    highlight,
     upcoming,
     history,
     hotelBookings,

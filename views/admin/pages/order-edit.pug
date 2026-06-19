@@ -1,5 +1,7 @@
 extends ../layouts/default.pug
 
+include ../../client/partials/order-baby-seats-mixins
+
 block main
   - var _orderReadOnly = readOnly === true
   - var _soBanner = (typeof superAdminOverrideBanner !== 'undefined') ? superAdminOverrideBanner : null
@@ -117,6 +119,8 @@ block main
                           .inner-ages-info
                             each age, idx in item.babyAges
                               span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
+                      if item.babySeatsDisplay && item.babySeatsDisplay.lines && item.babySeatsDisplay.lines.length
+                        +babySeatsSummary(item.babySeatsDisplay)
                       div Ngày khởi hành: #{item.departureDateFormat}
                       div Khởi hành tại: #{item.cityName}
               //- Hình thức lưu trú: ở riêng vs ở ghép.
@@ -182,8 +186,12 @@ block main
                   if item.passengers && item.passengers.length
                     -
                       var psList = item.passengers || [];
+                      var GUARDIAN_MIN_AGE = 18;
+                      function _isAnchorAdult(p){
+                        return p && p.type === 'adult' && Number(p.age || 0) >= GUARDIAN_MIN_AGE;
+                      }
                       var adultByIdx = {};
-                      psList.forEach(function(p){ if (p.type === 'adult') adultByIdx[p.idx] = p; });
+                      psList.forEach(function(p){ if (_isAnchorAdult(p)) adultByIdx[p.idx] = p; });
                     .inner-order-passengers(style="margin-top:10px")
                       .inner-order-rooms__title(style="font-size:13px;margin-bottom:6px")
                         i.fa-solid.fa-id-card(style="margin-right:6px;color:#606060")
@@ -196,7 +204,8 @@ block main
                             th(style="padding:6px;text-align:center") Tuổi
                             th(style="padding:6px;text-align:center") Loại
                             th(style="padding:6px;text-align:center") Giới tính
-                            th(style="padding:6px;text-align:left") Đi cùng
+                            th(style="padding:6px;text-align:left") Chỗ ngồi tour
+                            th(style="padding:6px;text-align:left") Ở cùng phòng
                         tbody
                           each p, pi in psList
                             tr(style="border-top:1px solid #e2e8f0")
@@ -218,12 +227,9 @@ block main
                                 else
                                   | —
                               td(style="padding:6px;color:#475569")
-                                if p.type === 'adult'
-                                  | (Tự lập)
-                                else if adultByIdx[p.guardianIdx]
-                                  | #{adultByIdx[p.guardianIdx].name || ('Người lớn #' + (p.guardianIdx + 1))}
-                                else
-                                  | —
+                                +adminBabySeatCell(p)
+                              td(style="padding:6px;color:#475569")
+                                +adminRoomGuardianCell(p, adultByIdx)
               else if item.roomSelections && item.roomSelections.length
                 -
                   var paxByIdxPrivate = {};
@@ -286,6 +292,13 @@ block main
                       strong #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
                   //- Bảng hành khách (ở riêng).
                   if item.passengers && item.passengers.length
+                    -
+                      var GUARDIAN_MIN_AGE_P = 18;
+                      function _isAnchorAdultP(p){
+                        return p && p.type === 'adult' && Number(p.age || 0) >= GUARDIAN_MIN_AGE_P;
+                      }
+                      var adultByIdxP = {};
+                      (item.passengers || []).forEach(function(p){ if (_isAnchorAdultP(p)) adultByIdxP[p.idx] = p; });
                     .inner-order-passengers(style="margin-top:10px")
                       .inner-order-rooms__title(style="font-size:13px;margin-bottom:6px")
                         i.fa-solid.fa-id-card(style="margin-right:6px;color:#606060")
@@ -298,6 +311,8 @@ block main
                             th(style="padding:6px;text-align:center") Tuổi
                             th(style="padding:6px;text-align:center") Loại
                             th(style="padding:6px;text-align:center") Giới tính
+                            th(style="padding:6px;text-align:left") Chỗ ngồi tour
+                            th(style="padding:6px;text-align:left") Ở cùng phòng
                         tbody
                           each p in item.passengers
                             tr(style="border-top:1px solid #e2e8f0")
@@ -318,6 +333,10 @@ block main
                                   | Nữ
                                 else
                                   | —
+                              td(style="padding:6px;color:#475569")
+                                +adminBabySeatCell(p)
+                              td(style="padding:6px;color:#475569")
+                                +adminRoomGuardianCell(p, adultByIdxP)
               else if item.extraRoomCost && item.extraRoomCost > 0
                 .inner-order-block.inner-order-block--hotels
                   .inner-order-extra-cost
@@ -370,4 +389,43 @@ block main
     }
     .inner-age-tag {
       display: inline-block;
+    }
+    .cart-baby-seats-info {
+      margin-top: 8px;
+      padding: 8px 10px;
+      background: #eef1f8;
+      border: 1px solid #c5cde6;
+      border-radius: 8px;
+      font-size: 12.5px;
+      max-width: 480px;
+    }
+    .cart-baby-seats-info__title {
+      font-weight: 600;
+      color: #2d3e90;
+      margin-bottom: 6px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .cart-baby-seats-info__title i { color: #2d3e90; font-size: 12px; }
+    .cart-baby-seats-info__row {
+      display: flex;
+      align-items: flex-start;
+      gap: 4px;
+      color: #475569;
+      margin-bottom: 3px;
+      line-height: 1.4;
+    }
+    .cart-baby-seats-info__row i { font-size: 11px; width: 14px; flex-shrink: 0; margin-top: 2px; }
+    .cart-baby-seats-info__row i.icon-shared { color: #2d3e90; }
+    .cart-baby-seats-info__row i.icon-private { color: #24366f; }
+    .cart-baby-seats-info__row i.icon-auto { color: #1a66cc; }
+    .cart-baby-seats-info__row strong { color: #2d3e90; font-weight: 600; }
+    .cart-baby-seats-info__fee {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px dashed #c5cde6;
+      font-size: 12px;
+      color: #2d3e90;
     }

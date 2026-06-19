@@ -15,6 +15,95 @@
 
 const { _weightForAge } = require("./passenger-atom.helper");
 
+/** Tuổi tối thiểu để được coi là người lớn đại diện phòng (ở riêng). */
+const PRIVATE_ROOM_ADULT_MIN_AGE = 18;
+
+const moment = require("moment");
+
+/** Tổng số phòng trong một khung (fromDate → toDate). */
+function _segmentKeyFromSelection(rs) {
+  const from = rs.fromDate
+    ? moment(rs.fromDate).format("YYYY-MM-DD")
+    : String(rs.fromDate || "");
+  const to = rs.toDate
+    ? moment(rs.toDate).format("YYYY-MM-DD")
+    : String(rs.toDate || "");
+  return `${from}|${to}`;
+}
+
+/**
+ * Số phòng tối đa trong một khung thời gian lưu trú (không cộng các khung).
+ * Khách không ở đồng thời tất cả khung → NL tối thiểu = max theo khung.
+ */
+function maxPrivateRoomsInAnySegment(roomSelections) {
+  const bySeg = new Map();
+  for (const rs of roomSelections || []) {
+    const key = _segmentKeyFromSelection(rs);
+    const prev = bySeg.get(key) || 0;
+    bySeg.set(
+      key,
+      prev + Math.max(0, Math.floor(Number(rs.selectedRooms) || 0))
+    );
+  }
+  let maxRooms = 0;
+  for (const n of bySeg.values()) {
+    if (n > maxRooms) maxRooms = n;
+  }
+  return maxRooms;
+}
+
+/** @deprecated dùng maxPrivateRoomsInAnySegment — giữ tên cũ nếu có import */
+function countPrivateSelectedRooms(roomSelections) {
+  return maxPrivateRoomsInAnySegment(roomSelections);
+}
+
+/**
+ * Thông báo khi thiếu người đủ 18 tuổi cho rule phân phòng (khác NL theo giá tour ≥12).
+ */
+function formatPrivateMinAdultsRequiredMessage(minRooms, adults18Count) {
+  const n = Math.max(0, Math.floor(Number(minRooms) || 0));
+  const c = Math.max(0, Math.floor(Number(adults18Count) || 0));
+  return (
+    `Khung thời gian có nhiều phòng nhất yêu cầu ${n} phòng. ` +
+    `Mỗi phòng cần ít nhất 1 người từ ${PRIVATE_ROOM_ADULT_MIN_AGE} tuổi trở lên. ` +
+    `Hiện tại, đoàn có ${c} người từ ${PRIVATE_ROOM_ADULT_MIN_AGE} tuổi trở lên. ` +
+    `Vui lòng bổ sung người từ ${PRIVATE_ROOM_ADULT_MIN_AGE} tuổi trở lên hoặc điều chỉnh số lượng phòng/khách.`
+  );
+}
+
+function countAdults18PlusInPassengers(passengers) {
+  return (passengers || []).filter(
+    (p) =>
+      p.type === "adult" &&
+      Math.max(0, Math.floor(Number(p.age) || 0)) >= PRIVATE_ROOM_ADULT_MIN_AGE
+  ).length;
+}
+
+/**
+ * Mỗi phòng trong từng khung cần ≥ 1 NL từ PRIVATE_ROOM_ADULT_MIN_AGE tuổi.
+ * → quantityAdult ≥ số phòng nhiều nhất trong một khung (không cộng các khung).
+ */
+function validatePrivateMinAdultsForItem(item) {
+  const errors = [];
+  if (!item || item.accommodationMode !== "private") {
+    return { ok: true, errors };
+  }
+  const minAdultsRequired = maxPrivateRoomsInAnySegment(item.roomSelections);
+  if (minAdultsRequired <= 0) return { ok: true, errors };
+
+  const passengers = Array.isArray(item.passengers) ? item.passengers : [];
+  const adults18 = countAdults18PlusInPassengers(passengers);
+  const qa = Math.max(0, Math.floor(Number(item.quantityAdult) || 0));
+
+  if (qa < minAdultsRequired || adults18 < minAdultsRequired) {
+    errors.push(
+      formatPrivateMinAdultsRequiredMessage(minAdultsRequired, adults18)
+    );
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
 /**
  * Tính sức chứa quy đổi cho 1 passenger theo ageBands.
  * @param {{ age: number, type: string }} passenger
@@ -157,6 +246,22 @@ function validatePrivateAssignmentsForItem({ item, hotelsByTourSegmentId }) {
             `${segLabel} · phòng ${rs.roomTypeName} #${i + 1} (${rs.hotelName || ""}): vượt sức chứa (${used.toFixed(2)} / ${baseOccupancy}).`
           );
         }
+        if (idxs.length > 0) {
+          const adultsInRoom = idxs
+            .map((idx) => passengersByIdx.get(idx))
+            .filter((p) => p && p.type === "adult");
+          const hasAdult18Plus = adultsInRoom.some(
+            (p) =>
+              Math.max(0, Math.floor(Number(p.age) || 0)) >=
+              PRIVATE_ROOM_ADULT_MIN_AGE
+          );
+          if (!hasAdult18Plus) {
+            errors.push(
+              `${segLabel} · phòng ${rs.roomTypeName} #${i + 1} (${rs.hotelName || ""}): ` +
+                `phòng phải có ít nhất 1 người lớn từ ${PRIVATE_ROOM_ADULT_MIN_AGE} tuổi trở lên.`
+            );
+          }
+        }
       });
     });
 
@@ -191,6 +296,12 @@ function validatePrivateAssignments({ items, hotelsByTourSegmentId }) {
 }
 
 module.exports = {
+  PRIVATE_ROOM_ADULT_MIN_AGE,
+  maxPrivateRoomsInAnySegment,
+  countPrivateSelectedRooms,
+  formatPrivateMinAdultsRequiredMessage,
+  countAdults18PlusInPassengers,
+  validatePrivateMinAdultsForItem,
   computeUsedCapacity,
   validatePrivateAssignmentsForItem,
   validatePrivateAssignments,

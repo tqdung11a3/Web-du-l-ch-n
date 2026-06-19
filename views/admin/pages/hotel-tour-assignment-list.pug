@@ -72,9 +72,74 @@ block main
                   span.assign-status-badge.assign-status-badge--complete
                     i.fa-solid.fa-check
               td
-                a.btn-assign-detail(href=`/${pathAdmin}/hotel/tour-assignments/${row.segmentId}${_htaListHotelQs}`)
+                a.btn-assign-detail(
+                  href=`/${pathAdmin}/hotel/tour-assignments/${row.segmentId}${_htaListHotelQs}`
+                  data-has-customers=(row.hasCustomers ? '1' : '0')
+                  data-tour-name=row.tourName
+                )
                   i.fa-solid.fa-user-tag
                   |  Phân phòng
+
+  //- Popup giữa màn hình khi chưa có khách đặt
+  #hta-no-customer-dialog.th-app-dialog(aria-hidden="true")
+    .th-app-dialog__backdrop
+    .th-app-dialog__panel(role="alertdialog" aria-modal="true" aria-labelledby="hta-no-customer-dialog-title")
+      .th-app-dialog__header
+        h3#hta-no-customer-dialog-title.th-app-dialog__title
+          i.fa-solid.fa-circle-info(style="color:#f59e0b;margin-right:8px")
+          | Chưa thể phân phòng
+        button#hta-no-customer-dialog-close.th-app-dialog__close(type="button" aria-label="Đóng")
+          i.fa-solid.fa-xmark
+      #hta-no-customer-dialog-body.th-app-dialog__body
+      .th-app-dialog__footer
+        button#hta-no-customer-dialog-ok.th-app-dialog__btn.th-app-dialog__btn--primary(type="button") Đã hiểu
+
+  script.
+    document.addEventListener('DOMContentLoaded', function () {
+      var hotelName = !{JSON.stringify(typeof selectedHotelName !== 'undefined' ? selectedHotelName : '')};
+      var dialog = document.getElementById('hta-no-customer-dialog');
+      var dialogBody = document.getElementById('hta-no-customer-dialog-body');
+      var dialogClose = document.getElementById('hta-no-customer-dialog-close');
+      var dialogOk = document.getElementById('hta-no-customer-dialog-ok');
+      var dialogBackdrop = dialog ? dialog.querySelector('.th-app-dialog__backdrop') : null;
+
+      function openNoCustomerDialog(message) {
+        if (!dialog || !dialogBody) {
+          alert(message);
+          return;
+        }
+        dialogBody.textContent = message;
+        dialog.classList.add('is-open');
+        dialog.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeNoCustomerDialog() {
+        if (!dialog) return;
+        dialog.classList.remove('is-open');
+        dialog.setAttribute('aria-hidden', 'true');
+      }
+
+      if (dialogClose) dialogClose.addEventListener('click', closeNoCustomerDialog);
+      if (dialogOk) dialogOk.addEventListener('click', closeNoCustomerDialog);
+      if (dialogBackdrop) dialogBackdrop.addEventListener('click', closeNoCustomerDialog);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && dialog && dialog.classList.contains('is-open')) {
+          closeNoCustomerDialog();
+        }
+      });
+
+      document.querySelectorAll('.btn-assign-detail').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          if (btn.getAttribute('data-has-customers') !== '0') return;
+          e.preventDefault();
+          var tourName = btn.getAttribute('data-tour-name') || 'tour này';
+          var msg = hotelName
+            ? 'Khách sạn «' + hotelName + '» chưa có khách nào đặt «' + tourName + '».\n\nVui lòng đợi khách đặt tour trước khi phân phòng.'
+            : 'Chưa có khách nào đặt phòng tại khách sạn của bạn cho «' + tourName + '».\n\nVui lòng đợi khách đặt tour trước khi phân phòng.';
+          openNoCustomerDialog(msg);
+        });
+      });
+    });
 
   style.
     .th-search-form {

@@ -560,7 +560,9 @@ if (boxTourDetail) {
   // --- DOM & data ---
   const listInputQuantity = boxTourDetail.querySelectorAll("[input-quantity]");
   const elementTotalPrice = boxTourDetail.querySelector("[total-price]");
-  const seatBabyCheckbox = boxTourDetail.querySelector("[seat-baby-toggle]");
+  // seatBabyCheckbox đã bị loại bỏ (thay bằng per-baby radio trong passenger rows)
+  const seatBabyCheckbox = null;
+  const seatBabyWrap = null;
 
   const inputAdult = boxTourDetail.querySelector(
     '[input-quantity="stockAdult"]'
@@ -586,6 +588,66 @@ if (boxTourDetail) {
   const agebabyMax         = isNaN(dtBabyMaxAge)     ? 3  : dtBabyMaxAge;
   const ageChildMin        = isNaN(dtChildrenMinAge) ? 4  : dtChildrenMinAge;
   const ageChildMax        = isNaN(dtChildrenMaxAge) ? 11 : dtChildrenMaxAge;
+  /** Tuổi tối thiểu của người lớn được tính là "đại diện phòng" khi ở riêng */
+  const privateRoomAdultMinAge = 18;
+  /** Số em bé tối đa ngồi cùng 1 người lớn (0 = không giới hạn) */
+  const maxBabiesPerAdult = Math.max(0, parseInt(boxTourDetail.dataset.maxBabiesPerAdult, 10) || 0);
+  /** Phí ghế ngồi riêng cho mỗi em bé (0 = ghế riêng miễn phí) */
+  const babySeatFee = Math.max(0, parseInt(boxTourDetail.dataset.babySeatFee, 10) || 0);
+  /** Chờ người dùng nhập xong tuổi NL rồi mới hiện dropdown người đi cùng */
+  const GUARDIAN_SELECT_DEBOUNCE_MS = 350;
+  const guardianSelectDebounceTimers = new Map();
+
+  function _parsePassengerAge(p) {
+    if (p.age === "" || p.age === null || p.age === undefined) return NaN;
+    return parseInt(p.age, 10);
+  }
+
+  /** NL từ 18 tuổi — có thể làm người đi cùng / anchor atom khi ở ghép. */
+  function _isAnchorAdult18(p) {
+    if (p.type !== "adult") return false;
+    const ageNum = _parsePassengerAge(p);
+    return !isNaN(ageNum) && ageNum >= privateRoomAdultMinAge;
+  }
+
+  /** TE, EB, hoặc NL tính giá NL nhưng chưa đủ 18 tuổi — cần chọn người đi cùng. */
+  function _passengerNeedsGuardian(p) {
+    if (p.type === "baby") {
+      // Khi maxBabiesPerAdult === 0: tất cả em bé tự động chiếm ghế, không cần chọn NL đi cùng
+      if (maxBabiesPerAdult === 0) return false;
+      // Em bé cần chọn guardian khi chọn "Ngồi cùng người lớn" (dù ở chế độ nào)
+      return p.babySeatType === "shared";
+    }
+    if (getAccommodationMode() !== "shared") return false;
+    if (p.type === "child") return true;
+    if (p.type === "adult") {
+      const ageNum = _parsePassengerAge(p);
+      return !isNaN(ageNum) && ageNum < privateRoomAdultMinAge;
+    }
+    return false;
+  }
+
+  function _countAdults18PlusInState() {
+    return passengerState.filter((p) => {
+      if (p.type !== "adult") return false;
+      const ageNum =
+        p.age === "" || p.age === null || p.age === undefined
+          ? NaN
+          : parseInt(p.age, 10);
+      return !isNaN(ageNum) && ageNum >= privateRoomAdultMinAge;
+    }).length;
+  }
+
+  function _formatPrivateMinAdultsRequiredMessage(minRooms, adults18Count) {
+    const n = Math.max(0, parseInt(minRooms, 10) || 0);
+    const c = Math.max(0, parseInt(adults18Count, 10) || 0);
+    return (
+      `Khung thời gian có nhiều phòng nhất yêu cầu ${n} phòng. ` +
+      `Mỗi phòng cần ít nhất 1 người từ ${privateRoomAdultMinAge} tuổi trở lên. ` +
+      `Hiện tại, đoàn có ${c} người từ ${privateRoomAdultMinAge} tuổi trở lên. ` +
+      `Vui lòng bổ sung người từ ${privateRoomAdultMinAge} tuổi trở lên hoặc điều chỉnh số lượng phòng/khách.`
+    );
+  }
 
   let babyRules = [];
   try {
@@ -595,6 +657,18 @@ if (boxTourDetail) {
   } catch {
     babyRules = [];
   }
+
+  /**
+   * State của passenger list — khai báo sớm vì drawBoxDetail() đọc khi tính ghế em bé.
+   */
+  let passengerState = [];
+
+  /**
+   * State phân bổ phòng cho mode "Ở riêng".
+   * Key: `${fromDate}|${toDate}|${hotelId}|${roomTypeId}|${roomIndex}` (1 phòng vật lý).
+   * Value: Set<number> — các idx hành khách đã gán vào phòng này.
+   */
+  const privateAssignmentState = new Map();
 
   // ======== GIÁ EM BÉ THEO TỪNG VỊ TRÍ (1-based) ========
   function babyUnitAt(idx) {
@@ -612,7 +686,7 @@ if (boxTourDetail) {
     return Math.round((base * pct) / 100);
   }
 
-  // Chi phí phòng dư (được cập nhật bởi updateRoomValidation)
+  // Chi phí phòng cộng thêm (được cập nhật bởi updateRoomValidation)
   let currentExtraRoomCost = 0;
 
   // ======== VẼ LẠI HỘP CHI TIẾT ========
@@ -625,11 +699,16 @@ if (boxTourDetail) {
     child = Math.max(0, child);
     baby = Math.max(0, baby);
 
-    const includeBabySeat = seatBabyCheckbox && seatBabyCheckbox.checked; // true nếu đã tick "đặt chỗ riêng"
+    // Em bé chiếm ghế tour:
+    // - maxBabiesPerAdult === 0 (auto mode): TẤT CẢ em bé chiếm ghế
+    // - maxBabiesPerAdult > 0 (picker mode): chỉ em bé chọn "Ghế ngồi riêng"
+    const privateSeatBabyCount = maxBabiesPerAdult === 0
+      ? baby
+      : passengerState.filter((p) => p.type === "baby" && p.babySeatType === "private").length;
 
     // ----- RÀNG BUỘC GHẾ -----
     if (maxSeats > 0) {
-      let usedSeats = adult + child + (includeBabySeat ? baby : 0);
+      let usedSeats = adult + child + privateSeatBabyCount;
 
       if (usedSeats > maxSeats) {
         notify?.error?.(
@@ -637,33 +716,27 @@ if (boxTourDetail) {
         );
 
         if (changedInput === inputAdult) {
-          const other = child + (includeBabySeat ? baby : 0);
-          adult = Math.max(0, maxSeats - other);
+          const other = child + privateSeatBabyCount;
+          adult = Math.max(1, maxSeats - other);
           inputAdult.value = adult;
         } else if (changedInput === inputChild) {
-          const other = adult + (includeBabySeat ? baby : 0);
+          const other = adult + privateSeatBabyCount;
           child = Math.max(0, maxSeats - other);
           inputChild.value = child;
-        } else if (includeBabySeat && changedInput === inputBaby) {
+        } else if (changedInput === inputBaby) {
           const other = adult + child;
           baby = Math.max(0, maxSeats - other);
           inputBaby.value = baby;
-        } else { // không phải là inputAdult, inputChild, inputBaby, 
+        } else {
           let overflow = usedSeats - maxSeats;
-          if (includeBabySeat && baby > 0 && overflow > 0) {
-            const dec = Math.min(baby, overflow);
-            baby -= dec;
-            overflow -= dec;
-            inputBaby.value = baby;
-          }
           if (child > 0 && overflow > 0) {
             const dec = Math.min(child, overflow);
             child -= dec;
             overflow -= dec;
             inputChild.value = child;
           }
-          if (adult > 0 && overflow > 0) {
-            const dec = Math.min(adult, overflow);
+          if (adult > 1 && overflow > 0) {
+            const dec = Math.min(adult - 1, overflow);
             adult -= dec;
             overflow -= dec;
             inputAdult.value = adult;
@@ -696,8 +769,9 @@ if (boxTourDetail) {
     if (babyUnitSpan)
       babyUnitSpan.textContent = unitForUi.toLocaleString("vi-VN");
 
+    const babySeatFeeTotal = privateSeatBabyCount * babySeatFee;
     const tourBasePrice = adult * priceAdultBase + child * priceChildBase + babyTotal;
-    const totalPrice = tourBasePrice + (currentExtraRoomCost || 0);
+    const totalPrice = tourBasePrice + (currentExtraRoomCost || 0) + babySeatFeeTotal;
     if (elementTotalPrice) {
       elementTotalPrice.textContent = (totalPrice || 0).toLocaleString("vi-VN");
     }
@@ -712,10 +786,18 @@ if (boxTourDetail) {
       drawBoxDetail(input);
       updateAgeInputs();
     });
+    if (input.name === "quantityAdult") {
+      input.addEventListener("blur", () => {
+        const v = parseInt(input.value || "0", 10) || 0;
+        if (v < 1) {
+          input.value = "1";
+          drawBoxDetail(input);
+          updateAgeInputs();
+        }
+      });
+    }
   });
-  if (seatBabyCheckbox) {
-    seatBabyCheckbox.addEventListener("change", () => drawBoxDetail(null));
-  }
+  // Event listener seatBabyCheckbox đã được loại bỏ (per-baby radio tự trigger drawBoxDetail)
 
   // === NHẬP TUỔI TỪNG TRẺ EM / EM BÉ ===
   const ageWrapper       = boxTourDetail.querySelector(".age-inputs-wrapper");
@@ -724,18 +806,34 @@ if (boxTourDetail) {
   const babiesGroup      = boxTourDetail.querySelector("#babies-ages-group");
   const babiesAgesList   = boxTourDetail.querySelector("#babies-ages-list");
 
+  function _clampAgeInput(inp, min, max) {
+    const raw = inp.value;
+    if (raw === "") return; // cho phép trống tạm thời khi đang gõ
+    const n = parseInt(raw, 10);
+    if (isNaN(n)) {
+      inp.value = String(min);
+      return;
+    }
+    if (n < min) inp.value = String(min);
+    else if (n > max) inp.value = String(max);
+    else inp.value = String(n);
+  }
+
   function renderAgeRows(container, count, min, max, labelPrefix, existingAges) {
     if (!container) return;
     // Giữ lại các giá trị hiện tại trước khi render lại
     const current = [];
     container.querySelectorAll(".age-input-row input").forEach(inp => {
-      current.push(parseInt(inp.value, 10) || min);
+      const v = parseInt(inp.value, 10);
+      current.push(isNaN(v) ? min : Math.min(max, Math.max(min, v)));
     });
     container.innerHTML = "";
     for (let i = 0; i < count; i++) {
-      const val = (existingAges && existingAges[i] !== undefined)
+      let raw = (existingAges && existingAges[i] !== undefined)
         ? existingAges[i]
         : (current[i] !== undefined ? current[i] : min);
+      const num = parseInt(raw, 10);
+      const val = isNaN(num) ? min : Math.min(max, Math.max(min, num));
       const row = document.createElement("div");
       row.className = "age-input-row";
       row.innerHTML = `
@@ -743,6 +841,13 @@ if (boxTourDetail) {
         <input class="age-input-field" type="number" min="${min}" max="${max}" value="${val}" required>
         <span class="age-input-hint">${min}–${max} tuổi</span>
       `;
+      const inp = row.querySelector("input");
+      inp.addEventListener("input", () => {
+        if (inp.value === "") return;
+        const n = parseInt(inp.value, 10);
+        if (!isNaN(n) && n > max) inp.value = String(max);
+      });
+      inp.addEventListener("blur", () => _clampAgeInput(inp, min, max));
       container.appendChild(row);
     }
   }
@@ -774,6 +879,9 @@ if (boxTourDetail) {
   // === ROOM SELECTION: validation, occupancy, extra cost (segment-level) ===
   const roomSelectionWrap = boxTourDetail.querySelector(".inner-room-selection");
   const requiredWarning = boxTourDetail.querySelector(".room-selection-required-warning");
+  const privateMinAdultsWarning = boxTourDetail.querySelector(
+    ".private-min-adults-warning"
+  );
   const isRoomRequired = roomSelectionWrap && roomSelectionWrap.getAttribute("data-required") === "1";
 
   // ── ACCOMMODATION MODE (Ở riêng / Ở ghép) ──────────────────────────────────
@@ -783,6 +891,9 @@ if (boxTourDetail) {
   );
   const sharedRequiredWarning = boxTourDetail.querySelector(
     ".shared-room-required-warning"
+  );
+  const sharedFeasibilityWarning = boxTourDetail.querySelector(
+    ".shared-feasibility-warning"
   );
   const passengerListWrap = boxTourDetail.querySelector(
     ".shared-passenger-list"
@@ -809,16 +920,11 @@ if (boxTourDetail) {
    * Index bám theo thứ tự render (NL trước, TE giữa, EB cuối) → khi user đổi
    * số lượng ở quantity inputs, ta re-render và cố gắng giữ data theo idx.
    */
-  let passengerState = [];
+  // passengerState khai báo ở trên (trước drawBoxDetail).
 
   /**
-   * State phân bổ phòng cho mode "Ở riêng".
-   * Key: `${fromDate}|${toDate}|${hotelId}|${roomTypeId}|${roomIndex}` (1 phòng vật lý).
-   * Value: Set<number> — các idx hành khách đã gán vào phòng này.
-   * Mỗi segment có thể có nhiều hotel × roomType × room. State sống độc lập
-   * với DOM để tránh mất khi user đổi số phòng.
+   * State phân bổ phòng cho mode "Ở riêng" — khai báo ở trên cùng passengerState.
    */
-  const privateAssignmentState = new Map();
   function _privateAssignKey(fromDate, toDate, hotelId, roomTypeId, roomIndex) {
     return [fromDate, toDate, hotelId, roomTypeId, roomIndex].join("|");
   }
@@ -943,6 +1049,27 @@ if (boxTourDetail) {
     return bad;
   }
 
+  /**
+   * Số NL tối thiểu (ở riêng): max số phòng trong một khung thời gian,
+   * không cộng các khung (khách không ở đồng thời mọi khung).
+   */
+  function getPrivateMinAdultsRequired() {
+    if (!roomSelectionWrap) return 0;
+    let maxRooms = 0;
+    roomSelectionWrap.querySelectorAll(".room-time-segment").forEach((segEl) => {
+      let segRooms = 0;
+      segEl.querySelectorAll(".room-qty-input").forEach((inp) => {
+        segRooms += Math.max(0, parseInt(inp.value || "0", 10) || 0);
+      });
+      if (segRooms > maxRooms) maxRooms = segRooms;
+    });
+    return maxRooms;
+  }
+
+  function hasAnyPrivateRoomsSelected() {
+    return getPrivateMinAdultsRequired() > 0;
+  }
+
   function collectRoomSelections() {
     const selections = [];
     if (!roomSelectionWrap) return selections;
@@ -1010,13 +1137,23 @@ if (boxTourDetail) {
     const newState = [];
     for (let i = 0; i < adults; i++) {
       const prev = passengerState.find((p) => p.idx === i && p.type === "adult");
+      const prevGuardian =
+        prev && typeof prev.guardianIdx === "number" ? prev.guardianIdx : null;
+      const prevAge = prev ? _parsePassengerAge(prev) : NaN;
+      const needsGuardian =
+        !isNaN(prevAge) && prevAge < privateRoomAdultMinAge;
       newState.push({
         idx: i,
         type: "adult",
         name: prev ? prev.name : "",
         age: prev ? prev.age : "",
         gender: prev ? prev.gender : "",
-        guardianIdx: null,
+        guardianIdx:
+          needsGuardian &&
+          prevGuardian !== null &&
+          prevGuardian < adults
+            ? prevGuardian
+            : null,
       });
     }
     for (let i = 0; i < children; i++) {
@@ -1040,9 +1177,12 @@ if (boxTourDetail) {
       const idx = adults + children + i;
       const prev = passengerState.find((p) => p.idx === idx && p.type === "baby");
       const prevGuardian = prev && typeof prev.guardianIdx === "number" ? prev.guardianIdx : null;
+      const prevRoomGuardian =
+        prev && typeof prev.roomGuardianIdx === "number" ? prev.roomGuardianIdx : null;
       const ageFromMini = Number.isFinite(Number(babyAges[i]))
         ? Math.max(0, parseInt(babyAges[i], 10) || 0)
         : "";
+      const prevBabySeatType = prev ? prev.babySeatType : null;
       newState.push({
         idx,
         type: "baby",
@@ -1050,11 +1190,121 @@ if (boxTourDetail) {
         // Tuổi em bé luôn đồng bộ từ khối "Tuổi hành khách nhỏ".
         age: ageFromMini,
         gender: "",
+        // guardianIdx = người lớn ngồi cùng trên TOUR (xe/máy bay)
         guardianIdx: prevGuardian !== null && prevGuardian < adults ? prevGuardian : null,
+        // roomGuardianIdx = người lớn ở cùng PHÒNG khách sạn (dùng để xếp atom)
+        roomGuardianIdx:
+          prevRoomGuardian !== null && prevRoomGuardian < adults
+            ? prevRoomGuardian
+            : null,
+        // Loại chỗ ngồi: 'shared' = ngồi cùng NL, 'private' = ghế riêng, null = chưa chọn
+        babySeatType: prevBabySeatType,
       });
     }
     passengerState = newState;
     return totalCount;
+  }
+
+  function _clearGuardianSelectDebounce(idx) {
+    const timerId = guardianSelectDebounceTimers.get(idx);
+    if (timerId) {
+      clearTimeout(timerId);
+      guardianSelectDebounceTimers.delete(idx);
+    }
+  }
+
+  function _clearAllGuardianSelectDebounces() {
+    guardianSelectDebounceTimers.forEach((timerId) => clearTimeout(timerId));
+    guardianSelectDebounceTimers.clear();
+  }
+
+  /** Sau khi người dùng ngừng gõ tuổi một lúc, mới hiện/ẩn khối chọn người đi cùng. */
+  function _scheduleGuardianSelectSync(row, p) {
+    _clearGuardianSelectDebounce(p.idx);
+    const timerId = setTimeout(() => {
+      guardianSelectDebounceTimers.delete(p.idx);
+      if (!row.isConnected) return;
+      _syncGuardianSelectOnRow(row, p);
+      _refreshGuardianOptions();
+      updateRoomValidation();
+    }, GUARDIAN_SELECT_DEBOUNCE_MS);
+    guardianSelectDebounceTimers.set(p.idx, timerId);
+  }
+
+  function _appendGuardianSelect(row, p) {
+    const guardianSelect = document.createElement("select");
+    guardianSelect.className = "passenger-guardian";
+    guardianSelect.setAttribute("data-idx", String(p.idx));
+    if (p.type === "baby") {
+      guardianSelect.title = "Người lớn ngồi cùng em bé trên tour";
+    }
+    guardianSelect.addEventListener("change", () => {
+      p.guardianIdx =
+        guardianSelect.value === "" ? null : parseInt(guardianSelect.value, 10);
+      updateRoomValidation();
+    });
+    row.appendChild(guardianSelect);
+    return guardianSelect;
+  }
+
+  /** Select "Em bé ở cùng ai trong phòng khách sạn" — chỉ render khi ở ghép + baby. */
+  function _appendRoomGuardianSelect(row, p) {
+    const wrap = document.createElement("div");
+    wrap.className = "baby-room-guardian passenger-guardian-wrap";
+    wrap.setAttribute("data-idx", String(p.idx));
+    wrap.style.cssText =
+      "display:flex;align-items:center;gap:6px;flex:1 1 100%;margin-top:6px;font-size:13px;color:#444";
+
+    const label = document.createElement("span");
+    label.className = "baby-room-guardian__label";
+    label.style.cssText = "white-space:nowrap;color:#5c7cfa;font-weight:500";
+    label.innerHTML =
+      '<i class="fa-solid fa-bed" style="margin-right:4px"></i>Ở phòng cùng:';
+    wrap.appendChild(label);
+
+    const sel = document.createElement("select");
+    sel.className = "passenger-room-guardian";
+    sel.setAttribute("data-idx", String(p.idx));
+    sel.title = "Người lớn em bé sẽ ở cùng phòng khách sạn";
+    sel.addEventListener("change", () => {
+      p.roomGuardianIdx =
+        sel.value === "" ? null : parseInt(sel.value, 10);
+      updateRoomValidation();
+    });
+    wrap.appendChild(sel);
+    row.appendChild(wrap);
+    return sel;
+  }
+
+  function _babyNeedsRoomGuardian(p) {
+    return (
+      p &&
+      p.type === "baby" &&
+      getAccommodationMode() === "shared"
+    );
+  }
+
+  function _syncGuardianSelectOnRow(row, p) {
+    const needs = _passengerNeedsGuardian(p);
+    let sel = row.querySelector(".passenger-guardian");
+    if (needs && !sel) {
+      _appendGuardianSelect(row, p);
+      _refreshGuardianOptions();
+    } else if (!needs && sel) {
+      p.guardianIdx = null;
+      sel.remove();
+    }
+
+    // Quản lý select "Ở phòng cùng" cho em bé khi ở ghép
+    const needsRoom = _babyNeedsRoomGuardian(p);
+    let roomWrap = row.querySelector(".baby-room-guardian");
+    if (needsRoom && !roomWrap) {
+      _appendRoomGuardianSelect(row, p);
+      _refreshGuardianOptions();
+    } else if (!needsRoom && roomWrap) {
+      p.roomGuardianIdx = null;
+      roomWrap.remove();
+    }
   }
 
   function _renderPassengerRow(p) {
@@ -1083,9 +1333,17 @@ if (boxTourDetail) {
     const ageInput = document.createElement("input");
     ageInput.type = "number";
     ageInput.className = "passenger-age";
-    ageInput.min = "0";
-    ageInput.max = "120";
-    ageInput.placeholder = "Tuổi";
+    if (p.type === "adult") {
+      const adultMin = ageChildMax + 1;
+      ageInput.min = String(adultMin);
+      ageInput.max = "120";
+      ageInput.placeholder = `Tuổi (≥ ${adultMin})`;
+      ageInput.title = `Người lớn từ ${adultMin} tuổi trở lên`;
+    } else {
+      ageInput.min = "0";
+      ageInput.max = "120";
+      ageInput.placeholder = "Tuổi";
+    }
     ageInput.value = p.age === "" ? "" : String(p.age);
     if (p.type !== "adult") {
       // Trẻ em/em bé lấy tuổi từ khối "Tuổi hành khách nhỏ", không sửa tại đây.
@@ -1094,6 +1352,19 @@ if (boxTourDetail) {
     }
     ageInput.addEventListener("input", () => {
       p.age = ageInput.value === "" ? "" : Math.max(0, parseInt(ageInput.value, 10) || 0);
+      if (p.type === "adult") {
+        // Cập nhật nhãn tuổi trong mọi dropdown "người lớn đi cùng" (em bé / TE / NL trẻ).
+        _refreshGuardianOptions();
+        if (getAccommodationMode() === "shared") {
+          // Ẩn dropdown trên dòng đang sửa trong lúc gõ; sau debounce mới quyết định hiện lại.
+          const sel = row.querySelector(".passenger-guardian");
+          if (sel) {
+            p.guardianIdx = null;
+            sel.remove();
+          }
+          _scheduleGuardianSelectSync(row, p);
+        }
+      }
       updateRoomValidation();
     });
     row.appendChild(ageInput);
@@ -1126,52 +1397,174 @@ if (boxTourDetail) {
         genderWrap.appendChild(lbl);
       });
       row.appendChild(genderWrap);
-    } else if (getAccommodationMode() === "shared") {
-      // Guardian select chỉ hiện khi ở ghép; ở riêng không cần.
-      const guardianSelect = document.createElement("select");
-      guardianSelect.className = "passenger-guardian";
-      guardianSelect.setAttribute("data-idx", String(p.idx));
-      guardianSelect.addEventListener("change", () => {
-        p.guardianIdx =
-          guardianSelect.value === "" ? null : parseInt(guardianSelect.value, 10);
-        updateRoomValidation();
-      });
-      row.appendChild(guardianSelect);
+    }
+
+    // EM BÉ: hiển thị chỗ ngồi
+    if (p.type === "baby") {
+      if (maxBabiesPerAdult === 0) {
+        // Auto mode: tất cả em bé tự động chiếm ghế, chỉ hiện badge thông báo
+        const autoBadge = document.createElement("div");
+        autoBadge.className = "baby-seat-auto-badge";
+        autoBadge.innerHTML =
+          '<i class="fa-solid fa-chair" style="margin-right:4px"></i>' +
+          "Tự động chiếm 1 vị trí tour";
+        row.appendChild(autoBadge);
+        // Đặt babySeatType = 'private' tự động (không cần chọn)
+        p.babySeatType = "private";
+      } else {
+        // Picker mode: cho khách chọn
+        const seatPickerWrap = document.createElement("div");
+        seatPickerWrap.className = "baby-seat-picker";
+
+        const seatLabel = document.createElement("span");
+        seatLabel.className = "baby-seat-picker__label";
+        seatLabel.textContent = "Chỗ ngồi:";
+        seatPickerWrap.appendChild(seatLabel);
+
+        const options = [
+          { value: "shared", label: "Ngồi cùng người lớn" },
+          {
+            value: "private",
+            label:
+              babySeatFee > 0
+                ? "Ghế ngồi riêng (+" + babySeatFee.toLocaleString("vi-VN") + "đ)"
+                : "Ghế ngồi riêng (miễn phí)",
+          },
+        ];
+
+        options.forEach(({ value, label }) => {
+          const lbl = document.createElement("label");
+          lbl.className = "baby-seat-option";
+          const inp = document.createElement("input");
+          inp.type = "radio";
+          inp.name = "baby_seat_type_" + p.idx;
+          inp.value = value;
+          if (p.babySeatType === value) inp.checked = true;
+          inp.addEventListener("change", () => {
+            if (inp.checked) {
+              p.babySeatType = value;
+              if (value === "private") {
+                p.guardianIdx = null;
+              }
+              renderPassengerRows();
+              updateRoomValidation();
+            }
+          });
+          lbl.appendChild(inp);
+          lbl.appendChild(document.createTextNode(" " + label));
+          seatPickerWrap.appendChild(lbl);
+        });
+
+        row.appendChild(seatPickerWrap);
+      }
+    }
+
+    // EB với "Ngồi cùng người lớn" hoặc TE/NL trẻ ở ghép phải chọn người đi cùng.
+    if (_passengerNeedsGuardian(p)) {
+      _appendGuardianSelect(row, p);
+    }
+
+    // Em bé ở ghép: thêm select riêng "Ở phòng cùng" (anchor adult 18+)
+    if (_babyNeedsRoomGuardian(p)) {
+      _appendRoomGuardianSelect(row, p);
     }
 
     return row;
   }
 
+  /** NL có thể làm người đi cùng em bé (mọi tuổi tính giá NL). */
+  function _isBabyGuardianCandidate(p) {
+    return p && p.type === "adult";
+  }
+
+  /** NL ≥18 tuổi, hoặc chưa khai tuổi — dùng cho TE / NL trẻ (ở ghép). */
+  function _getGuardianCandidateAdults(forPassenger) {
+    if (forPassenger && forPassenger.type === "baby") {
+      return passengerState.filter((p) => _isBabyGuardianCandidate(p));
+    }
+    return passengerState.filter((p) => {
+      if (p.type !== "adult") return false;
+      const ageNum = _parsePassengerAge(p);
+      return isNaN(ageNum) || ageNum >= privateRoomAdultMinAge;
+    });
+  }
+
+  function _isValidBabyGuardian(guardian) {
+    return _isBabyGuardianCandidate(guardian);
+  }
+
   function _refreshGuardianOptions() {
     if (!passengerRowsWrap) return;
-    // Ở mode "private" không có guardian select — không cần refresh.
-    if (getAccommodationMode() !== "shared") return;
-    const adults = passengerState.filter((p) => p.type === "adult");
-    passengerRowsWrap.querySelectorAll(".passenger-guardian").forEach((sel) => {
+
+    // Select 1: passenger-guardian (NL đi cùng — chỗ ngồi tour hoặc atom)
+    const guardianSelects = passengerRowsWrap.querySelectorAll(".passenger-guardian");
+    guardianSelects.forEach((sel) => {
       const idx = parseInt(sel.getAttribute("data-idx") || "-1", 10);
       const ps = passengerState.find((p) => p.idx === idx);
       if (!ps) return;
+      const candidates = _getGuardianCandidateAdults(ps);
       const prevValue = ps.guardianIdx === null ? "" : String(ps.guardianIdx);
       sel.innerHTML = "";
       const empty = document.createElement("option");
       empty.value = "";
-      empty.textContent = "-- Chọn người lớn đi cùng --";
+      empty.textContent =
+        ps.type === "baby"
+          ? "-- Người lớn ngồi cùng trên tour --"
+          : "-- Chọn người lớn ở cùng --";
       sel.appendChild(empty);
-      adults.forEach((a) => {
+      candidates.forEach((a) => {
         const opt = document.createElement("option");
         opt.value = String(a.idx);
+        const ageNum = _parsePassengerAge(a);
         const display = a.name && a.name.trim() ? a.name.trim() : "Người lớn #" + (a.idx + 1);
-        opt.textContent = display;
+        opt.textContent = isNaN(ageNum)
+          ? `${display} (chưa khai tuổi)`
+          : `${display} (${ageNum} tuổi)`;
         if (prevValue === String(a.idx)) opt.selected = true;
         sel.appendChild(opt);
       });
-      // Nếu guardian cũ không còn (vd giảm số người lớn), reset về "".
       if (sel.value === "") ps.guardianIdx = null;
+    });
+
+    // Select 2: passenger-room-guardian (chỉ em bé ở ghép) — ứng viên = anchor adult 18+
+    const roomSelects = passengerRowsWrap.querySelectorAll(".passenger-room-guardian");
+    roomSelects.forEach((sel) => {
+      const idx = parseInt(sel.getAttribute("data-idx") || "-1", 10);
+      const ps = passengerState.find((p) => p.idx === idx);
+      if (!ps) return;
+      // Phải là anchor adult (18+, hoặc chưa khai tuổi)
+      const candidates = passengerState.filter((p) => {
+        if (p.type !== "adult") return false;
+        const ageNum = _parsePassengerAge(p);
+        return isNaN(ageNum) || ageNum >= privateRoomAdultMinAge;
+      });
+      const prevValue =
+        ps.roomGuardianIdx === null || ps.roomGuardianIdx === undefined
+          ? ""
+          : String(ps.roomGuardianIdx);
+      sel.innerHTML = "";
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "-- Người lớn ở cùng phòng --";
+      sel.appendChild(empty);
+      candidates.forEach((a) => {
+        const opt = document.createElement("option");
+        opt.value = String(a.idx);
+        const ageNum = _parsePassengerAge(a);
+        const display = a.name && a.name.trim() ? a.name.trim() : "Người lớn #" + (a.idx + 1);
+        opt.textContent = isNaN(ageNum)
+          ? `${display} (chưa khai tuổi)`
+          : `${display} (${ageNum} tuổi)`;
+        if (prevValue === String(a.idx)) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      if (sel.value === "") ps.roomGuardianIdx = null;
     });
   }
 
   function renderPassengerRows() {
     if (!passengerRowsWrap) return;
+    _clearAllGuardianSelectDebounces();
     _ensurePassengerSlots();
     passengerRowsWrap.innerHTML = "";
     passengerState.forEach((p) => {
@@ -1185,7 +1578,8 @@ if (boxTourDetail) {
    * - Tên non-empty cho mọi người.
    * - Tuổi phải khai (>=0).
    * - Adult phải chọn gender.
-   * - Child/baby phải chọn guardian.
+   * - Child/baby phải chọn guardian (ở ghép).
+   * - Ở ghép: đoàn phải có ≥ 1 người lớn từ 18 tuổi trở lên.
    */
   function validatePassengers() {
     const errors = [];
@@ -1207,23 +1601,221 @@ if (boxTourDetail) {
         rowEl?.classList.add("is-invalid");
       }
       if (p.type === "adult") {
+        const adultMin = ageChildMax + 1;
+        const ageNum = p.age === "" || p.age === null || p.age === undefined
+          ? NaN : parseInt(p.age, 10);
+        if (!isNaN(ageNum) && ageNum < adultMin) {
+          errors.push(label + `: tuổi người lớn phải từ ${adultMin} trở lên (đang nhập ${ageNum}).`);
+          rowEl?.classList.add("is-invalid");
+        }
         if (p.gender === "male") derivedMales++;
         else if (p.gender === "female") derivedFemales++;
         else {
           errors.push(label + ": chưa chọn giới tính.");
           rowEl?.classList.add("is-invalid");
         }
-      } else {
-        // Guardian chỉ bắt buộc ở mode "ở ghép".
-        if (
+        if (_passengerNeedsGuardian(p)) {
+          if (p.guardianIdx === null || p.guardianIdx === undefined) {
+            errors.push(
+              label +
+                ": chưa chọn người lớn đi cùng từ " +
+                privateRoomAdultMinAge +
+                " tuổi trở lên."
+            );
+            rowEl?.classList.add("is-invalid");
+          } else {
+            const guardian = passengerState.find((g) => g.idx === p.guardianIdx);
+            if (!guardian || !_isAnchorAdult18(guardian)) {
+              errors.push(
+                label +
+                  ": người đi cùng phải từ " +
+                  privateRoomAdultMinAge +
+                  " tuổi trở lên."
+              );
+              rowEl?.classList.add("is-invalid");
+            }
+          }
+        } else if (
           getAccommodationMode() === "shared" &&
-          (p.guardianIdx === null || p.guardianIdx === undefined)
+          _isAnchorAdult18(p) &&
+          p.guardianIdx !== null &&
+          p.guardianIdx !== undefined
         ) {
-          errors.push(label + ": chưa chọn người lớn đi cùng.");
+          errors.push(
+            label +
+              ": người lớn từ " +
+              privateRoomAdultMinAge +
+              " tuổi trở lên không cần chọn người đi cùng."
+          );
           rowEl?.classList.add("is-invalid");
+        }
+      } else if (_passengerNeedsGuardian(p)) {
+        if (p.guardianIdx === null || p.guardianIdx === undefined) {
+          errors.push(
+            label +
+              ": chưa chọn người lớn đi cùng từ " +
+              privateRoomAdultMinAge +
+              " tuổi trở lên."
+          );
+          rowEl?.classList.add("is-invalid");
+        } else {
+          const guardian = passengerState.find((g) => g.idx === p.guardianIdx);
+          if (!guardian || !_isAnchorAdult18(guardian)) {
+            errors.push(
+              label +
+                ": người đi cùng phải từ " +
+                privateRoomAdultMinAge +
+                " tuổi trở lên."
+            );
+            rowEl?.classList.add("is-invalid");
+          }
         }
       }
     });
+
+    // Ở ghép: đoàn phải có ít nhất 1 người lớn từ 18 tuổi trở lên
+    if (getAccommodationMode() === "shared" && passengerState.length > 0) {
+      const hasAdult18Plus = passengerState.some((p) => {
+        if (p.type !== "adult") return false;
+        const ageNum =
+          p.age === "" || p.age === null || p.age === undefined
+            ? NaN
+            : parseInt(p.age, 10);
+        return !isNaN(ageNum) && ageNum >= privateRoomAdultMinAge;
+      });
+      if (!hasAdult18Plus) {
+        errors.push(
+          "Đoàn phải có ít nhất 1 người lớn từ " +
+            privateRoomAdultMinAge +
+            " tuổi trở lên."
+        );
+      }
+    }
+
+    // === Validate chỗ ngồi em bé ===
+    const babies = passengerState.filter((p) => p.type === "baby");
+    if (babies.length > 0) {
+      // Dù em bé ở chế độ nào, đoàn vẫn phải có ít nhất 1 người lớn từ 18 tuổi trở lên
+      const hasAdult18PlusInGroup = passengerState.some((p) => _isAnchorAdult18(p));
+      if (!hasAdult18PlusInGroup) {
+        errors.push(
+          "Đoàn có em bé phải có ít nhất 1 người lớn từ " +
+            privateRoomAdultMinAge +
+            " tuổi trở lên đi cùng."
+        );
+      }
+
+      // === Em bé khi ở ghép PHẢI chọn "Ở phòng cùng" (cả picker & auto mode) ===
+      if (getAccommodationMode() === "shared") {
+        babies.forEach((p) => {
+          const rowEl = passengerRowsWrap
+            ? passengerRowsWrap.querySelector(
+                `.passenger-row[data-idx="${p.idx}"][data-type="baby"]`
+              )
+            : null;
+          const label = "#" + (p.idx + 1);
+          if (p.roomGuardianIdx === null || p.roomGuardianIdx === undefined) {
+            errors.push(
+              label + " (Em bé): chưa chọn người lớn ở cùng phòng khách sạn."
+            );
+            rowEl?.classList.add("is-invalid");
+          } else {
+            const roomG = passengerState.find(
+              (g) => g.idx === p.roomGuardianIdx
+            );
+            if (!roomG || !_isAnchorAdult18(roomG)) {
+              errors.push(
+                label +
+                  " (Em bé): người ở cùng phòng phải là người lớn từ " +
+                  privateRoomAdultMinAge +
+                  " tuổi trở lên trong đoàn."
+              );
+              rowEl?.classList.add("is-invalid");
+            }
+          }
+        });
+      }
+
+      if (maxBabiesPerAdult === 0) {
+        // Auto mode: không cần validate chỗ ngồi vì tất cả tự động chiếm ghế
+      } else {
+        // Picker mode: validate từng em bé đã chọn loại ghế và guardian hợp lệ
+        const babiesPerGuardian = {};
+
+        babies.forEach((p) => {
+          const rowEl = passengerRowsWrap
+            ? passengerRowsWrap.querySelector(`.passenger-row[data-idx="${p.idx}"][data-type="baby"]`)
+            : null;
+          const label = "#" + (p.idx + 1);
+
+          // Phải chọn loại chỗ ngồi
+          if (!p.babySeatType) {
+            errors.push(label + " (Em bé): chưa chọn loại chỗ ngồi (Ngồi cùng người lớn / Ghế ngồi riêng).");
+            rowEl?.classList.add("is-invalid");
+            return;
+          }
+
+          if (p.babySeatType === "shared") {
+            // Phải chọn người lớn đi cùng (mọi tuổi tính giá NL)
+            if (p.guardianIdx === null || p.guardianIdx === undefined) {
+              errors.push(label + " (Em bé): chưa chọn người lớn đi cùng.");
+              rowEl?.classList.add("is-invalid");
+            } else {
+              const guardian = passengerState.find((g) => g.idx === p.guardianIdx);
+              if (!guardian || !_isValidBabyGuardian(guardian)) {
+                errors.push(label + " (Em bé): người đi cùng phải là người lớn trong đoàn.");
+                rowEl?.classList.add("is-invalid");
+              } else {
+                const gid = p.guardianIdx;
+                babiesPerGuardian[gid] = (babiesPerGuardian[gid] || 0) + 1;
+              }
+            }
+          }
+          // Nếu babySeatType === 'private': không cần guardian select
+        });
+
+        // Kiểm tra số em bé tối đa / người lớn
+        Object.entries(babiesPerGuardian).forEach(([adultIdx, count]) => {
+          if (count > maxBabiesPerAdult) {
+            const guardian = passengerState.find((g) => g.idx === parseInt(adultIdx, 10));
+            const guardianLabel = guardian && guardian.name
+              ? guardian.name
+              : "Người lớn #" + (parseInt(adultIdx, 10) + 1);
+            errors.push(
+              guardianLabel +
+                " đang đi cùng " +
+                count +
+                " em bé, vượt quá giới hạn tối đa " +
+                maxBabiesPerAdult +
+                " em bé/người lớn."
+            );
+          }
+        });
+      }
+    }
+
+    // Ở riêng: NL tối thiểu = max số phòng trong một khung (không cộng các khung)
+    if (getAccommodationMode() === "private") {
+      const minAdultsRequired = getPrivateMinAdultsRequired();
+      if (minAdultsRequired > 0) {
+        const qa =
+          parseInt(
+            boxTourDetail.querySelector(`[name="quantityAdult"]`)?.value || "0",
+            10
+          ) || 0;
+        const adults18 =
+          passengerState.length > 0 ? _countAdults18PlusInState() : 0;
+        if (qa < minAdultsRequired || adults18 < minAdultsRequired) {
+          errors.push(
+            _formatPrivateMinAdultsRequiredMessage(
+              minAdultsRequired,
+              adults18
+            )
+          );
+        }
+      }
+    }
+
     return {
       ok: errors.length === 0,
       message: errors.join("\n"),
@@ -1276,8 +1868,283 @@ if (boxTourDetail) {
       age: p.age === "" ? 0 : Math.max(0, parseInt(p.age, 10) || 0),
       type: p.type,
       gender: p.type === "adult" ? p.gender || null : null,
-      guardianIdx: p.type === "adult" ? null : p.guardianIdx,
+      guardianIdx: _passengerNeedsGuardian(p) ? p.guardianIdx : null,
+      // roomGuardianIdx: chỉ áp dụng cho em bé khi ở ghép — xác định phòng KS
+      roomGuardianIdx: _babyNeedsRoomGuardian(p)
+        ? p.roomGuardianIdx
+        : undefined,
+      babySeatType: p.type === "baby" ? (p.babySeatType || null) : undefined,
     }));
+  }
+
+  // ── Ở ghép: kiểm tra NL đủ phân bổ TE/EB theo baseOccupancy ─────────────
+  const SHARED_INSUFFICIENT_ADULTS_MSG =
+    "Số lượng trẻ em đi cùng vượt quá khả năng phân bổ phòng ở ghép. " +
+    "Với loại phòng hiện tại, mỗi phòng cần có ít nhất 1 người lớn đi kèm trẻ em. " +
+    "Vui lòng bổ sung người lớn đi cùng hoặc liên hệ công ty du lịch để được hỗ trợ.";
+
+  let sharedFeasibilityOk = true;
+  let sharedFeasibilityMessage = "";
+  let sharedFeasibilityTimer = null;
+  let sharedFeasibilityRequestId = 0;
+
+  const _companySlugMatch = window.location.pathname.match(
+    /^\/company\/([^/]+)\/tour\//
+  );
+  const sharedFeasibilityCheckUrl = _companySlugMatch
+    ? `/company/${_companySlugMatch[1]}/tour/check-shared-feasibility`
+    : "/tour/check-shared-feasibility";
+
+  function parseTourRoomSegmentsFromDom() {
+    if (!sharedSelectionWrap) return [];
+    try {
+      const raw = sharedSelectionWrap.getAttribute("data-room-segments");
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function _clientWeightForAge(age, type, ageBands) {
+    if (Array.isArray(ageBands) && ageBands.length > 0) {
+      const band = ageBands.find((b) => {
+        if (!b || b.countInOccupancy === false) return false;
+        const min = Number(b.minAge) || 0;
+        const max =
+          b.maxAge === null || b.maxAge === undefined
+            ? Infinity
+            : Number(b.maxAge);
+        return age >= min && age <= max;
+      });
+      if (band) {
+        const w = Number(band.occupancyWeight);
+        if (!isNaN(w)) return w;
+      }
+    }
+    if (type === "baby") return 0;
+    if (type === "child") return 0.5;
+    return 1;
+  }
+
+  function _buildAtomsClient(passengers, ageBands) {
+    const list = (passengers || []).map((p, i) => ({
+      idx: typeof p.idx === "number" ? p.idx : i,
+      name: String(p.name || "").trim(),
+      age: Math.max(0, parseInt(p.age, 10) || 0),
+      type: p.type === "child" || p.type === "baby" ? p.type : "adult",
+      gender: p.gender === "male" || p.gender === "female" ? p.gender : null,
+      guardianIdx:
+        p.guardianIdx === null || p.guardianIdx === undefined
+          ? null
+          : parseInt(p.guardianIdx, 10),
+      // Em bé: roomGuardianIdx quyết định phòng KS; fallback guardianIdx
+      roomGuardianIdx:
+        p.roomGuardianIdx === null || p.roomGuardianIdx === undefined
+          ? null
+          : parseInt(p.roomGuardianIdx, 10),
+      babySeatType:
+        p.babySeatType === "private" || p.babySeatType === "shared"
+          ? p.babySeatType
+          : undefined,
+    }));
+    const anchorAdults = list.filter((p) => p.type === "adult" && _isAnchorAdult18(p));
+    const anchorByIdx = new Set(anchorAdults.map((a) => a.idx));
+    // Cho em bé: ưu tiên roomGuardianIdx, fallback guardianIdx
+    const _babyAtomAnchor = (b) =>
+      b.roomGuardianIdx !== null ? b.roomGuardianIdx : b.guardianIdx;
+    const atoms = anchorAdults.map((a) => {
+      const members = [
+        a,
+        ...list.filter((p) => {
+          if (p.idx === a.idx) return false;
+          if (p.type === "baby") {
+            // baby ghép vào atom theo roomGuardianIdx (mới) hoặc guardianIdx (cũ)
+            return _babyAtomAnchor(p) === a.idx;
+          }
+          return p.guardianIdx === a.idx;
+        }),
+      ];
+      const effectiveSize = members.reduce(
+        (sum, m) => sum + _clientWeightForAge(m.age, m.type, ageBands),
+        0
+      );
+      return { members, effectiveSize, adultCount: 1, anchorIdx: a.idx };
+    });
+    list.forEach((baby) => {
+      if (baby.type !== "baby") return;
+      const babyAnchor = _babyAtomAnchor(baby);
+      if (babyAnchor === null || anchorByIdx.has(babyAnchor)) return;
+      const atom = atoms.find((at) =>
+        (at.members || []).some((m) => m.idx === babyAnchor)
+      );
+      if (atom && !atom.members.some((m) => m.idx === baby.idx)) {
+        atom.members.push(baby);
+        atom.effectiveSize = atom.members.reduce(
+          (sum, m) => sum + _clientWeightForAge(m.age, m.type, ageBands),
+          0
+        );
+      }
+    });
+    return atoms;
+  }
+
+  function _validateAtomsOfflineForHotel(atoms, hotels) {
+    if (!hotels || hotels.length === 0) return { ok: true };
+    for (const atom of atoms) {
+      const dependents = (atom.members || []).filter(
+        (m) => m.type === "child" || m.type === "baby"
+      );
+      if (dependents.length === 0) continue;
+      let fits = false;
+      for (const hotel of hotels) {
+        const caps = (hotel.roomTypes || [])
+          .map((rt) => Math.max(1, parseInt(rt.baseOccupancy, 10) || 2))
+          .filter((c) => c > 0);
+        if (!caps.length) continue;
+        const maxCap = Math.max(...caps);
+        const ageBands = hotel.ageBands || [];
+        const size = (atom.members || []).reduce(
+          (sum, m) => sum + _clientWeightForAge(m.age, m.type, ageBands),
+          0
+        );
+        const remaining = Math.max(0, maxCap - 1);
+        let minChildW = 0.5;
+        const weights = (ageBands || [])
+          .filter((b) => b && b.countInOccupancy !== false)
+          .map((b) => Number(b.occupancyWeight))
+          .filter((w) => !isNaN(w) && w > 0);
+        if (weights.length) minChildW = Math.min(...weights);
+        const maxDepSlots = Math.floor(remaining / minChildW);
+        if (size <= maxCap && dependents.length <= maxDepSlots) {
+          fits = true;
+          break;
+        }
+      }
+      if (!fits) {
+        return { ok: false, message: SHARED_INSUFFICIENT_ADULTS_MSG };
+      }
+    }
+    return { ok: true };
+  }
+
+  function collectSharedFeasibilityFrames() {
+    const frames = [];
+    if (!sharedSelectionWrap) return frames;
+    sharedSelectionWrap
+      .querySelectorAll(".shared-room-segment")
+      .forEach((segEl) => {
+        const tourSegmentId = segEl.getAttribute("data-tour-segment-id");
+        const fromDate = segEl.getAttribute("data-from-date");
+        const toDate = segEl.getAttribute("data-to-date");
+        if (!tourSegmentId || !fromDate || !toDate) return;
+        const candidateHotels = Array.from(
+          segEl.querySelectorAll(".shared-room-hotel-block__candidate")
+        ).map((el) => ({
+          hotelId: el.getAttribute("data-hotel-id") || "",
+          hotelName: el.getAttribute("data-hotel-name") || "",
+        }));
+        frames.push({
+          tourSegmentId,
+          fromDate,
+          toDate,
+          candidateHotels,
+        });
+      });
+    return frames;
+  }
+
+  function applySharedFeasibilityUI() {
+    if (!sharedFeasibilityWarning) return;
+    const mode = getAccommodationMode();
+    if (mode !== "shared" || sharedFeasibilityOk || !sharedFeasibilityMessage) {
+      sharedFeasibilityWarning.style.display = "none";
+      sharedFeasibilityWarning.textContent = "";
+      return;
+    }
+    sharedFeasibilityWarning.textContent = sharedFeasibilityMessage;
+    sharedFeasibilityWarning.style.display = "";
+  }
+
+  function offlineCheckSharedFeasibility() {
+    const segments = parseTourRoomSegmentsFromDom();
+    if (!segments.length) {
+      sharedFeasibilityOk = true;
+      sharedFeasibilityMessage = "";
+      return;
+    }
+    const passengers = collectPassengers();
+    const adults = passengers.filter((p) => p.type === "adult");
+    if (adults.length === 0) {
+      sharedFeasibilityOk = true;
+      sharedFeasibilityMessage = "";
+      return;
+    }
+    for (const seg of segments) {
+      const hotels = seg.hotels || [];
+      if (!hotels.length) continue;
+      const atoms = _buildAtomsClient(passengers, hotels[0].ageBands || []);
+      const check = _validateAtomsOfflineForHotel(atoms, hotels);
+      if (!check.ok) {
+        sharedFeasibilityOk = false;
+        sharedFeasibilityMessage = check.message;
+        return;
+      }
+    }
+    sharedFeasibilityOk = true;
+    sharedFeasibilityMessage = "";
+  }
+
+  async function remoteCheckSharedFeasibility() {
+    const reqId = ++sharedFeasibilityRequestId;
+    const frames = collectSharedFeasibilityFrames();
+    const passengers = collectPassengers();
+    if (!frames.length || !passengers.length) {
+      if (reqId === sharedFeasibilityRequestId) {
+        sharedFeasibilityOk = true;
+        sharedFeasibilityMessage = "";
+        applySharedFeasibilityUI();
+      }
+      return;
+    }
+    const v = validatePassengers();
+    if (!v.ok) return;
+
+    try {
+      const res = await fetch(sharedFeasibilityCheckUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passengers, frames }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (reqId !== sharedFeasibilityRequestId) return;
+      if (data.ok === true || data.code === "success") {
+        sharedFeasibilityOk = true;
+        sharedFeasibilityMessage = "";
+      } else {
+        sharedFeasibilityOk = false;
+        sharedFeasibilityMessage =
+          data.message || SHARED_INSUFFICIENT_ADULTS_MSG;
+      }
+    } catch (e) {
+      if (reqId !== sharedFeasibilityRequestId) return;
+      // Giữ kết quả offline nếu API lỗi
+    }
+    applySharedFeasibilityUI();
+  }
+
+  function scheduleSharedFeasibilityCheck() {
+    if (getAccommodationMode() !== "shared") {
+      sharedFeasibilityOk = true;
+      sharedFeasibilityMessage = "";
+      applySharedFeasibilityUI();
+      return;
+    }
+    offlineCheckSharedFeasibility();
+    applySharedFeasibilityUI();
+    if (sharedFeasibilityTimer) clearTimeout(sharedFeasibilityTimer);
+    sharedFeasibilityTimer = setTimeout(() => {
+      remoteCheckSharedFeasibility();
+    }, 400);
   }
 
   // ── Private room assignment ─────────────────────────────────────────────
@@ -1567,7 +2434,7 @@ if (boxTourDetail) {
    * - Không trùng idx giữa các phòng trong cùng segment.
    * - Σ adult+child gán = quantityAdult + quantityChildren.
    * - Σ occupancyWeight ≤ baseOccupancy mỗi phòng (theo ageBands của hotel).
-   * - child/baby được gán phải ở cùng phòng với guardian (adult) đã chọn.
+   * - Mỗi phòng có khách phải có ≥ 1 người lớn từ 18 tuổi trở lên.
    * Trả về { ok, message?, perRoom: Map<key, {used, base, overflow}> }.
    */
   function validatePrivateAssignments() {
@@ -1577,22 +2444,27 @@ if (boxTourDetail) {
       return { ok: true, message: "", perRoom };
     }
 
-    const adults = parseInt(
+    const reqAdults = parseInt(
       boxTourDetail.querySelector(`[name="quantityAdult"]`)?.value || "0",
       10
     ) || 0;
-    const children = parseInt(
+    const reqChildren = parseInt(
       boxTourDetail.querySelector(`[name="quantityChildren"]`)?.value || "0",
       10
     ) || 0;
-    const requiredCount = adults + children;
+    const reqBabies = parseInt(
+      boxTourDetail.querySelector(`[name="quantityBaby"]`)?.value || "0",
+      10
+    ) || 0;
 
     const segments = _readPrivateSelectionsBySegment();
     segments.forEach((seg) => {
       if (seg.hotels.length === 0) return;
       const segLabel = seg.segLabel;
       const idxToRoomKey = new Map();
-      const assignedAdultsAndChildren = new Set();
+      const assignedAdults   = new Set();
+      const assignedChildren = new Set();
+      const assignedBabies   = new Set();
 
       seg.hotels.forEach((hotel) => {
         hotel.roomTypes.forEach((rt) => {
@@ -1610,6 +2482,31 @@ if (boxTourDetail) {
                   fmtOccNum(used) + " / " + rt.baseOccupancy + ")."
               );
             }
+            // Mỗi phòng phải có ít nhất 1 người lớn từ 18 tuổi trở lên
+            if (idxs.length > 0) {
+              const roomNum = i + 1;
+              const roomLabel =
+                segLabel + " · Phòng " + rt.roomTypeName + " #" + roomNum +
+                " (" + hotel.hotelName + ")";
+              const adultsInRoom = idxs
+                .map((idx) => passengerState.find((x) => x.idx === idx))
+                .filter((p) => p && p.type === "adult");
+              const hasAdult18Plus = adultsInRoom.some((p) => {
+                const ageNum =
+                  p.age === "" || p.age === null || p.age === undefined
+                    ? NaN
+                    : parseInt(p.age, 10);
+                return !isNaN(ageNum) && ageNum >= privateRoomAdultMinAge;
+              });
+              if (!hasAdult18Plus) {
+                errors.push(
+                  roomLabel +
+                    ": phòng phải có ít nhất 1 người lớn từ " +
+                    privateRoomAdultMinAge +
+                    " tuổi trở lên."
+                );
+              }
+            }
             idxs.forEach((idx) => {
               const p = passengerState.find((x) => x.idx === idx);
               if (!p) return;
@@ -1621,18 +2518,31 @@ if (boxTourDetail) {
               } else {
                 idxToRoomKey.set(idx, key);
               }
-              if (p.type !== "baby") assignedAdultsAndChildren.add(idx);
+              if (p.type === "adult")       assignedAdults.add(idx);
+              else if (p.type === "child")  assignedChildren.add(idx);
+              else if (p.type === "baby")   assignedBabies.add(idx);
             });
           }
         });
       });
 
-      // Đủ adult + child?
-      if (assignedAdultsAndChildren.size < requiredCount) {
+      // Kiểm tra đủ từng loại hành khách
+      const missingParts = [];
+      if (assignedAdults.size < reqAdults)
+        missingParts.push(
+          "người lớn: " + assignedAdults.size + "/" + reqAdults
+        );
+      if (assignedChildren.size < reqChildren)
+        missingParts.push(
+          "trẻ em: " + assignedChildren.size + "/" + reqChildren
+        );
+      if (assignedBabies.size < reqBabies)
+        missingParts.push(
+          "em bé: " + assignedBabies.size + "/" + reqBabies
+        );
+      if (missingParts.length > 0) {
         errors.push(
-          segLabel + ": chưa gán đủ hành khách (đã gán " +
-            assignedAdultsAndChildren.size + "/" + requiredCount +
-            " người lớn + trẻ em)."
+          segLabel + ": chưa gán đủ hành khách (" + missingParts.join(", ") + ")."
         );
       }
 
@@ -1835,6 +2745,36 @@ if (boxTourDetail) {
         mode === "private" && isRoomRequired && anyRoomCapacityShortfall ? "" : "none";
     }
 
+    const minAdultsRequired =
+      mode === "private" ? getPrivateMinAdultsRequired() : 0;
+    const qaInput = boxTourDetail.querySelector(`[name="quantityAdult"]`);
+    if (qaInput && mode === "private" && minAdultsRequired > 0) {
+      qaInput.min = String(minAdultsRequired);
+    } else if (qaInput) {
+      qaInput.min = "0";
+    }
+    let privateMinAdultsWarnText = "";
+    if (mode === "private" && minAdultsRequired > 0) {
+      const qaNow = parseInt(qaInput?.value || "0", 10) || 0;
+      const adults18 =
+        passengerState.length > 0 ? _countAdults18PlusInState() : 0;
+      if (qaNow < minAdultsRequired || adults18 < minAdultsRequired) {
+        privateMinAdultsWarnText = _formatPrivateMinAdultsRequiredMessage(
+          minAdultsRequired,
+          adults18
+        );
+      }
+    }
+    if (privateMinAdultsWarning) {
+      if (privateMinAdultsWarnText) {
+        privateMinAdultsWarning.textContent = privateMinAdultsWarnText;
+        privateMinAdultsWarning.style.display = "";
+      } else {
+        privateMinAdultsWarning.style.display = "none";
+        privateMinAdultsWarning.textContent = "";
+      }
+    }
+
     // ── Validate passengers (dùng chung cho cả 2 mode) ─────────────────────
     let anySharedMismatch = false;
     let passengerWarnText = "";
@@ -1883,6 +2823,13 @@ if (boxTourDetail) {
       sharedRequiredWarning.style.display =
         mode === "shared" && isRoomRequired && anySharedMismatch ? "" : "none";
     }
+    if (mode === "shared" && passengerState.length > 0) {
+      scheduleSharedFeasibilityCheck();
+    } else {
+      sharedFeasibilityOk = true;
+      sharedFeasibilityMessage = "";
+      applySharedFeasibilityUI();
+    }
     if (passengerWarning) {
       if (passengerWarnText) {
         passengerWarning.textContent = passengerWarnText;
@@ -1917,7 +2864,6 @@ if (boxTourDetail) {
         });
       if (privateAssignmentWarning) {
         if (
-          isRoomRequired &&
           !v.ok &&
           privateAssignmentWrap &&
           privateAssignmentWrap.style.display !== "none"
@@ -2026,7 +2972,7 @@ if (boxTourDetail) {
         // Khi chuyển sang "ở riêng", xóa guardianIdx khỏi state vì không dùng.
         if (e.target.value === "private") {
           passengerState.forEach((p) => {
-            if (p.type !== "adult") p.guardianIdx = null;
+            p.guardianIdx = null;
           });
         }
         renderPassengerRows();
@@ -2066,7 +3012,6 @@ if (boxTourDetail) {
       const quantityAdult = parseInt(qaEl?.value || "0", 10) || 0;
       const quantityChild = parseInt(qcEl?.value || "0", 10) || 0;
       const quantityBaby = parseInt(qbEl?.value || "0", 10) || 0;
-      const babySeat = seatBabyCheckbox ? !!seatBabyCheckbox.checked : false;
 
       let departureDateDisplay = "";
       if (departureSelect) {
@@ -2085,6 +3030,12 @@ if (boxTourDetail) {
         }
       }
 
+      if (quantityAdult < 1) {
+        notify?.error?.("Tour phải có ít nhất 1 người lớn.");
+        qaEl?.focus();
+        return;
+      }
+
       if (quantityAdult > 0 || quantityChild > 0 || quantityBaby > 0) {
         const childrenAges = collectAges(childrenAgesList);
         const babyAges     = collectAges(babiesAgesList);
@@ -2100,26 +3051,33 @@ if (boxTourDetail) {
             notify?.error?.("Vui lòng chọn đủ phòng ở từng khung thời gian.");
             return;
           }
-          // Validate passenger list (tên/tuổi/giới tính/guardian).
-          if (isRoomRequired && passengerState.length > 0) {
+          // Validate số NL tối thiểu theo số phòng + danh sách hành khách.
+          if (isRoomRequired) {
             const v = validatePassengers();
-            if (!v.ok) {
+            const needPaxCheck =
+              passengerState.length > 0 || getPrivateMinAdultsRequired() > 0;
+            if (!v.ok && needPaxCheck) {
               if (passengerWarning) {
                 passengerWarning.textContent = v.message;
                 passengerWarning.style.display = "";
               }
-              passengerWarning?.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-              });
+              const totalRoomsBook = getPrivateMinAdultsRequired();
+              const scrollEl =
+                totalRoomsBook > 0 &&
+                quantityAdult < totalRoomsBook &&
+                privateMinAdultsWarning
+                  ? privateMinAdultsWarning
+                  : passengerWarning;
+              scrollEl?.scrollIntoView({ behavior: "smooth", block: "center" });
               notify?.error?.(
-                "Vui lòng khai đầy đủ thông tin hành khách trước khi đặt tour."
+                v.message.split("\n")[0] ||
+                  "Vui lòng kiểm tra lại số người lớn và phòng đã chọn."
               );
               return;
             }
           }
           // Validate phân bổ hành khách vào phòng.
-          if (isRoomRequired && privateAssignmentWrap && privateAssignmentWrap.style.display !== "none") {
+          if (privateAssignmentWrap && privateAssignmentWrap.style.display !== "none") {
             const va = validatePrivateAssignments();
             if (!va.ok) {
               if (privateAssignmentWarning) {
@@ -2171,7 +3129,38 @@ if (boxTourDetail) {
                 return;
               }
             }
+            offlineCheckSharedFeasibility();
+            if (!sharedFeasibilityOk) {
+              applySharedFeasibilityUI();
+              sharedFeasibilityWarning?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+              notify?.error?.(
+                sharedFeasibilityMessage || SHARED_INSUFFICIENT_ADULTS_MSG
+              );
+              return;
+            }
           }
+        }
+
+        // Build babySeats array từ passengerState
+        let babySeats, privateSeatCount, babySeatFeeTotal;
+        if (maxBabiesPerAdult === 0) {
+          // Auto mode: tất cả em bé chiếm ghế, không cần lưu lựa chọn riêng
+          babySeats = [];
+          privateSeatCount = quantityBaby;
+          babySeatFeeTotal = 0;
+        } else {
+          babySeats = passengerState
+            .filter((p) => p.type === "baby")
+            .map((p) => ({
+              babyIdx: p.idx,
+              seatType: p.babySeatType || "shared",
+              guardianIdx: p.babySeatType === "shared" ? p.guardianIdx : null,
+            }));
+          privateSeatCount = babySeats.filter((b) => b.seatType === "private").length;
+          babySeatFeeTotal = privateSeatCount * babySeatFee;
         }
 
         const item = {
@@ -2180,7 +3169,10 @@ if (boxTourDetail) {
           quantityChildren: quantityChild,
           quantityBaby,
           checked: true,
-          babySeat,
+          babySeat: privateSeatCount > 0, // backward compat flag
+          babySeats,
+          babySeatFeeTotal,
+          maxBabiesPerAdult,
           departureDateDisplay,
           childrenAges,
           babyAges,
@@ -2213,10 +3205,10 @@ if (boxTourDetail) {
       const departureSelect = boxTourDetail.querySelector(
         "#departureDateSelect"
       );
-      if (qaEl) qaEl.value = existItem.quantityAdult || 0;
+      if (qaEl) qaEl.value = Math.max(1, existItem.quantityAdult || 0);
       if (qcEl) qcEl.value = existItem.quantityChildren || 0;
       if (qbEl) qbEl.value = existItem.quantityBaby || 0;
-      if (seatBabyCheckbox) seatBabyCheckbox.checked = !!existItem.babySeat;
+      // babySeat/babySeats per-baby state sẽ được restore qua passengerState (guardianIdx, babySeatType)
       if (departureSelect && existItem.departureDateDisplay) {
         departureSelect.value = existItem.departureDateDisplay;
       }
@@ -2336,6 +3328,14 @@ if (orderForm) {
             item.quantityBaby > 0)
         );
       });
+
+      const cartMissingAdult = cart.some(
+        (item) => Number(item.quantityAdult || 0) < 1
+      );
+      if (cartMissingAdult) {
+        notify.error("Mỗi tour phải có ít nhất 1 người lớn.");
+        return;
+      }
 
       if (cart.length > 0) {
         const dataFinal = {
@@ -2597,6 +3597,163 @@ function babyUnitAtForItem(item, idx) {
   return Math.round((base * pct) / 100);
 }
 
+/** Map idx → NL từ passengers trong cart item. */
+function _cartAdultByIdx(item) {
+  const map = {};
+  (Array.isArray(item.passengers) ? item.passengers : []).forEach((p) => {
+    if (p.type === "adult") map[p.idx] = p;
+  });
+  return map;
+}
+
+/** HTML khối "Chỗ ngồi em bé" trên /cart. */
+function buildCartBabySeatsInfoHtml(item, adultByIdx) {
+  const qBaby = Number(item.quantityBaby || 0);
+  if (qBaby <= 0) return "";
+
+  const maxBabiesPerAdult = Number(item.maxBabiesPerAdult ?? 1);
+  const babies = (Array.isArray(item.passengers) ? item.passengers : []).filter(
+    (p) => p.type === "baby"
+  );
+  const bsArr = Array.isArray(item.babySeats) ? item.babySeats : [];
+  const feeTotal = Number(item.babySeatFeeTotal || 0);
+  const lines = [];
+
+  const babyNameAt = (seat, i) => {
+    const byIdx = babies.find((b) => b.idx === seat.babyIdx);
+    if (byIdx && byIdx.name) return byIdx.name;
+    if (babies[i] && babies[i].name) return babies[i].name;
+    return `Em bé #${i + 1}`;
+  };
+
+  const guardianLabel = (guardianIdx) => {
+    if (guardianIdx === null || guardianIdx === undefined) return null;
+    const g = adultByIdx[guardianIdx];
+    return g ? g.name || `Người lớn #${guardianIdx + 1}` : null;
+  };
+
+  if (maxBabiesPerAdult === 0) {
+    lines.push({ kind: "auto", text: "Tất cả em bé tự động chiếm 1 vị trí tour" });
+  } else if (bsArr.length > 0) {
+    bsArr.forEach((seat, i) => {
+      const name = babyNameAt(seat, i);
+      if (seat.seatType === "private") {
+        lines.push({ kind: "private", text: `${name}: ghế ngồi riêng` });
+      } else {
+        const gName = guardianLabel(seat.guardianIdx);
+        lines.push({
+          kind: "shared",
+          text: gName
+            ? `${name}: ngồi cùng ${gName}`
+            : `${name}: ngồi cùng người lớn (chưa chọn)`,
+        });
+      }
+    });
+  } else if (item.babySeat) {
+    lines.push({ kind: "private", text: "Đặt chỗ ngồi riêng cho em bé" });
+  }
+
+  if (lines.length === 0) return "";
+
+  let html = `<div class="cart-baby-seats-info">`;
+  html += `<div class="cart-baby-seats-info__title"><i class="fa-solid fa-baby-carriage"></i>Chỗ ngồi em bé</div>`;
+  lines.forEach((line) => {
+    const icon = line.kind === "shared" ? "fa-link" : "fa-chair";
+    const iconClass =
+      line.kind === "shared" ? "icon-shared" : line.kind === "auto" ? "icon-auto" : "icon-private";
+    let inner = line.text;
+    if (line.kind === "shared" && line.text.includes(": ngồi cùng ")) {
+      const [babyPart, gPart] = line.text.split(": ngồi cùng ");
+      inner = `${babyPart}: ngồi cùng <strong>${gPart}</strong>`;
+    }
+    html += `<div class="cart-baby-seats-info__row">
+      <i class="fa-solid ${icon} ${iconClass}"></i>
+      <span>${inner}</span>
+    </div>`;
+  });
+  if (feeTotal > 0) {
+    html += `<div class="cart-baby-seats-info__fee">Tổng phí ghế riêng: <strong>+${feeTotal.toLocaleString("vi-VN")}đ</strong></div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+/** Guardian / ghế em bé trên từng dòng hành khách trong cart. */
+function buildCartPassengerExtraHtml(p, item, adultByIdx) {
+  if (p.type === "baby") {
+    const isSharedAcc = item.accommodationMode === "shared";
+    const roomGid =
+      p.roomGuardianIdx !== null && p.roomGuardianIdx !== undefined
+        ? p.roomGuardianIdx
+        : p.guardianIdx;
+
+    const bs = (Array.isArray(item.babySeats) ? item.babySeats : []).find(
+      (b) => b.babyIdx === p.idx
+    );
+    const seatType = bs ? bs.seatType : p.babySeatType;
+
+    // Ở ghép: hiển thị người ở cùng phòng KS (roomGuardianIdx), không phải người ngồi cùng tour.
+    if (
+      isSharedAcc &&
+      roomGid !== null &&
+      roomGid !== undefined &&
+      adultByIdx[roomGid]
+    ) {
+      const gName = adultByIdx[roomGid].name || `Người lớn #${roomGid + 1}`;
+      let html = `<span class="cart-passenger-guardian">
+        <i class="fa-solid fa-bed icon-muted"></i>
+        Ở cùng: <strong>${gName}</strong>
+      </span>`;
+      if (seatType === "private") {
+        html =
+          `<span class="cart-passenger-guardian">
+            <i class="fa-solid fa-chair icon-private"></i>
+            Ghế ngồi riêng
+          </span>` + html;
+      }
+      return html;
+    }
+
+    if (seatType === "private") {
+      return `<span class="cart-passenger-guardian">
+        <i class="fa-solid fa-chair icon-private"></i>
+        Ghế ngồi riêng
+      </span>`;
+    }
+    const gid =
+      bs && bs.guardianIdx !== null && bs.guardianIdx !== undefined
+        ? bs.guardianIdx
+        : p.guardianIdx;
+    if (gid !== null && gid !== undefined && adultByIdx[gid]) {
+      const gName = adultByIdx[gid].name || `Người lớn #${gid + 1}`;
+      return `<span class="cart-passenger-guardian">
+        <i class="fa-solid fa-link icon-shared"></i>
+        Ngồi cùng: <strong>${gName}</strong>
+      </span>`;
+    }
+    if (Number(item.maxBabiesPerAdult ?? 1) === 0) {
+      return `<span class="cart-passenger-guardian">
+        <i class="fa-solid fa-chair icon-auto"></i>
+        Tự động chiếm 1 vị trí tour
+      </span>`;
+    }
+    return "";
+  }
+  if (
+    p.guardianIdx !== null &&
+    p.guardianIdx !== undefined &&
+    adultByIdx[p.guardianIdx]
+  ) {
+    const guardian = adultByIdx[p.guardianIdx];
+    const guardianName = guardian.name || `Người lớn #${p.guardianIdx + 1}`;
+    return `<span class="cart-passenger-guardian">
+      <i class="fa-solid fa-link icon-muted"></i>
+      Ở cùng: <strong>${guardianName}</strong>
+    </span>`;
+  }
+  return "";
+}
+
 const drawCart = () => {
   // Lấy giỏ hiện tại (ưu tiên session nếu đang đặt ngay)
   const cartJSON = JSON.stringify(getCart());
@@ -2637,10 +3794,11 @@ const drawCart = () => {
         const unitBabyForUi = babyUnitAtForItem(item, Math.max(1, qBaby || 1));
 
         const itemExtraRoomCost = Number(item.extraRoomCost || 0);
+        const itemBabySeatFeeTotal = Number(item.babySeatFeeTotal || 0);
 
         // cộng tiền chỉ khi item được tick
         if (item.checked) {
-          subTotal += qAdult * unitAdult + qChild * unitChild + babyTotal + itemExtraRoomCost;
+          subTotal += qAdult * unitAdult + qChild * unitChild + babyTotal + itemExtraRoomCost + itemBabySeatFeeTotal;
         }
 
         // Build age info display for cart
@@ -2652,6 +3810,8 @@ const drawCart = () => {
         const babyAgesHtml = babyAgesArr.length
           ? `<div class="cart-ages-info">Tuổi em bé: ${babyAgesArr.map((a, i) => `Bé ${i+1}: <b>${a} tuổi</b>`).join(" · ")}</div>`
           : "";
+        const adultByIdxCart = _cartAdultByIdx(item);
+        const babySeatsInfoHtml = buildCartBabySeatsInfoHtml(item, adultByIdxCart);
         const tourDetailUrlForBack = (item.company && item.company.slug)
           ? `/company/${item.company.slug}/tour/detail/${item.slug}`
           : `/tour/detail/${item.slug}`;
@@ -2683,11 +3843,7 @@ const drawCart = () => {
                   <div>Ngày Khởi Hành: <b>${item.departureDate}</b></div>
                   <div>Khởi Hành Tại: <b>${(item.cityName || "").trim() || "Chưa thiết lập"}</b></div>
                   <div>Số ghế còn lại: <b>${seatsTotal}</b></div>
-                  ${
-                    babySeat
-                      ? `<div style="font-size:13px;color:#e67e22">Đặt chỗ ngồi riêng cho em bé</div>`
-                      : ""
-                  }
+                  ${babySeatsInfoHtml}
                   ${childrenAgesHtml}
                   ${babyAgesHtml}
                 </div>
@@ -2753,15 +3909,12 @@ const drawCart = () => {
                 const psList = Array.isArray(item.passengers) ? item.passengers : [];
 
                 // Build adult lookup map để tra tên người trông
-                const adultByIdx = {};
-                psList.forEach((p) => {
-                  if (p.type === "adult") adultByIdx[p.idx] = p;
-                });
+                const adultByIdx = _cartAdultByIdx(item);
 
                 let html = `<div class="inner-room-selections">`;
                 html += `<div class="inner-label" style="display:flex;align-items:center;gap:6px;">
                   <i class="fa-solid fa-people-group" style="color:#6366f1;font-size:13px"></i>
-                  Ở ghép — chờ admin xếp phòng
+                  Ở ghép
                 </div>`;
 
                 // ── Khung thời gian + khách sạn ──
@@ -2819,17 +3972,7 @@ const drawCart = () => {
                       : "";
                     const genderText = p.gender === "male" ? "Nam" : p.gender === "female" ? "Nữ" : "";
 
-                    let guardianHtml = "";
-                    if (p.type !== "adult") {
-                      const guardian = adultByIdx[p.guardianIdx];
-                      const guardianName = guardian
-                        ? (guardian.name || `Người lớn #${guardian.idx + 1}`)
-                        : "—";
-                      guardianHtml = `<span class="cart-passenger-guardian">
-                        <i class="fa-solid fa-link" style="font-size:10px;color:#94a3b8;margin-right:3px"></i>
-                        Ở cùng: <strong>${guardianName}</strong>
-                      </span>`;
-                    }
+                    let guardianHtml = buildCartPassengerExtraHtml(p, item, adultByIdx);
 
                     html += `<div class="cart-passenger-row cart-passenger-row--${typeClass}">
                       <span class="cart-passenger-badge cart-passenger-badge--${typeClass}">${typeLabel}</span>
@@ -2851,11 +3994,7 @@ const drawCart = () => {
               if (roomSels.length === 0) return "";
 
               const psListPrivate = Array.isArray(item.passengers) ? item.passengers : [];
-              // Build adult lookup map cho việc tra tên người lớn đi cùng.
-              const adultByIdxPrivate = {};
-              psListPrivate.forEach((p) => {
-                if (p.type === "adult") adultByIdxPrivate[p.idx] = p;
-              });
+              const adultByIdxPrivate = _cartAdultByIdx(item);
               // Build idx → passenger map.
               const paxByIdxPrivate = {};
               psListPrivate.forEach((p) => {
@@ -2870,11 +4009,13 @@ const drawCart = () => {
                   ? `<i class="fa-solid fa-venus" style="color:#ec4899;font-size:11px"></i>`
                   : "";
                 const genderText = p.gender === "male" ? "Nam" : p.gender === "female" ? "Nữ" : "";
+                const extraHtml = buildCartPassengerExtraHtml(p, item, adultByIdxPrivate);
                 return `<div class="cart-passenger-row cart-passenger-row--${typeClass}">
                   <span class="cart-passenger-badge cart-passenger-badge--${typeClass}">${typeLabel}</span>
                   <span class="cart-passenger-name">${p.name || "(chưa có tên)"}</span>
                   <span class="cart-passenger-age">${p.age !== undefined && p.age !== "" ? p.age + " tuổi" : ""}</span>
                   ${genderIcon ? `<span class="cart-passenger-gender">${genderIcon} ${genderText}</span>` : ""}
+                  ${extraHtml}
                 </div>`;
               };
 
@@ -3031,13 +4172,23 @@ const drawCart = () => {
           if (fieldName === "quantityChildren") qChild = quantity;
           if (fieldName === "quantityBaby") qBaby = quantity;
 
+          if (qAdult < 1) {
+            qAdult = 1;
+            if (fieldName === "quantityAdult") input.value = 1;
+            notify.error("Tour phải có ít nhất 1 người lớn.");
+          }
+
           // GHẾ = NL + TE + (EB nếu đã tick “đặt chỗ riêng” khi thêm vào giỏ)
           const babySeat = !!cartData[idx].babySeat;
-          let usedSeats = qAdult + qChild + (babySeat ? qBaby : 0);
+          const babySeatsArr = Array.isArray(cartData[idx].babySeats) ? cartData[idx].babySeats : [];
+          const privateSeatBabiesInCart = babySeatsArr.length > 0
+            ? babySeatsArr.filter((b) => b.seatType === "private").length
+            : (babySeat ? qBaby : 0);
+          let usedSeats = qAdult + qChild + privateSeatBabiesInCart;
 
           if (seatsTotal > 0 && usedSeats > seatsTotal) {
             const overflow = usedSeats - seatsTotal;
-            if (fieldName === "quantityBaby" && babySeat && qBaby > 0) {
+            if (fieldName === "quantityBaby" && privateSeatBabiesInCart > 0 && qBaby > 0) {
               qBaby = Math.max(0, qBaby - overflow);
               input.value = qBaby;
               notify.error(`Tổng ghế vượt ${seatsTotal}. Đã giảm bớt em bé.`);
@@ -3509,326 +4660,7 @@ if (boxPagination) {
 }
 // End Box Pagination
 
-(function () {
-  const popup = document.getElementById("guestsPopup");
-  const btn = document.getElementById("guestBtn");
-  const text = document.getElementById("guestText");
-  const roomsContainer = document.getElementById("roomsContainer");
-  const addRoomBtn = document.getElementById("addRoomBtn");
-  const roomsDataInput = document.getElementById("roomsDataInput");
-  const roomsInput = document.getElementById("roomsInput");
-  const adultsInput = document.getElementById("adultsInput");
-  const childrenInput = document.getElementById("childrenInput");
-
-  if (!popup || !btn || !text || !roomsContainer) return;
-
-  // Parse dữ liệu từ URL query hoặc khởi tạo mặc định
-  function parseRoomsFromQuery() {
-    try {
-      const url = new URL(window.location.href);
-      const roomsData = url.searchParams.get("roomsData");
-      if (roomsData) {
-        return JSON.parse(decodeURIComponent(roomsData));
-      }
-    } catch (e) {
-      console.warn("Failed to parse roomsData from URL", e);
-    }
-    
-    // Fallback: parse từ query params cũ (rooms, adults, children)
-    const url = new URL(window.location.href);
-    const rooms = parseInt(url.searchParams.get("rooms") || "1", 10);
-    const adults = parseInt(url.searchParams.get("adults") || "1", 10);
-    const children = parseInt(url.searchParams.get("children") || "0", 10);
-    
-    // Tạo 1 phòng với dữ liệu cũ
-    const room = {
-      adults: adults,
-      children: [],
-    };
-    
-    // Thêm trẻ em với độ tuổi mặc định (nếu có)
-    for (let i = 0; i < children; i++) {
-      room.children.push({ age: 4 }); // Độ tuổi mặc định
-    }
-    
-    // Tạo mảng phòng (có thể có nhiều phòng nhưng chỉ có dữ liệu cho phòng đầu)
-    const result = [room];
-    for (let i = 1; i < rooms; i++) {
-      result.push({ adults: 1, children: [] });
-    }
-    
-    return result;
-  }
-
-  let roomsData = parseRoomsFromQuery();
-
-  // Render một phòng
-  function renderRoom(roomIndex, room) {
-    const roomId = `room-${roomIndex}`;
-    const childrenHtml = room.children.map((child, childIndex) => {
-      const childId = `${roomId}-child-${childIndex}`;
-      return `
-        <div class="guests-popup__child-item" data-child-index="${childIndex}">
-          <div class="guests-popup__left">
-            <strong>Trẻ ${childIndex + 1}</strong>
-          </div>
-          <div class="guests-popup__right">
-            <div class="guests-popup__age-selector">
-              <button type="button" class="guests-popup__age-btn" data-room="${roomIndex}" data-child="${childIndex}">
-                <span class="guests-popup__age-display">${child.age === 0 ? "Dưới 1" : child.age}</span>
-                <i class="fa-solid fa-chevron-down"></i>
-              </button>
-              <div class="guests-popup__age-dropdown" style="display: none;">
-                ${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
-                  .map(age => `<div class="guests-popup__age-option ${age === child.age ? 'active' : ''}" data-age="${age}">${age === 0 ? "Dưới 1" : age}</div>`)
-                  .join("")}
-              </div>
-            </div>
-            <button type="button" class="guests-popup__btn guests-popup__btn--remove-child" data-room="${roomIndex}" data-child="${childIndex}">×</button>
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    return `
-      <div class="guests-popup__room" data-room-index="${roomIndex}">
-        <div class="guests-popup__room-header">
-          <strong>Phòng ${roomIndex + 1}</strong>
-          ${roomIndex > 0 ? `<button type="button" class="guests-popup__btn--remove-room" data-room="${roomIndex}">×</button>` : ""}
-        </div>
-        <div class="guests-popup__row">
-          <div class="guests-popup__left">
-            <strong>Người lớn</strong>
-          </div>
-          <div class="guests-popup__right">
-            <button type="button" class="guests-popup__btn" data-room="${roomIndex}" data-type="adults" data-action="dec">−</button>
-            <input type="text" class="guests-popup__input" value="${room.adults}" readonly data-room="${roomIndex}" data-type="adults">
-            <button type="button" class="guests-popup__btn" data-room="${roomIndex}" data-type="adults" data-action="inc">+</button>
-          </div>
-        </div>
-        <div class="guests-popup__row">
-          <div class="guests-popup__left">
-            <strong>Trẻ em</strong>
-            <small>Tuổi từ 0 đến 17</small>
-          </div>
-          <div class="guests-popup__right">
-            <button type="button" class="guests-popup__btn" data-room="${roomIndex}" data-type="children" data-action="dec">−</button>
-            <input type="text" class="guests-popup__input" value="${room.children.length}" readonly data-room="${roomIndex}" data-type="children">
-            <button type="button" class="guests-popup__btn" data-room="${roomIndex}" data-type="children" data-action="inc">+</button>
-          </div>
-        </div>
-        <div class="guests-popup__children-list">
-          ${childrenHtml}
-        </div>
-      </div>
-    `;
-  }
-
-  // Render tất cả phòng
-  function renderRooms() {
-    roomsContainer.innerHTML = roomsData.map((room, index) => renderRoom(index, room)).join("");
-    updateSummary();
-    updateHiddenInputs();
-  }
-
-  // Cập nhật summary text
-  function updateSummary() {
-    const totalRooms = roomsData.length;
-    const totalAdults = roomsData.reduce((sum, r) => sum + r.adults, 0);
-    const totalChildren = roomsData.reduce((sum, r) => sum + r.children.length, 0);
-    
-    text.textContent = `${totalRooms} phòng - ${totalAdults} người lớn${totalChildren > 0 ? ` - ${totalChildren} trẻ em` : ""}`;
-  }
-
-  // Cập nhật hidden inputs
-  function updateHiddenInputs() {
-    const totalRooms = roomsData.length;
-    const totalAdults = roomsData.reduce((sum, r) => sum + r.adults, 0);
-    const totalChildren = roomsData.reduce((sum, r) => sum + r.children.length, 0);
-    
-    if (roomsInput) roomsInput.value = String(totalRooms);
-    if (adultsInput) adultsInput.value = String(totalAdults);
-    if (childrenInput) childrenInput.value = String(totalChildren);
-    if (roomsDataInput) roomsDataInput.value = encodeURIComponent(JSON.stringify(roomsData));
-  }
-
-  // Thay đổi số lượng (adults hoặc children count)
-  function changeQuantity(roomIndex, type, delta) {
-    const room = roomsData[roomIndex];
-    if (!room) return;
-    
-    if (type === "adults") {
-      room.adults = Math.max(1, room.adults + delta);
-    } else if (type === "children") {
-      const currentCount = room.children.length;
-      const newCount = Math.max(0, currentCount + delta);
-      
-      if (newCount > currentCount) {
-        // Thêm trẻ em mới với độ tuổi mặc định
-        for (let i = currentCount; i < newCount; i++) {
-          room.children.push({ age: 4 });
-        }
-      } else if (newCount < currentCount) {
-        // Xóa trẻ em cuối cùng
-        room.children = room.children.slice(0, newCount);
-      }
-    }
-    
-    renderRooms();
-  }
-
-  // Thêm phòng mới
-  function addRoom() {
-    roomsData.push({ adults: 1, children: [] });
-    renderRooms();
-  }
-
-  // Xóa phòng
-  function removeRoom(roomIndex) {
-    if (roomIndex === 0 || roomsData.length <= 1) return; // Không cho xóa phòng đầu tiên
-    roomsData.splice(roomIndex, 1);
-    renderRooms();
-  }
-
-  // Xóa trẻ em
-  function removeChild(roomIndex, childIndex) {
-    const room = roomsData[roomIndex];
-    if (!room) return;
-    room.children.splice(childIndex, 1);
-    renderRooms();
-  }
-
-  // Thay đổi độ tuổi trẻ em
-  function changeChildAge(roomIndex, childIndex, age) {
-    const room = roomsData[roomIndex];
-    if (!room || !room.children[childIndex]) return;
-    room.children[childIndex].age = age;
-    renderRooms();
-  }
-
-  // Xử lý click events
-  popup.addEventListener("click", (e) => {
-    // Ngăn event bubble lên để không đóng popup
-    e.stopPropagation();
-    
-    // Nút tăng/giảm số lượng
-    const qtyBtn = e.target.closest("button.guests-popup__btn[data-type]");
-    if (qtyBtn && !qtyBtn.classList.contains("guests-popup__btn--remove-room") && !qtyBtn.classList.contains("guests-popup__btn--remove-child")) {
-      const roomIndex = parseInt(qtyBtn.dataset.room, 10);
-      const type = qtyBtn.dataset.type;
-      const action = qtyBtn.dataset.action;
-      const delta = action === "inc" ? 1 : -1;
-      changeQuantity(roomIndex, type, delta);
-      return;
-    }
-
-    // Nút xóa phòng
-    const removeRoomBtn = e.target.closest("button.guests-popup__btn--remove-room");
-    if (removeRoomBtn) {
-      const roomIndex = parseInt(removeRoomBtn.dataset.room, 10);
-      removeRoom(roomIndex);
-      return;
-    }
-
-    // Nút xóa trẻ em
-    const removeChildBtn = e.target.closest("button.guests-popup__btn--remove-child");
-    if (removeChildBtn) {
-      const roomIndex = parseInt(removeChildBtn.dataset.room, 10);
-      const childIndex = parseInt(removeChildBtn.dataset.child, 10);
-      removeChild(roomIndex, childIndex);
-      return;
-    }
-
-    // Nút chọn độ tuổi
-    const ageBtn = e.target.closest("button.guests-popup__age-btn");
-    if (ageBtn) {
-      const roomIndex = parseInt(ageBtn.dataset.room, 10);
-      const childIndex = parseInt(ageBtn.dataset.child, 10);
-      const dropdown = ageBtn.nextElementSibling;
-      if (dropdown) {
-        // Toggle dropdown
-        document.querySelectorAll(".guests-popup__age-dropdown").forEach(d => {
-          if (d !== dropdown) d.style.display = "none";
-        });
-        dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
-      }
-      return;
-    }
-
-    // Chọn độ tuổi từ dropdown
-    const ageOption = e.target.closest(".guests-popup__age-option");
-    if (ageOption) {
-      const dropdown = ageOption.closest(".guests-popup__age-dropdown");
-      const ageBtn = dropdown?.previousElementSibling;
-      if (ageBtn) {
-        const roomIndex = parseInt(ageBtn.dataset.room, 10);
-        const childIndex = parseInt(ageBtn.dataset.child, 10);
-        const age = parseInt(ageOption.dataset.age, 10);
-        changeChildAge(roomIndex, childIndex, age);
-        dropdown.style.display = "none";
-      }
-      return;
-    }
-  });
-
-  // Đóng dropdown khi click ra ngoài (nhưng không đóng popup)
-  document.addEventListener("click", (e) => {
-    // Chỉ đóng dropdown, không đóng popup
-    if (!e.target.closest(".guests-popup__age-selector")) {
-      document.querySelectorAll(".guests-popup__age-dropdown").forEach(d => {
-        d.style.display = "none";
-      });
-    }
-  });
-
-  // Nút thêm phòng
-  if (addRoomBtn) {
-    addRoomBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      addRoom();
-    });
-  }
-
-  // Toggle popup
-  function openPopup() {
-    btn.setAttribute("aria-expanded", "true");
-    popup.setAttribute("aria-hidden", "false");
-    popup.classList.add("is-open");
-  }
-  
-  function closePopup() {
-    btn.setAttribute("aria-expanded", "false");
-    popup.setAttribute("aria-hidden", "true");
-    popup.classList.remove("is-open");
-  }
-  
-  function togglePopup() {
-    const open = btn.getAttribute("aria-expanded") === "true";
-    open ? closePopup() : openPopup();
-  }
-
-  if (btn) {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      togglePopup();
-    });
-  }
-
-  // Click ra ngoài thì đóng
-  document.addEventListener("click", (e) => {
-    if (!popup.contains(e.target) && !btn.contains(e.target)) {
-      closePopup();
-    }
-  });
-
-  // ESC để đóng
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closePopup();
-  });
-
-  // Khởi tạo
-  renderRooms();
-})();
+// Guest picker: xem public/assets/js/hotel-guest-picker.js
 
 // ===============================
 // Hotel Search Top - Date Validation & Auto-Set Min Dates

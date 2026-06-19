@@ -201,6 +201,8 @@ block main
           - const childrenMaxAge = ageBands.childrenMaxAge !== undefined ? ageBands.childrenMaxAge : 11;
           - const childrenMinAge = babyMaxAge + 1;
           - const adultMinAge    = childrenMaxAge + 1;
+          - const maxBabiesPerAdult = Number(tourDetail.maxBabiesPerAdult != null ? tourDetail.maxBabiesPerAdult : 1);
+          - const babySeatFee       = Number(tourDetail.babySeatFee || 0);
 
           .box-tour-detail(
             data-seats-remaining=tourDetail.seatsRemaining
@@ -212,6 +214,8 @@ block main
             data-baby-max-age=babyMaxAge
             data-children-min-age=childrenMinAge
             data-children-max-age=childrenMaxAge
+            data-max-babies-per-adult=maxBabiesPerAdult
+            data-baby-seat-fee=babySeatFee
           )
             .inner-title-main Chuyến Đi Của Bạn
             .inner-product
@@ -270,7 +274,7 @@ block main
                     input(
                       value="1"
                       type="number"
-                      min="0"
+                      min="1"
                       input-quantity="stockAdult"
                       data-price=priceAdult
                       name="quantityAdult"
@@ -314,10 +318,7 @@ block main
                     // chỉ còn 1 dòng, dùng biến đã tính sẵn
                     span.inner-hl(data-baby-unit)= babyUnit
 
-                .inner-seat-option
-                  label
-                    input(type="checkbox" name="seatBaby" seat-baby-toggle)
-                    |  Đặt chỗ ngồi riêng cho em bé
+                //- Checkbox "Đặt chỗ ngồi riêng" đã được chuyển sang per-baby trong phần Thông tin hành khách
 
             // Khối nhập tuổi từng trẻ em / em bé — JS hiển thị khi số lượng > 0
             .age-inputs-wrapper(style="display:none")
@@ -333,6 +334,11 @@ block main
                   .age-inputs-list#babies-ages-list
 
             //- Chọn phòng khách sạn (bắt buộc nếu tour có liên kết khách sạn)
+            if hotelAccommodationRequired && (!tourRoomSegments || tourRoomSegments.length === 0)
+              .hotel-quota-exhausted-banner
+                i.fa-solid.fa-circle-xmark
+                span  Tất cả phòng lưu trú của lịch này đã hết chỗ trong quota. Vui lòng liên hệ công ty du lịch để được hỗ trợ hoặc chọn lịch khởi hành khác.
+
             if tourRoomSegments && tourRoomSegments.length > 0
               - const _segmentsJson = JSON.stringify(tourRoomSegments)
 
@@ -433,7 +439,8 @@ block main
                   .inner-label Thông tin hành khách
                   .shared-passenger-list__hint
                     i.fa-solid.fa-circle-info
-                    span  Khai đầy đủ họ tên, tuổi, giới tính cho mỗi người. Trẻ em / em bé phải chọn người lớn đi cùng phòng.
+                    span  Khai đầy đủ họ tên, tuổi, giới tính cho mỗi người. Ở riêng: số người lớn (từ 18 tuổi) phải ≥ số phòng nhiều nhất trong một khung thời gian (mỗi phòng cần ít nhất 1 người lớn). Ở ghép: đoàn phải có ít nhất 1 người lớn từ 18 tuổi; trẻ em và khách tính giá người lớn nhưng chưa đủ 18 tuổi phải chọn người lớn đi cùng từ 18 tuổi trở lên. Với mỗi em bé chọn "Ngồi cùng người lớn", có thể chọn bất kỳ người lớn nào trong đoàn (kể cả dưới 18 tuổi); đoàn vẫn phải có ít nhất 1 người lớn từ 18 tuổi.
+                .private-min-adults-warning(style="display:none")
                 .shared-passenger-list__rows
                   //- Rows được render bằng JS dựa trên số người lớn / trẻ em / em bé.
                 .shared-passenger-list__warning(style="display:none") Vui lòng khai đầy đủ thông tin hành khách trước khi đặt tour.
@@ -445,7 +452,7 @@ block main
                   .inner-label Phân bổ hành khách vào phòng
                   .private-room-assignment__hint
                     i.fa-solid.fa-circle-info
-                    span  Mỗi người lớn và trẻ em phải được gán vào đúng 1 phòng trong cùng khung. Em bé có thể bỏ trống. Trẻ em / em bé phải ở cùng phòng với người lớn đã chọn.
+                    span  Mỗi phòng phải có ít nhất 1 người lớn từ 18 tuổi trở lên. Mỗi người lớn và trẻ em phải được gán vào đúng 1 phòng trong cùng khung. Em bé có thể bỏ trống.
                 .private-room-assignment__segments
                   //- JS render skeleton per segment / hotel / physical room.
                 .private-room-assignment__warning(style="display:none") Vui lòng phân bổ đầy đủ hành khách vào phòng.
@@ -498,8 +505,9 @@ block main
                         strong.shared-room-hotel-block__expected 1
                         span  người lớn. Hệ thống tự xếp vào các khách sạn ở trên.
                 .shared-room-required-warning(style="display:none") Tổng số nam + nữ ở danh sách hành khách chưa khớp số người lớn đoàn.
+                .shared-feasibility-warning(style="display:none" role="alert")
 
-            //- Khối cảnh báo phòng dư – hiển thị ngay trên Tổng cộng
+            //- Khối cảnh báo chi phí phòng cộng thêm – hiển thị ngay trên Tổng cộng
             .room-selection-global-extra-warning(style="display:none")
 
             .inner-total

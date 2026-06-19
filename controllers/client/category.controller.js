@@ -85,10 +85,11 @@ module.exports.list = async (req, res) => {
       slug: categoryDetail.slug,
     });
 
-    // 3) Chuẩn bị ID danh mục (gồm con)
+    // 3) Chuẩn bị ID danh mục (gồm con + cha — tour gán cha hiện ở con, gán con hiện ở cha)
     const categoryId = String(categoryDetail._id);
-    const categoryChild = await categoryHelper.getCategoryChild(categoryId);
-    const categoryChildId = categoryChild.map((item) => item.id);
+    const categoryFilter = await categoryHelper.buildTourCategoryPageFilter(
+      categoryId
+    );
 
     // 4) Query params (filter + sort)
     const {
@@ -104,10 +105,12 @@ module.exports.list = async (req, res) => {
 
     // 5) Pipeline filter
     const matchBase = {
-      category: { $in: [categoryId, ...categoryChildId] },
       deleted: false,
       status: "active",
     };
+    if (categoryFilter) {
+      Object.assign(matchBase, categoryFilter);
+    }
 
     const keywordCond = nameOrLocationContainsTokens(q);
     if (keywordCond) Object.assign(matchBase, keywordCond);

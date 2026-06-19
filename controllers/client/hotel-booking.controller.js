@@ -339,17 +339,19 @@ module.exports.createPost = async (req, res) => {
             // Breakfast
             else if (serviceId.includes('breakfast_')) {
               // Format: breakfast_{bandname}_{index}_item_{itemIndex}
+              // qty = số người muốn ăn sáng → tính cho toàn bộ số đêm
               const ageBands = hotel.ageBands || [];
               for (const band of ageBands) {
                 const bandKey = band.bandName.toLowerCase().replace(/\s+/g, '_');
                 if (serviceId.includes(bandKey)) {
                   const breakfastFee = band.breakfastFeePerPersonPerMeal || 0;
-                  additionalServicesTotal += qty * breakfastFee;
+                  additionalServicesTotal += qty * breakfastFee * nights;
                   breakfastDetails.push({
                     ageBandName: band.bandName,
-                    meals: qty,
-                    pricePerMeal: breakfastFee,
-                    totalPrice: qty * breakfastFee
+                    persons: qty,
+                    nights: nights,
+                    pricePerPersonPerMeal: breakfastFee,
+                    totalPrice: qty * breakfastFee * nights
                   });
                   break;
                 }
@@ -824,8 +826,19 @@ module.exports.paymentVNPayResult = async (req, res) => {
  */
 async function _cancelHotelBookingGroup(code, phone) {
   try {
+    // Lấy base code (loại bỏ suffix -1, -2, ...): HB123-1 → HB123
+    const baseCode = String(code).replace(/-\d+$/, "");
+
+    // Hủy cả booking gốc và toàn bộ booking con cùng nhóm
     await HotelBooking.updateMany(
-      { code, "guest.phone": phone, paymentStatus: { $ne: "paid" } },
+      {
+        $or: [
+          { code: baseCode },
+          { code: { $regex: `^${baseCode}-\\d+$` } },
+        ],
+        "guest.phone": phone,
+        paymentStatus: { $ne: "paid" },
+      },
       { status: "cancelled", isTemporaryHold: false, holdExpiresAt: null }
     );
   } catch (err) {
@@ -887,6 +900,203 @@ module.exports.cancelHold = async (req, res) => {
   }
 };
 
+/** Lấy toàn bộ booking trong cùng group (HB123, HB123-1, …) */
+async function _fetchHotelBookingGroup(bookingCode, phone) {
+  const baseCode = String(bookingCode).replace(/-\d+$/, "");
+  return HotelBooking.find({
+    $or: [
+      { code: baseCode },
+      { code: { $regex: `^${baseCode}-\\d+$` } },
+    ],
+    "guest.phone": phone,
+  })
+    .populate(
+      "hotel.hotelId",
+      "name address roomTypes currency ageBands thumbnail " +
+      "earlyCheckinFee earlyCheckinTime lateCheckoutFee lateCheckoutTime usefulInfo"
+    )
+    .sort({ createdAt: 1 })
+    .lean();
+}
+
+/** Build dữ liệu hiển thị chi tiết đơn (phòng, dịch vụ, thanh toán) */
+function _buildHotelBookingDisplayDetail(bookings, bookingCode, phone) {
+  const firstBooking = bookings[0];
+  const hotelDoc =
+    firstBooking.hotel?.hotelId && typeof firstBooking.hotel.hotelId === "object"
+      ? firstBooking.hotel.hotelId
+      : null;
+  const roomTypes = Array.isArray(hotelDoc?.roomTypes) ? hotelDoc.roomTypes : [];
+  const ageBands = Array.isArray(hotelDoc?.ageBands) ? hotelDoc.ageBands : [];
+  const currency = hotelDoc?.currency || "VND";
+
+  const { normalizeRoomsData, buildAllocationRoomsDisplay } = require("../../helpers/hotel-guest-rooms.helper");
+
+  const roomItems = bookings.map((b) => {
+    const rt = roomTypes.find((r) => String(r._id) === String(b.roomTypeId)) || null;
+    const roomTypeName = rt?.name || rt?.title || "Loại phòng";
+    const roomTypeImage =
+      (Array.isArray(rt?.images) && rt.images[0]) ||
+      hotelDoc?.thumbnail ||
+      b.hotel?.thumbnail ||
+      "/images/no-image.jpg";
+
+    let roomsDetails = [];
+    let adultsCount = b.adults || 0;
+    let childrenCount = b.children || 0;
+    let babiesCount = 0;
+    if (b.roomsData) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(b.roomsData));
+        const normalized = normalizeRoomsData(parsed);
+        roomsDetails = buildAllocationRoomsDisplay(normalized);
+        adultsCount = roomsDetails.reduce((s, r) => s + r.adultCount, 0);
+        childrenCount = roomsDetails.reduce((s, r) => s + r.childCount, 0);
+        babiesCount = roomsDetails.reduce((s, r) => s + r.babyCount, 0);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    const nights = b.totalNights || 1;
+    const quantity = b.rooms || roomsDetails.length || 1;
+    const roomBaseSubtotal = (b.pricePerNight || 0) * nights * quantity;
+
+    const services = [];
+    const perItemServices = b.additionalServices?.perItem || {};
+    Object.values(perItemServices).forEach((svcMap) => {
+      if (!svcMap || typeof svcMap !== "object") return;
+      Object.entries(svcMap).forEach(([serviceId, qtyStr]) => {
+        const qty = parseInt(qtyStr) || 0;
+        if (qty <= 0) return;
+
+        if (serviceId.includes("extra_bed")) {
+          const price = rt?.extraBedFeePerNight || 0;
+          services.push({
+            name: "Giường phụ",
+            detail: `${qty} giường × ${nights} đêm`,
+            price: price * qty * nights,
+          });
+        } else if (serviceId.includes("breakfast_")) {
+          const band = ageBands.find((bd) => {
+            const bandKey = bd.bandName.toLowerCase().replace(/\s+/g, "_");
+            return serviceId.includes(bandKey);
+          });
+          if (band) {
+            const price = band.breakfastFeePerPersonPerMeal || 0;
+            services.push({
+              name: `Ăn sáng / ${band.bandName}`,
+              detail: `${qty} người × ${nights} buổi sáng`,
+              price: price * qty * nights,
+            });
+          }
+        }
+      });
+    });
+
+    const servicesSubtotal = services.reduce((s, svc) => s + svc.price, 0);
+    const subtotal = roomBaseSubtotal + servicesSubtotal;
+
+    return {
+      roomTypeName,
+      roomTypeImage,
+      nights,
+      quantity,
+      pricePerNight: b.pricePerNight || 0,
+      roomBaseSubtotal,
+      subtotal,
+      adultsCount,
+      childrenCount,
+      babiesCount,
+      roomsDetails,
+      services,
+    };
+  });
+
+  const globalServices = [];
+  const globalSvcMap = firstBooking.additionalServices?.global || {};
+  Object.entries(globalSvcMap).forEach(([key, value]) => {
+    if (key === "early_checkin" && value && hotelDoc?.earlyCheckinFee > 0) {
+      globalServices.push({
+        name: `Nhận phòng sớm (từ ${hotelDoc.earlyCheckinTime || ""})`,
+        price: hotelDoc.earlyCheckinFee,
+      });
+    } else if (key === "late_checkout" && value && hotelDoc?.lateCheckoutFee > 0) {
+      globalServices.push({
+        name: `Trả phòng muộn (đến ${hotelDoc.lateCheckoutTime || ""})`,
+        price: hotelDoc.lateCheckoutFee,
+      });
+    } else if (key === "airport_transfer" && (value === "true" || value === true)) {
+      const price = hotelDoc?.usefulInfo?.airportTransferFee || 0;
+      if (price > 0) {
+        globalServices.push({ name: "Đưa đón sân bay (1 chiều)", price });
+      }
+    } else if (key === "service_airport_transfer" || key.startsWith("service_")) {
+      const qty = parseInt(value) || 0;
+      if (qty > 0) {
+        const price = hotelDoc?.usefulInfo?.airportTransferFee || 0;
+        if (price > 0) {
+          globalServices.push({
+            name: `Đưa đón sân bay (${qty} chiều)`,
+            price: price * qty,
+          });
+        }
+      }
+    }
+  });
+
+  const roomsSubtotal = roomItems.reduce((s, i) => s + i.roomBaseSubtotal, 0);
+  const itemServicesTotal = roomItems.reduce(
+    (s, i) => s + (i.subtotal - i.roomBaseSubtotal),
+    0
+  );
+  const globalServicesTotal = globalServices.reduce((s, svc) => s + svc.price, 0);
+  const taxPercent = 10;
+  const feePercent = 5;
+  const tax = Math.round(roomsSubtotal * taxPercent / 100);
+  const fee = Math.round(roomsSubtotal * feePercent / 100);
+  const orderTotal =
+    firstBooking.orderTotal ||
+    bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+  const extraOccupancyFee = Math.max(
+    0,
+    orderTotal - roomsSubtotal - tax - fee - itemServicesTotal - globalServicesTotal
+  );
+
+  return {
+    code: bookingCode,
+    guest: firstBooking.guest,
+    checkIn: moment(firstBooking.checkIn).format("DD/MM/YYYY"),
+    checkOut: moment(firstBooking.checkOut).format("DD/MM/YYYY"),
+    nights: firstBooking.totalNights || 1,
+    hotel: {
+      name: hotelDoc?.name || firstBooking.hotel?.name || "",
+      address: hotelDoc?.address || firstBooking.hotel?.address || "",
+    },
+    totalAmount: orderTotal,
+    currency,
+    roomItems,
+    globalServices,
+    priceSummary: {
+      roomsSubtotal,
+      itemServicesTotal,
+      globalServicesTotal,
+      extraOccupancyFee,
+      tax,
+      taxPercent,
+      fee,
+      feePercent,
+      orderTotal,
+    },
+    isTemporaryHold: firstBooking.isTemporaryHold,
+    holdExpiresAt: firstBooking.holdExpiresAt,
+    paymentStatus: firstBooking.paymentStatus,
+    paymentMethod: firstBooking.paymentMethod,
+    transferProofImages: firstBooking.transferProofImages || [],
+    phone,
+  };
+}
+
 /**
  * GET /hotel-booking/pending?bookingCode=...&phone=...
  * Hiển thị trang đơn tạm thời (chưa thanh toán)
@@ -899,19 +1109,12 @@ module.exports.pending = async (req, res) => {
       return res.redirect("/");
     }
 
-    // Lấy tất cả bookings có cùng mã code
-    const bookings = await HotelBooking.find({
-      code: bookingCode,
-      "guest.phone": phone,
-    })
-      .populate('hotel.hotelId', 'name address')
-      .lean();
+    const bookings = await _fetchHotelBookingGroup(bookingCode, phone);
 
     if (!bookings || bookings.length === 0) {
       return res.redirect("/");
     }
 
-    // Nếu đã thanh toán → chuyển thẳng sang trang thành công
     const firstBooking = bookings[0];
     if (firstBooking.paymentStatus === "paid") {
       return res.redirect(
@@ -930,31 +1133,7 @@ module.exports.pending = async (req, res) => {
       return res.redirect("/?expired=1");
     }
 
-    // Format booking data
-    const bookingDetail = {
-      code: bookingCode,
-      guest: bookings[0].guest,
-      checkIn: moment(bookings[0].checkIn).format("DD/MM/YYYY"),
-      checkOut: moment(bookings[0].checkOut).format("DD/MM/YYYY"),
-      hotel: bookings[0].hotel,
-      totalAmount:
-        bookings[0].orderTotal ||
-        bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0),
-      bookings: bookings.map(b => ({
-        code: b.code,
-        roomTypeId: b.roomTypeId,
-        pricePerNight: b.pricePerNight,
-        totalNights: b.totalNights,
-        totalAmount: b.totalAmount,
-      })),
-      // Thông tin đơn tạm / giữ chỗ
-      isTemporaryHold: bookings[0].isTemporaryHold,
-      holdExpiresAt: bookings[0].holdExpiresAt,
-      paymentStatus: bookings[0].paymentStatus,
-      paymentMethod: bookings[0].paymentMethod,
-      transferProofImages: bookings[0].transferProofImages || [],
-      phone: phone,
-    };
+    const bookingDetail = _buildHotelBookingDisplayDetail(bookings, bookingCode, phone);
 
     return res.render("client/pages/hotel-booking-pending", {
       pageTitle: "Đơn đặt phòng tạm thời",
@@ -978,42 +1157,13 @@ module.exports.success = async (req, res) => {
       return res.redirect("/");
     }
 
-    // Lấy tất cả bookings có cùng mã code (trong luồng hiện tại mỗi đơn dùng 1 mã)
-    const bookings = await HotelBooking.find({
-      code: bookingCode,
-      "guest.phone": phone,
-    })
-      .populate('hotel.hotelId', 'name address')
-      .lean();
+    const bookings = await _fetchHotelBookingGroup(bookingCode, phone);
 
     if (!bookings || bookings.length === 0) {
       return res.redirect("/");
     }
 
-    // Format booking data
-    const bookingDetail = {
-      code: bookingCode,
-      guest: bookings[0].guest,
-      checkIn: moment(bookings[0].checkIn).format("DD/MM/YYYY"),
-      checkOut: moment(bookings[0].checkOut).format("DD/MM/YYYY"),
-      hotel: bookings[0].hotel,
-      totalAmount:
-        bookings[0].orderTotal ||
-        bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0),
-      bookings: bookings.map(b => ({
-        code: b.code,
-        roomTypeId: b.roomTypeId,
-        pricePerNight: b.pricePerNight,
-        totalNights: b.totalNights,
-        totalAmount: b.totalAmount,
-      })),
-      // Thông tin đơn tạm / giữ chỗ
-      isTemporaryHold: bookings[0].isTemporaryHold,
-      holdExpiresAt: bookings[0].holdExpiresAt,
-      paymentStatus: bookings[0].paymentStatus,
-      paymentMethod: bookings[0].paymentMethod, // Thêm paymentMethod để hiển thị nút thanh toán
-      phone: phone, // Thêm phone để tạo link thanh toán
-    };
+    const bookingDetail = _buildHotelBookingDisplayDetail(bookings, bookingCode, phone);
 
     return res.render("client/pages/hotel-booking-success", {
       pageTitle: "Đặt phòng thành công",

@@ -101,6 +101,31 @@
   font-size: 16px;
 }
 
+.btn-change-room {
+  background: #2d3e90;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.btn-change-room:hover {
+  background: #243270;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(45, 62, 144, 0.35);
+}
+
+.btn-change-room i {
+  font-size: 16px;
+}
+
 /* Room Status Section */
 .room-status-section {
   background: #fff;

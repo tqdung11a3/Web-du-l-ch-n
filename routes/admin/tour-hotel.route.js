@@ -20,7 +20,8 @@ router.get ("/assign/:segmentId",       controller.assign);
 router.get ("/api/hotel-availability",  controller.hotelAvailability);
 router.get ("/api/suggest-allocation",  controller.suggestAllocation);
 router.post("/api/save-segments",       controller.saveSegments);
-router.post("/api/confirm-segments",    controller.confirmSegments);
-router.post("/api/cancel-segments",     controller.cancelSegments);
+router.post("/api/confirm-segments",       controller.confirmSegments);
+router.post("/api/cancel-segments",        controller.cancelSegments);
+router.post("/api/request-additional-rooms", controller.requestAdditionalRooms);
 
 module.exports = router;

@@ -1,8 +1,8 @@
 // helpers/passenger-atom.helper.js
 //
 // Quy đổi danh sách hành khách (passengers) thành các "atoms" cho thuật toán
-// xếp ghép phòng. Mỗi atom là 1 cụm-bất-khả-tách: 1 người lớn + tất cả TE/EB
-// có guardianIdx trỏ tới người lớn đó.
+// xếp ghép phòng. Mỗi atom là 1 cụm-bất-khả-tách: 1 người lớn từ 18 tuổi +
+// tất cả TE/EB và NL dưới 18 tuổi có guardianIdx trỏ tới người đó.
 //
 // Atom giữ luôn ràng buộc về giới tính (theo người lớn) và sức chứa quy đổi
 // (Σ occupancyWeight của các thành viên theo Hotel.ageBands).
@@ -38,6 +38,60 @@
  * }} Atom
  */
 
+/** Tuổi tối thiểu để làm người lớn đi cùng (anchor atom) khi ở ghép. */
+const GUARDIAN_MIN_AGE = 18;
+
+/**
+ * Hành khách cần chọn người lớn đi cùng (TE, EB, hoặc NL tính giá NL nhưng < 18 tuổi).
+ * @param {{ type: string, age: number }} p
+ * @param {number} [minAge]
+ */
+function passengerNeedsGuardian(p, minAge = GUARDIAN_MIN_AGE) {
+  if (p.type === "child" || p.type === "baby") return true;
+  if (p.type === "adult") return p.age < minAge;
+  return false;
+}
+
+/** Người lớn đủ tuổi làm anchor atom / người đi cùng (TE, NL trẻ). */
+function isAnchorAdult(p, minAge = GUARDIAN_MIN_AGE) {
+  return p.type === "adult" && p.age >= minAge;
+}
+
+/** Em bé ghế riêng không cần chọn người đi cùng. */
+function babyNeedsGuardian(p) {
+  if (p.type !== "baby") return passengerNeedsGuardian(p);
+  if (p.babySeatType === "private") return false;
+  return true;
+}
+
+/** Người lớn trong đoàn (mọi tuổi tính giá NL). */
+function isAdultPassenger(p) {
+  return !!(p && p.type === "adult");
+}
+
+function _atomLabelFromMembers(anchor, members) {
+  const labelDeps = members
+    .filter((m) => m.idx !== anchor.idx)
+    .map((m) => {
+      if (m.type === "child") return `TE ${m.name || "?"}`;
+      if (m.type === "baby") return `EB ${m.name || "?"}`;
+      return `${m.name || "?"} (${m.age}t)`;
+    })
+    .join(", ");
+  return labelDeps ? `${anchor.name || "?"} (+ ${labelDeps})` : anchor.name || "?";
+}
+
+function _attachMemberToAtom(atom, member, ageBands) {
+  if ((atom.members || []).some((m) => m.idx === member.idx)) return;
+  atom.members.push(member);
+  atom.effectiveSize = atom.members.reduce(
+    (sum, m) => sum + _weightForAge(m.age, m.type, ageBands),
+    0
+  );
+  const anchor = atom.members.find((m) => m.idx === atom.anchorIdx) || atom.members[0];
+  atom.label = _atomLabelFromMembers(anchor, atom.members);
+}
+
 /**
  * Build atoms từ danh sách passengers.
  *
@@ -49,75 +103,160 @@
 function buildAtomsFromPassengers(passengers, ageBands) {
   if (!Array.isArray(passengers) || passengers.length === 0) return [];
 
-  const list = passengers.map((p, i) => ({
-    idx: typeof p.idx === "number" ? p.idx : i,
-    name: String(p.name || "").trim(),
-    age: Math.max(0, Math.floor(Number(p.age) || 0)),
-    type: p.type === "child" || p.type === "baby" ? p.type : "adult",
-    gender: p.gender === "male" || p.gender === "female" ? p.gender : null,
-    guardianIdx:
+  const list = passengers.map((p, i) => {
+    const guardianIdx =
       p.guardianIdx === null || p.guardianIdx === undefined
         ? null
-        : Math.floor(Number(p.guardianIdx)),
-  }));
+        : Math.floor(Number(p.guardianIdx));
+    // Em bé có thể có roomGuardianIdx riêng (NL ở cùng phòng KS, khác với
+    // NL ngồi cùng trên tour). Khi xây atom ta DÙNG roomGuardianIdx.
+    // Fallback về guardianIdx khi đơn cũ không có.
+    const roomGuardianIdx =
+      p.roomGuardianIdx === null || p.roomGuardianIdx === undefined
+        ? null
+        : Math.floor(Number(p.roomGuardianIdx));
+    const type = p.type === "child" || p.type === "baby" ? p.type : "adult";
+    return {
+      idx: typeof p.idx === "number" ? p.idx : i,
+      name: String(p.name || "").trim(),
+      age: Math.max(0, Math.floor(Number(p.age) || 0)),
+      type,
+      gender: p.gender === "male" || p.gender === "female" ? p.gender : null,
+      guardianIdx,
+      // Atom anchor cho em bé: ưu tiên roomGuardianIdx, fallback guardianIdx
+      roomGuardianIdx:
+        type === "baby" && roomGuardianIdx !== null
+          ? roomGuardianIdx
+          : null,
+      babySeatType:
+        p.babySeatType === "private" || p.babySeatType === "shared"
+          ? p.babySeatType
+          : undefined,
+    };
+  });
 
-  // Validate adults
+  // Helper: em bé thuộc atom của ai? Ưu tiên roomGuardianIdx, fallback guardianIdx.
+  const _babyAtomAnchorIdx = (p) =>
+    p.type === "baby" && p.roomGuardianIdx !== null
+      ? p.roomGuardianIdx
+      : p.guardianIdx;
+
   const adults = list.filter((p) => p.type === "adult");
+  const anchorAdults = [];
+
   for (const a of adults) {
     if (!a.gender) {
       throw new Error(
         `Hành khách "${a.name || "(chưa có tên)"}" là người lớn nhưng chưa khai giới tính.`
       );
     }
-    if (a.guardianIdx !== null) {
+    if (isAnchorAdult(a)) {
+      if (a.guardianIdx !== null) {
+        throw new Error(
+          `Hành khách "${a.name || "(chưa có tên)"}" từ ${GUARDIAN_MIN_AGE} tuổi trở lên không thể chọn người đi cùng.`
+        );
+      }
+      anchorAdults.push(a);
+    } else if (passengerNeedsGuardian(a)) {
+      if (a.guardianIdx === null) {
+        throw new Error(
+          `Hành khách "${a.name || "(chưa có tên)"}" (${a.age} tuổi) chưa chọn người lớn đi cùng từ ${GUARDIAN_MIN_AGE} tuổi trở lên.`
+        );
+      }
+    }
+  }
+
+  const anchorByIdx = new Map();
+  for (const a of anchorAdults) anchorByIdx.set(a.idx, a);
+
+  const adultByIdx = new Map(adults.map((a) => [a.idx, a]));
+
+  const dependents = list.filter((p) => {
+    if (p.type === "baby") return babyNeedsGuardian(p);
+    return passengerNeedsGuardian(p);
+  });
+
+  for (const d of dependents) {
+    if (d.guardianIdx === null) {
+      const who =
+        d.type === "child"
+          ? "Trẻ em"
+          : d.type === "baby"
+          ? "Em bé"
+          : "Hành khách";
+      const msg =
+        d.type === "baby"
+          ? `${who} "${d.name || "(chưa có tên)"}" chưa chọn người lớn đi cùng.`
+          : `${who} "${d.name || "(chưa có tên)"}" chưa chọn người lớn đi cùng từ ${GUARDIAN_MIN_AGE} tuổi trở lên.`;
+      throw new Error(msg);
+    }
+    if (d.type === "baby") {
+      // Em bé: kiểm tra anchor phòng KS (roomGuardianIdx) trước, fallback guardianIdx.
+      const roomAnchor = _babyAtomAnchorIdx(d);
+      if (roomAnchor === null || !adultByIdx.has(roomAnchor)) {
+        throw new Error(
+          `Em bé "${d.name || "(chưa có tên)"}" có người ở cùng phòng không hợp lệ (phải là người lớn trong đoàn).`
+        );
+      }
+      continue;
+    }
+    if (!anchorByIdx.has(d.guardianIdx)) {
+      const who =
+        d.type === "child"
+          ? "Trẻ em"
+          : "Hành khách";
       throw new Error(
-        `Hành khách "${a.name || "(chưa có tên)"}" là người lớn không thể có người trông.`
+        `${who} "${d.name || "(chưa có tên)"}" có người đi cùng không hợp lệ (phải từ ${GUARDIAN_MIN_AGE} tuổi trở lên).`
       );
     }
   }
 
-  // Map idx → adult cho lookup nhanh.
-  const adultByIdx = new Map();
-  for (const a of adults) adultByIdx.set(a.idx, a);
-
-  // Validate kids/babies
-  const kids = list.filter((p) => p.type === "child" || p.type === "baby");
-  for (const k of kids) {
-    if (k.guardianIdx === null) {
-      throw new Error(
-        `${k.type === "child" ? "Trẻ em" : "Em bé"} "${k.name || "(chưa có tên)"}" chưa chọn người lớn đi cùng.`
-      );
-    }
-    if (!adultByIdx.has(k.guardianIdx)) {
-      throw new Error(
-        `${k.type === "child" ? "Trẻ em" : "Em bé"} "${k.name || "(chưa có tên)"}" có người trông không hợp lệ.`
-      );
-    }
-  }
-
-  // Build atoms: mỗi adult tạo 1 atom, kèm các kids guardianIdx === adult.idx.
+  // Build atoms: mỗi NL từ 18 tuổi là anchor; TE/EB và NL < 18 gắn qua guardianIdx.
   /** @type {Atom[]} */
-  const atoms = adults.map((a) => {
-    const members = [a, ...kids.filter((k) => k.guardianIdx === a.idx)];
+  const atoms = anchorAdults.map((a) => {
+    const members = [
+      a,
+      ...list.filter((p) => {
+        if (p.idx === a.idx) return false;
+        if (p.type === "baby") {
+          // Em bé luôn gắn vào atom theo roomGuardianIdx (fallback guardianIdx),
+          // không phụ thuộc loại ghế tour. Ngay cả baby ghế riêng vẫn phải nằm
+          // trong 1 phòng (atom) nào đó khi shared mode.
+          return _babyAtomAnchorIdx(p) === a.idx;
+        }
+        return p.guardianIdx === a.idx;
+      }),
+    ];
     const effectiveSize = members.reduce(
       (sum, m) => sum + _weightForAge(m.age, m.type, ageBands),
       0
     );
-    const labelKids = members
-      .filter((m) => m.type !== "adult")
-      .map((m) => `${m.type === "child" ? "TE" : "EB"} ${m.name || "?"}`)
-      .join(", ");
-    const label = labelKids
-      ? `${a.name || "?"} (+ ${labelKids})`
-      : a.name || "?";
     return {
       gender: a.gender,
       effectiveSize,
       members,
       anchorIdx: a.idx,
-      label,
+      label: _atomLabelFromMembers(a, members),
     };
   });
+
+  // Em bé chọn anchor phòng KS = NL < 18 (hiếm, nhưng vẫn có thể): gắn em bé
+  // vào atom mà NL đi cùng đó thuộc về.
+  for (const baby of list) {
+    if (baby.type !== "baby") continue;
+    const roomAnchor = _babyAtomAnchorIdx(baby);
+    if (roomAnchor === null) continue;
+    if (anchorByIdx.has(roomAnchor)) continue;
+    const atom = atoms.find((at) =>
+      (at.members || []).some((m) => m.idx === roomAnchor)
+    );
+    if (!atom) {
+      throw new Error(
+        `Em bé "${baby.name || "(chưa có tên)"}" có người ở cùng phòng không thuộc đoàn hợp lệ.`
+      );
+    }
+    _attachMemberToAtom(atom, baby, ageBands);
+  }
 
   return atoms;
 }
@@ -196,6 +335,102 @@ function reweightAtomsForAgeBands(atoms, ageBands) {
  * @param {{ males:number, females:number }} legacy
  * @returns {Atom[]}
  */
+/** Thông báo chuẩn khi NL không đủ để phân bổ TE/EB ở ghép trong 1 phòng. */
+const SHARED_INSUFFICIENT_ADULTS_MESSAGE =
+  "Số lượng trẻ em đi cùng vượt quá khả năng phân bổ phòng ở ghép. " +
+  "Với loại phòng hiện tại, mỗi phòng cần có ít nhất 1 người lớn đi kèm trẻ em. " +
+  "Vui lòng bổ sung người lớn đi cùng hoặc liên hệ công ty du lịch để được hỗ trợ.";
+
+/**
+ * Số slot occupancy tối đa cho TE/EB trong 1 phòng (sau khi trừ 1 NL) theo
+ * baseOccupancy và ageBands.
+ */
+function _maxDependentSlotsInRoom(maxCap, ageBands) {
+  const cap = Math.max(1, Math.floor(Number(maxCap) || 2));
+  const remaining = Math.max(0, cap - 1);
+  if (remaining <= 0) return 0;
+  let minChildW = 0.5;
+  if (Array.isArray(ageBands) && ageBands.length > 0) {
+    const childWeights = ageBands
+      .filter((b) => b && b.countInOccupancy !== false)
+      .map((b) => Number(b.occupancyWeight))
+      .filter((w) => !isNaN(w) && w > 0);
+    if (childWeights.length > 0) {
+      minChildW = Math.min(...childWeights);
+    }
+  }
+  return Math.floor(remaining / minChildW);
+}
+
+/**
+ * Kiểm tra mỗi atom (1 NL + TE/EB đi cùng) có nằm trọn trong 1 phòng ở ghép
+ * theo baseOccupancy hay không. Ở ghép không được tách 1 NL sang nhiều phòng
+ * để "chia" trẻ — nếu nhóm vượt sức chứa 1 phòng → cần thêm NL.
+ *
+ * @param {Atom[]} atoms
+ * @param {Array<{ capacity: number, count?: number }>} roomBuckets
+ * @param {AgeBand[]} ageBands
+ * @returns {{
+ *   ok: boolean,
+ *   reason?: 'insufficient_adults_for_children'|'atom_too_large',
+ *   message?: string,
+ *   offendingAtom?: Atom,
+ *   maxRoomCapacity?: number,
+ * }}
+ */
+function validateAtomsFitSharedRooms(atoms, roomBuckets, ageBands) {
+  const buckets = (roomBuckets || []).filter(
+    (r) => Math.floor(Number(r.capacity) || 0) > 0
+  );
+  if (buckets.length === 0) {
+    return { ok: true };
+  }
+  const maxCap = Math.max(
+    ...buckets.map((r) => Math.max(1, Math.floor(Number(r.capacity) || 2)))
+  );
+  const maxDepSlots = _maxDependentSlotsInRoom(maxCap, ageBands);
+
+  for (const atom of atoms || []) {
+    if (!atom) continue;
+    const members = Array.isArray(atom.members) ? atom.members : [];
+    const dependents = members.filter((m) => m.type === "child" || m.type === "baby");
+    if (dependents.length === 0) continue;
+
+    const adultMembers = members.filter((m) => m.type === "adult");
+    const effectiveSize =
+      members.length > 0
+        ? members.reduce(
+            (sum, m) => sum + _weightForAge(m.age, m.type, ageBands),
+            0
+          )
+        : Math.max(0, Number(atom.effectiveSize) || 0);
+
+    const tooLargeByWeight = effectiveSize > maxCap;
+    const tooManyDependents = dependents.length > maxDepSlots;
+
+    if (!tooLargeByWeight && !tooManyDependents) continue;
+
+    const reason =
+      adultMembers.length <= 1
+        ? "insufficient_adults_for_children"
+        : "atom_too_large";
+
+    return {
+      ok: false,
+      reason,
+      message:
+        reason === "insufficient_adults_for_children"
+          ? SHARED_INSUFFICIENT_ADULTS_MESSAGE
+          : `Nhóm "${atom.label || "?"}" vượt sức chứa phòng lớn nhất (${maxCap}) cho ở ghép. ` +
+            `Hãy giảm số trẻ em đi cùng 1 người lớn hoặc chuyển sang ở riêng.`,
+      offendingAtom: atom,
+      maxRoomCapacity: maxCap,
+    };
+  }
+
+  return { ok: true, maxRoomCapacity: maxCap };
+}
+
 function synthesizeLegacyAtoms({ males, females }) {
   const atoms = [];
   const m = Math.max(0, Math.floor(Number(males) || 0));
@@ -225,5 +460,12 @@ module.exports = {
   buildAtomsFromPassengers,
   reweightAtomsForAgeBands,
   synthesizeLegacyAtoms,
+  validateAtomsFitSharedRooms,
+  SHARED_INSUFFICIENT_ADULTS_MESSAGE,
+  GUARDIAN_MIN_AGE,
+  babyNeedsGuardian,
+  isAdultPassenger,
+  passengerNeedsGuardian,
+  isAnchorAdult,
   _weightForAge, // export để test
 };

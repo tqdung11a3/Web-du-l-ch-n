@@ -43,14 +43,24 @@ block main
 
     if receivedRequests && receivedRequests.length > 0
       each req in receivedRequests
-        .lr-card(class=`lr-card--${req.status}`)
+        - var _autoTagBadgeR = hotelLinkAutoBySenderTag || ''
+        - var _isAutoClosedR = req.status === 'rejected' && _autoTagBadgeR && (req.responseNote || '').indexOf(_autoTagBadgeR) === 0
+        .lr-card(class=(_isAutoClosedR ? 'lr-card--auto-closed' : `lr-card--${req.status}`))
           .lr-card-header
             .lr-card-info
               h3.lr-card-title= req.tourName
               .lr-card-meta
-                span.lr-meta-item
+                span.lr-meta-item.lr-meta-item--tour
                   i.fa-solid.fa-calendar-day
-                  |  #{req.departureDateDisplay} → #{req.endDateDisplay}
+                  |  Lịch tour: #{req.departureDateDisplay} → #{req.endDateDisplay}
+                if req.hotelStayFrames && req.hotelStayFrames.length > 0
+                  each frame, fi in req.hotelStayFrames
+                    span.lr-meta-item.lr-meta-item--hotel-stay
+                      i.fa-solid.fa-bed
+                      if req.hotelStayFrames.length > 1
+                        |  Khung #{fi + 1} (KS): #{frame.fromDateDisplay} → #{frame.toDateDisplay}
+                      else
+                        |  Lưu trú KS: #{frame.fromDateDisplay} → #{frame.toDateDisplay}
                 span.lr-meta-item
                   i.fa-solid.fa-building
                   |  Từ công ty: #{req.fromCompanyName}
@@ -67,6 +77,8 @@ block main
                 span.lr-badge.lr-badge--approved Đã duyệt
               else if req.status === 'partially_approved'
                 span.lr-badge.lr-badge--partial Duyệt một phần
+              else if _isAutoClosedR
+                span.lr-badge.lr-badge--auto-closed(title="Hệ thống đóng do bên gửi cấu hình lại — bạn không phải từ chối yêu cầu này") Đóng tự động
               else
                 span.lr-badge.lr-badge--rejected Từ chối
 
@@ -78,8 +90,9 @@ block main
                   th Loại phòng
                   th Số phòng yêu cầu
                   th Sức chứa
-                  th Từ ngày
-                  th Đến ngày
+                  th Khung KS
+                  th Check-in
+                  th Check-out
                   th(
                     title="Số phòng trống ước tính trong khoảng ngày yêu cầu (theo đặt phòng hiện tại và phòng trạng thái trống)"
                   ) Trống (khoảng yêu cầu)
@@ -91,6 +104,7 @@ block main
                     td= rr.roomTypeName
                     td= rr.assignedRooms
                     td= rr.baseOccupancy + ' người/phòng'
+                    td= rr.stayFrameIndex ? ('Khung ' + rr.stayFrameIndex) : '—'
                     td= rr.fromDateDisplay
                     td= rr.toDateDisplay
                     td= rr.availableFreeRooms != null ? rr.availableFreeRooms : '—'
@@ -104,7 +118,7 @@ block main
                 |  #{req.note}
 
             //- Khối reviewer info (duyệt / từ chối)
-            if req.status !== 'pending' && req.status !== 'cancelled' && req.reviewerName
+            if req.status !== 'pending' && req.status !== 'cancelled' && req.reviewerName && !_isAutoClosedR
               .lr-reviewer-info
                 i.fa-solid.fa-user-check
                 if req.status === 'rejected'
@@ -218,6 +232,7 @@ block main
     .lr-card--approved { border-left: 4px solid #22c55e; }
     .lr-card--partially_approved { border-left: 4px solid #3b82f6; }
     .lr-card--rejected { border-left: 4px solid #ef4444; opacity: .7; }
+    .lr-card--auto-closed { border-left: 4px solid #94a3b8; opacity: .75; }
     .lr-card-header {
       display: flex; justify-content: space-between; align-items: flex-start;
       padding: 16px 20px; background: #f8fafc;
@@ -233,6 +248,7 @@ block main
     .lr-badge--approved { background: #dcfce7; color: #166534; }
     .lr-badge--partial  { background: #dbeafe; color: #1e40af; }
     .lr-badge--rejected { background: #fee2e2; color: #991b1b; }
+    .lr-badge--auto-closed { background: #e2e8f0; color: #475569; border: 1px dashed #94a3b8; }
     .lr-card-body { padding: 16px 20px; }
     .lr-card-body h4 { margin: 0 0 10px; font-size: 14px; color: #475569; font-weight: 600; }
     .lr-table { width: 100%; border-collapse: collapse; font-size: 13px; }

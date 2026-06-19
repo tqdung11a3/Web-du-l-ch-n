@@ -44,11 +44,107 @@ block main
                 span.info-label Ngày trả phòng:
                 strong.info-value= bookingDetail.checkOut
               .info-row
-                span.info-label Tổng tiền:
-                strong.info-value.total-amount= Number(bookingDetail.totalAmount || 0).toLocaleString('vi-VN') + ' VND'
-              .info-row
                 span.info-label Trạng thái thanh toán:
                 strong.info-value.status-unpaid Chưa thanh toán
+
+            if bookingDetail.roomItems && bookingDetail.roomItems.length > 0
+              .info-card
+                h3.info-title Các phòng đã chọn
+                .pending-room-list
+                  each item, idx in bookingDetail.roomItems
+                    .pending-room-item
+                      .pending-room-item__image
+                        img(src=item.roomTypeImage, alt=item.roomTypeName)
+                      .pending-room-item__body
+                        .pending-room-item__header
+                          h4.pending-room-item__title= item.roomTypeName
+                          span.pending-room-item__badge #{item.quantity} phòng × #{item.nights} đêm
+                        .pending-room-item__meta
+                          span
+                            i.fa-regular.fa-user
+                            |  #{item.adultsCount} người lớn
+                            if item.childrenCount > 0
+                              | , #{item.childrenCount} trẻ em
+                            if item.babiesCount > 0
+                              | , #{item.babiesCount} em bé
+                          span.pending-room-item__price
+                            | #{Number(item.pricePerNight).toLocaleString('vi-VN')} #{bookingDetail.currency} / đêm
+                        if item.roomsDetails && item.roomsDetails.length > 0
+                          ul.pending-room-item__rooms
+                            each rd, rIdx in item.roomsDetails
+                              li
+                                strong Phòng #{rIdx + 1}: 
+                                if rd.adultCount > 0
+                                  span #{rd.adultCount} người lớn
+                                  if rd.adults && rd.adults.length
+                                    |  (
+                                    each a, ai in rd.adults
+                                      if ai > 0
+                                        | , 
+                                      |#{a.age} tuổi
+                                    | )
+                                if rd.childCount > 0
+                                  | , #{rd.childCount} trẻ em
+                                  if rd.children && rd.children.length
+                                    |  (
+                                    each c, ci in rd.children
+                                      if ci > 0
+                                        | , 
+                                      |#{c.age} tuổi
+                                    | )
+                                if rd.babyCount > 0
+                                  | , #{rd.babyCount} em bé
+                                  if rd.babies && rd.babies.length
+                                    |  (
+                                    each b, bi in rd.babies
+                                      if bi > 0
+                                        | , 
+                                      |#{b.age} tuổi
+                                    | )
+                        if item.services && item.services.length > 0
+                          .pending-room-item__services
+                            .pending-room-item__services-title Dịch vụ thêm:
+                            ul
+                              each svc in item.services
+                                li
+                                  span.svc-name= svc.name
+                                  if svc.detail
+                                    span.svc-detail  · #{svc.detail}
+                                  span.svc-price  — #{Number(svc.price).toLocaleString('vi-VN')} #{bookingDetail.currency}
+                        .pending-room-item__subtotal
+                          span.pending-room-item__subtotal-base
+                            | Phòng: #{Number(item.roomBaseSubtotal).toLocaleString('vi-VN')} #{bookingDetail.currency}
+                          if item.services && item.services.length > 0
+                            span.pending-room-item__subtotal-sep  + 
+                            span.pending-room-item__subtotal-svc
+                              | Dịch vụ: #{Number(item.subtotal - item.roomBaseSubtotal).toLocaleString('vi-VN')} #{bookingDetail.currency}
+                          .pending-room-item__subtotal-total
+                            | Thành tiền: 
+                            strong #{Number(item.subtotal).toLocaleString('vi-VN')} #{bookingDetail.currency}
+
+                if bookingDetail.globalServices && bookingDetail.globalServices.length > 0
+                  .pending-global-services
+                    h4.pending-global-services__title Dịch vụ chung
+                    ul
+                      each svc in bookingDetail.globalServices
+                        li
+                          span= svc.name
+                          span.svc-price  — #{Number(svc.price).toLocaleString('vi-VN')} #{bookingDetail.currency}
+
+            if bookingDetail.priceSummary
+              - const ps = bookingDetail.priceSummary
+              .info-card
+                h3.info-title Chi tiết thanh toán
+                .pending-price-summary
+                  .pending-price-row
+                    span Thuế VAT (#{ps.taxPercent}%):
+                    strong= Number(ps.tax).toLocaleString('vi-VN') + ' ' + bookingDetail.currency
+                  .pending-price-row
+                    span Phí dịch vụ (#{ps.feePercent}%):
+                    strong= Number(ps.fee).toLocaleString('vi-VN') + ' ' + bookingDetail.currency
+                  .pending-price-row.pending-price-row--total
+                    span Tổng cộng:
+                    strong.total-amount= Number(ps.orderTotal).toLocaleString('vi-VN') + ' ' + bookingDetail.currency
 
             if bookingDetail.guest
               .info-card
@@ -127,6 +223,17 @@ block main
               i.fa-solid.fa-xmark
               |  Hủy đặt phòng & trả lại phòng
 
+            //- Modal xác nhận hủy (thay cho confirm trình duyệt)
+            #cancelHoldModal.cancel-hold-modal(aria-hidden="true")
+              button.cancel-hold-modal__overlay(type="button" tabindex="-1" aria-label="Đóng")
+              .cancel-hold-modal__dialog(role="dialog" aria-modal="true" aria-labelledby="cancelHoldModalTitle")
+                h3#cancelHoldModalTitle Xác nhận hủy đặt phòng
+                p.cancel-hold-modal__lead
+                  | Bạn chắc chắn muốn hủy đặt phòng và trả lại các phòng đã giữ?
+                .cancel-hold-modal__actions
+                  button#cancelHoldModalDismiss.cancel-hold-modal__btn.cancel-hold-modal__btn--muted(type="button") Không, giữ đơn
+                  button#cancelHoldModalConfirm.cancel-hold-modal__btn.cancel-hold-modal__btn--danger(type="button") Xác nhận hủy đơn
+
   //- sendBeacon: hủy khi user rời trang (trừ khi đang thanh toán hoặc refresh)
   if bookingDetail && bookingDetail.isTemporaryHold && bookingDetail.paymentStatus === 'unpaid'
     script.
@@ -141,21 +248,63 @@ block main
           payBtn.addEventListener('click', function () { goingToPayment = true; });
         }
 
-        // Nút "Hủy đặt phòng" → gọi API explicit rồi về trang chủ
+        // Nút "Hủy đặt phòng" → modal xác nhận → gọi API explicit rồi về trang chủ
         var cancelBtn = document.getElementById('btnCancelHold');
-        if (cancelBtn) {
-          cancelBtn.addEventListener('click', function () {
-            if (!confirm('Bạn chắc chắn muốn hủy đặt phòng và trả lại phòng?')) return;
-            goingToPayment = true;
+        var cancelModal = document.getElementById('cancelHoldModal');
+        var cancelModalDismiss = document.getElementById('cancelHoldModalDismiss');
+        var cancelModalConfirm = document.getElementById('cancelHoldModalConfirm');
+        var cancelModalOverlay = cancelModal ? cancelModal.querySelector('.cancel-hold-modal__overlay') : null;
+
+        function openCancelHoldModal() {
+          if (!cancelModal) return;
+          cancelModal.classList.add('is-open');
+          cancelModal.setAttribute('aria-hidden', 'false');
+          document.body.style.overflow = 'hidden';
+          if (cancelModalConfirm) cancelModalConfirm.focus();
+        }
+        function closeCancelHoldModal() {
+          if (!cancelModal) return;
+          cancelModal.classList.remove('is-open');
+          cancelModal.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+        }
+
+        function runCancelHoldRequest() {
+          goingToPayment = true; // tắt beacon tránh gọi 2 lần
+          if (cancelBtn) {
             cancelBtn.disabled = true;
             cancelBtn.textContent = 'Đang hủy...';
-            fetch('/hotel-booking/cancel-hold?bookingCode=' + encodeURIComponent(bookingCode) +
-                  '&phone=' + encodeURIComponent(phone), {
-                    headers: { 'X-Cancel-Reason': 'explicit' }
-                  })
-              .finally(function () { window.location.href = '/'; });
+          }
+          fetch('/hotel-booking/cancel-hold?bookingCode=' + encodeURIComponent(bookingCode) +
+                '&phone=' + encodeURIComponent(phone), {
+                  headers: { 'X-Cancel-Reason': 'explicit' }
+                })
+            .finally(function () { window.location.href = '/'; });
+        }
+
+        if (cancelBtn && cancelModal) {
+          cancelBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            openCancelHoldModal();
           });
         }
+        if (cancelModalDismiss) {
+          cancelModalDismiss.addEventListener('click', function () { closeCancelHoldModal(); });
+        }
+        if (cancelModalOverlay) {
+          cancelModalOverlay.addEventListener('click', function () { closeCancelHoldModal(); });
+        }
+        if (cancelModalConfirm) {
+          cancelModalConfirm.addEventListener('click', function () {
+            closeCancelHoldModal();
+            runCancelHoldRequest();
+          });
+        }
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && cancelModal && cancelModal.classList.contains('is-open')) {
+            closeCancelHoldModal();
+          }
+        });
 
         // pagehide: gửi beacon khi đóng tab / điều hướng ra ngoài
         // Server chỉ cancel nếu đơn đã hết hạn (tránh hủy khi F5 hoặc mở tab mới)
@@ -323,6 +472,46 @@ block main
       })();
 
   style.
+    /* Khối các phòng đã chọn */
+    .pending-room-list { display: flex; flex-direction: column; gap: 14px; }
+    .pending-room-item { display: flex; gap: 14px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa; }
+    .pending-room-item__image { flex: 0 0 120px; }
+    .pending-room-item__image img { width: 120px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; }
+    .pending-room-item__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+    .pending-room-item__header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pending-room-item__title { margin: 0; font-size: 16px; font-weight: 700; color: #1e293b; }
+    .pending-room-item__badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #e0f2fe; color: #0369a1; white-space: nowrap; }
+    .pending-room-item__meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: #475569; }
+    .pending-room-item__meta i { margin-right: 4px; }
+    .pending-room-item__price { color: #2d3e90; font-weight: 600; }
+    .pending-room-item__rooms { list-style: none; padding: 8px 12px; margin: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; color: #334155; }
+    .pending-room-item__rooms li { padding: 3px 0; }
+    .pending-room-item__rooms li + li { border-top: 1px dashed #e5e7eb; }
+    .pending-room-item__services { padding: 8px 12px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; font-size: 13px; color: #9a3412; }
+    .pending-room-item__services-title { font-weight: 600; margin-bottom: 4px; }
+    .pending-room-item__services ul { list-style: none; padding: 0; margin: 0; }
+    .pending-room-item__services li { padding: 2px 0; }
+    .pending-room-item__services .svc-price { color: #c2410c; font-weight: 600; }
+    .pending-room-item__subtotal { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; justify-content: flex-end; font-size: 13px; color: #475569; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 4px; }
+    .pending-room-item__subtotal-total { width: 100%; text-align: right; font-size: 14px; color: #334155; }
+    .pending-room-item__subtotal-total strong { color: #dc2626; font-size: 16px; margin-left: 4px; }
+    .pending-room-item__subtotal-sep { color: #94a3b8; }
+    .pending-global-services { margin-top: 14px; padding: 12px 14px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; }
+    .pending-global-services__title { margin: 0 0 8px; font-size: 14px; font-weight: 700; color: #0369a1; }
+    .pending-global-services ul { list-style: none; padding: 0; margin: 0; font-size: 13px; color: #1e3a5f; }
+    .pending-global-services li { padding: 3px 0; display: flex; justify-content: space-between; }
+    .pending-global-services .svc-price { font-weight: 600; color: #0c4a6e; }
+    .pending-price-summary { display: flex; flex-direction: column; gap: 8px; }
+    .pending-price-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #475569; padding: 6px 0; border-bottom: 1px dashed #e5e7eb; }
+    .pending-price-row:last-child { border-bottom: none; }
+    .pending-price-row strong { color: #1e293b; font-weight: 600; }
+    .pending-price-row--extra strong { color: #b45309; }
+    .pending-price-row--total { margin-top: 6px; padding-top: 12px; border-top: 2px solid #e5e7eb; border-bottom: none; font-size: 16px; font-weight: 700; color: #1e293b; }
+    .pending-price-row--total .total-amount { color: #dc2626; font-size: 18px; }
+    @media (max-width: 640px) {
+      .pending-room-item { flex-direction: column; }
+      .pending-room-item__image, .pending-room-item__image img { width: 100%; height: 180px; }
+    }
     .bank-details { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 14px 18px; margin: 12px 0; }
     .bank-details-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 14px; }
     .bank-details-row:last-child { margin-bottom: 0; }

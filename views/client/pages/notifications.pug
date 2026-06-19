@@ -1,0 +1,72 @@
+extends ../layouts/default.pug
+
+block main
+  .client-notifications-page
+    h1 Thông báo của bạn
+    #clientNotificationsPageList
+      .client-notification-loading
+        i.fa-solid.fa-spinner.fa-spin
+        |  Đang tải...
+
+  script.
+    (function() {
+      const listEl = document.getElementById('clientNotificationsPageList');
+      function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s || '';
+        return d.innerHTML;
+      }
+      async function load() {
+        try {
+          const res = await fetch('/notifications/api/list?limit=50');
+          const data = await res.json();
+          if (data.code !== 'success' || !data.notifications || !data.notifications.length) {
+            listEl.innerHTML = '<div class="client-notification-empty"><i class="fa-regular fa-bell-slash"></i><p>Chưa có thông báo</p></div>';
+            return;
+          }
+          let html = '';
+          if (data.notifications.some(n => !n.isRead)) {
+            html += '<p style="margin-bottom:12px"><button type="button" id="pageMarkAllRead" class="client-notification-actions button" style="border:1px solid #2f54eb;color:#2f54eb;padding:8px 16px;border-radius:6px;background:#fff;cursor:pointer">Đánh dấu tất cả đã đọc</button></p>';
+          }
+          data.notifications.forEach(function(n) {
+            const unread = n.isRead ? '' : ' unread';
+            html += '<div class="client-notification-item' + unread + '" data-id="' + n._id + '" data-link="' + esc(n.link || '') + '">' +
+              '<div class="client-notification-icon" style="background:' + n.iconColor + '20;color:' + n.iconColor + '"><i class="fa-solid ' + n.icon + '"></i></div>' +
+              '<div class="client-notification-body">' +
+              '<p class="client-notification-title">' + esc(n.title) + '</p>' +
+              '<p class="client-notification-text">' + esc(n.content) + '</p>' +
+              '<span class="client-notification-time">' + esc(n.createdAt) + ' · ' + esc(n.timeAgo) + '</span>' +
+              '</div></div>';
+          });
+          listEl.innerHTML = html;
+          const markAll = document.getElementById('pageMarkAllRead');
+          if (markAll) {
+            markAll.addEventListener('click', async function() {
+              await fetch('/notifications/api/mark-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ all: true })
+              });
+              load();
+              if (window.clientNotificationRefreshBadge) window.clientNotificationRefreshBadge();
+            });
+          }
+          listEl.querySelectorAll('.client-notification-item').forEach(function(el) {
+            el.addEventListener('click', async function() {
+              const id = el.getAttribute('data-id');
+              const link = el.getAttribute('data-link');
+              await fetch('/notifications/api/mark-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+              });
+              if (window.clientNotificationRefreshBadge) window.clientNotificationRefreshBadge();
+              if (link) window.location.href = link;
+            });
+          });
+        } catch (e) {
+          listEl.innerHTML = '<div class="client-notification-empty"><p>Không tải được thông báo</p></div>';
+        }
+      }
+      load();
+    })();

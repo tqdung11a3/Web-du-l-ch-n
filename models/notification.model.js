@@ -13,7 +13,7 @@ const schema = new Schema(
     // Loại thông báo
     type: {
       type: String,
-      enum: ["hotel_booking", "order", "review", "other"],
+      enum: ["hotel_booking", "order", "review", "tour_hotel_quota", "other"],
       default: "other",
     },
     
@@ -45,6 +45,9 @@ const schema = new Schema(
       amount: Number,
       hotelId: Schema.Types.ObjectId,
       hotelName: String,
+      // tour_hotel_quota
+      tourSegmentId: String,
+      pressureLevel: String,
     },
     
     // Đã đọc chưa

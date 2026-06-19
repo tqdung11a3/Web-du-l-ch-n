@@ -3,6 +3,7 @@
 // Quản lý "Liên kết Tour – Khách sạn": company admin chia tour thành các
 // khung thời gian và phân bổ phòng khách sạn cho từng khung.
 
+const mongoose    = require("mongoose");
 const Tour        = require("../../models/tour.model");
 const Company     = require("../../models/company.model");
 const Hotel       = require("../../models/hotel.model");
@@ -19,7 +20,9 @@ const moment = require("moment");
 const {
   HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG,
 } = require("../../helpers/hotel-link-request-note.helper");
+const { diffHotelsForConfirm, pickLatestRequestPerHotelMap } = require("../../helpers/tour-hotel-segment-diff.helper");
 const auditLogHelper = require("../../helpers/audit-log.helper");
+const { evaluateTourHotelQuotaPressure } = require("../../helpers/tour-hotel-quota-pressure.helper");
 
 // ── Danh sách tour của company ───────────────────────────────────────────────
 module.exports.list = async (req, res) => {
@@ -34,7 +37,6 @@ module.exports.list = async (req, res) => {
     const tourIds = tours.map((t) => t._id);
     const existing = await TourSegment.find({
       tourId: { $in: tourIds },
-      status: { $ne: "cancelled" },
     })
       .select("_id tourId departureDate status")
       .lean();
@@ -75,15 +77,21 @@ module.exports.list = async (req, res) => {
       const segRequests = bucket ? bucket.latest : [];
       let effectiveStatus = seg.status;
       let rejectedByCompanyName = "";
-      if (segRequests.length > 0) {
+      let rejectedByCompanyNames = [];
+      if (seg.status === "cancelled") {
+        effectiveStatus = "cancelled";
+      } else if (segRequests.length > 0) {
         const hasPending = segRequests.some((r) => r.status === "pending");
-        const rejectedReq = segRequests.find((r) => r.status === "rejected");
+        const rejectedReqs = segRequests.filter((r) => r.status === "rejected");
         const hasCancelled = segRequests.some((r) => r.status === "cancelled");
         if (hasPending) {
           effectiveStatus = "pending_approval";
-        } else if (rejectedReq) {
+        } else if (rejectedReqs.length > 0) {
           effectiveStatus = "rejected";
-          rejectedByCompanyName = rejectedReq.toCompanyName || "";
+          rejectedByCompanyNames = [
+            ...new Set(rejectedReqs.map((r) => r.toCompanyName).filter(Boolean)),
+          ];
+          rejectedByCompanyName = rejectedByCompanyNames.join(", ");
         } else if (hasCancelled) {
           effectiveStatus = "draft";
         } else {
@@ -96,6 +104,7 @@ module.exports.list = async (req, res) => {
         departureDateStr:      moment(seg.departureDate).format("YYYY-MM-DD"),
         status:                effectiveStatus,
         rejectedByCompanyName,
+        rejectedByCompanyNames,
       });
     }
 
@@ -161,7 +170,7 @@ module.exports.detail = async (req, res) => {
         // Heal DB status cho chính segment này theo luật latest-per-hotel —
         // tránh trường hợp DB còn mắc kẹt ở "rejected" cũ dù link request mới
         // đã được duyệt (dữ liệu trước khi helper được nâng cấp).
-        if (existingSegment) {
+        if (existingSegment && existingSegment.status !== "cancelled") {
           try {
             const {
               _recomputeTourSegmentStatus,
@@ -180,7 +189,7 @@ module.exports.detail = async (req, res) => {
         // mới nhất theo createdAt cho mỗi hotel để các request cũ đã
         // reject/cancel ở vòng trước không đè lên kết quả sau khi admin gửi
         // lại và được chấp nhận.
-        if (existingSegment) {
+        if (existingSegment && existingSegment.status !== "cancelled") {
           const allRequests = await HotelLinkRequest.find({
             tourSegmentId: existingSegment._id,
           })
@@ -198,20 +207,34 @@ module.exports.detail = async (req, res) => {
           }
 
           if (segRequests.length > 0) {
+            const autoTag = HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG;
+            const isAutoClosed = (r) =>
+              r.status === "rejected" &&
+              autoTag &&
+              (r.responseNote || "").indexOf(autoTag) === 0;
+
             const hasPending = segRequests.some((r) => r.status === "pending");
-            const rejectedReq = segRequests.find((r) => r.status === "rejected");
+            // Chỉ xét rejected THẬT (do KS bấm Từ chối), bỏ qua auto-closed
+            // bởi chính bên gửi (khi admin tour cấu hình lại).
+            const rejectedReqs = segRequests.filter(
+              (r) => r.status === "rejected" && !isAutoClosed(r)
+            );
             const hasCancelled = segRequests.some(
-              (r) => r.status === "cancelled"
+              (r) => r.status === "cancelled" || isAutoClosed(r)
             );
             if (hasPending) {
               existingSegment.status = "pending_approval";
-            } else if (rejectedReq) {
+            } else if (rejectedReqs.length > 0) {
               existingSegment.status = "rejected";
-              existingSegment.rejectedByCompanyName =
-                rejectedReq.toCompanyName || "";
-              existingSegment.rejectedHotelName = rejectedReq.hotelName || "";
+              // Gom tên tất cả công ty đã từ chối (loại trùng)
+              const uniqueCompanies = [
+                ...new Set(rejectedReqs.map((r) => r.toCompanyName).filter(Boolean)),
+              ];
+              existingSegment.rejectedByCompanyNames = uniqueCompanies;
+              existingSegment.rejectedByCompanyName = uniqueCompanies.join(", ");
+              existingSegment.rejectedHotelName = rejectedReqs.map((r) => r.hotelName).filter(Boolean).join(", ");
               existingSegment.rejectedResponseNote =
-                rejectedReq.responseNote || "";
+                rejectedReqs[0].responseNote || "";
             } else if (hasCancelled) {
               existingSegment.status = "draft";
             } else {
@@ -237,6 +260,48 @@ module.exports.detail = async (req, res) => {
           req.tabAccess?.hasTour &&
           !req.tabAccess?.hasHotel));
 
+    // Tính áp lực quota phòng cho banner cảnh báo (chỉ khi có segment confirmed/pending)
+    let quotaPressure = null;
+    if (existingSegment && ["confirmed", "pending_approval"].includes(existingSegment.status)) {
+      try {
+        quotaPressure = await evaluateTourHotelQuotaPressure({
+          tourSegmentId: String(existingSegment._id),
+        });
+      } catch (pressureErr) {
+        console.error("[tour-hotel.detail] quotaPressure error:", pressureErr);
+      }
+    }
+
+    // Build map hotelId → trạng thái link request mới nhất để hiển thị badge
+    // trên từng hotel card trong khung lưu trú.
+    // Các status cần phân biệt: pending | approved | partially_approved | rejected | cancelled | none
+    // Auto-closed (rejected bởi bên gửi) → hiển thị như "cancelled" (không show đỏ "từ chối").
+    const hotelLinkStatusMap = {};
+    if (existingSegment && existingSegment.status !== "cancelled") {
+      try {
+        const autoTag = HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG;
+        const allLrForMap = await HotelLinkRequest.find({
+          tourSegmentId: existingSegment._id,
+        })
+          .select("hotelId status responseNote createdAt")
+          .sort({ createdAt: -1 })
+          .lean();
+        const seenForMap = new Set();
+        for (const r of allLrForMap) {
+          const hid = String(r.hotelId);
+          if (seenForMap.has(hid)) continue;
+          seenForMap.add(hid);
+          const isAutoClosed =
+            r.status === "rejected" &&
+            autoTag &&
+            (r.responseNote || "").indexOf(autoTag) === 0;
+          hotelLinkStatusMap[hid] = isAutoClosed ? "cancelled" : r.status;
+        }
+      } catch (mapErr) {
+        console.error("[tour-hotel.detail] hotelLinkStatusMap error:", mapErr);
+      }
+    }
+
     res.render("admin/pages/tour-hotel-detail", {
       pageTitle: "Cấu hình khung thời gian – Khách sạn",
       tour,
@@ -248,6 +313,8 @@ module.exports.detail = async (req, res) => {
       moment,
       currentCompanyId: String(companyId),
       isTourOnlyAdmin,
+      quotaPressure,
+      hotelLinkStatusMap,
     });
   } catch (err) {
     console.error("[tour-hotel.detail]", err);
@@ -259,7 +326,7 @@ module.exports.detail = async (req, res) => {
 module.exports.hotelAvailability = async (req, res) => {
   try {
     const companyId = req.account.companyId;
-    const { hotelId, fromDate, toDate } = req.query;
+    const { hotelId, fromDate, toDate, excludeTourSegmentId } = req.query;
 
     if (!hotelId || !fromDate || !toDate) {
       return res.json({ success: false, message: "Thiếu tham số" });
@@ -280,12 +347,19 @@ module.exports.hotelAvailability = async (req, res) => {
       return res.json({ success: false, message: "Không tìm thấy khách sạn" });
     }
 
-    const existingBookings = await HotelBooking.find({
+    const bookingQuery = {
       "hotel.hotelId": hotelId,
       status: { $nin: ["cancelled", "checked_out"] },
       checkIn:  { $lt: checkOut },
       checkOut: { $gt: checkIn },
-    })
+    };
+    // Loại các HotelBooking thuộc CHÍNH tour segment đang chỉnh sửa
+    // (Tour Hold của chính tour này không nên bị tính là "đã đặt từ khách lạ"
+    // → tránh ép giảm assignedRooms đã cấu hình xuống 0).
+    if (excludeTourSegmentId) {
+      bookingQuery.tourSegmentId = { $ne: excludeTourSegmentId };
+    }
+    const existingBookings = await HotelBooking.find(bookingQuery)
       .select("roomTypeId roomId rooms status checkIn checkOut")
       .lean();
 
@@ -470,6 +544,7 @@ module.exports.confirmSegments = async (req, res) => {
 
     const TourModel = require("../../models/tour.model");
     const Notification = require("../../models/notification.model");
+    const { _recomputeTourSegmentStatus } = require("./hotel-link-request.controller");
 
     const tourDoc = await TourModel.findById(tourId).select("name").lean();
     const tourName = tourDoc ? tourDoc.name : "Tour";
@@ -478,45 +553,93 @@ module.exports.confirmSegments = async (req, res) => {
 
     const fromCompany = await Company.findById(companyId).select("name").lean();
     const fromCompanyName = fromCompany ? fromCompany.name : "";
-
-    // Huỷ TẤT CẢ booking hold cũ của segment này
-    await HotelBooking.updateMany(
-      { tourSegmentId: tourSeg._id, status: { $ne: "cancelled" } },
-      { status: "cancelled" }
-    );
-
-    // Huỷ các link request cũ đang pending (ghi rõ: phía công ty gửi tour xác nhận lại, không phải đối tác từ chối)
-    const pendingOldLink = await HotelLinkRequest.find({
-      tourSegmentId: tourSeg._id,
-      status: "pending",
-    }).lean();
     const fromDisp = fromCompanyName || "công ty tổ chức tour";
-    for (const lr of pendingOldLink) {
-      const toName = lr.toCompanyName || "công ty chủ khách sạn";
-      const hotel = lr.hotelName || "khách sạn";
-      const body =
-        `Company admin công ty «${fromDisp}» đã xác nhận lại cấu hình tour, nên yêu cầu cũ tới ${hotel} (thuộc công ty «${toName}») được hệ thống đóng để tạo yêu cầu mới theo cấu hình mới. ` +
-        `Đây không phải do công ty «${toName}» từ chối trên màn hình «Yêu cầu nhận được».`;
-      await HotelLinkRequest.updateOne(
-        { _id: lr._id },
-        { $set: { status: "rejected", responseNote: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG + body } }
+
+    const allLinkRequests = await HotelLinkRequest.find({ tourSegmentId: tourSeg._id })
+      .select("hotelId hotelName status requestedRooms createdAt toCompanyName")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const hotelDiff = diffHotelsForConfirm({
+      currentSegments: tourSeg.segments,
+      linkRequests: allLinkRequests,
+    });
+
+    const {
+      unchangedHotelIds,
+      changedHotelIds,
+      addedHotelIds,
+      removedHotelIds,
+      affectedHotelIds,
+      needsNewRequestHotelIds,
+    } = hotelDiff;
+
+    const needsNewSet = new Set(needsNewRequestHotelIds.map(String));
+    const closeRequestHotelIds = [
+      ...new Set([...changedHotelIds, ...removedHotelIds].map(String)),
+    ];
+
+    // Chỉ hủy hold tại các KS bị thay đổi / gỡ / thêm lại (không đụng KS không đổi)
+    if (affectedHotelIds.length > 0) {
+      await HotelBooking.updateMany(
+        {
+          tourSegmentId: tourSeg._id,
+          "hotel.hotelId": { $in: affectedHotelIds },
+          status: { $ne: "cancelled" },
+        },
+        { status: "cancelled" }
       );
     }
 
-    const newHoldIds = [];
-    const newLinkRequestIds = [];
-    let totalRoomsBlocked = 0;
-    const warnings = [];
-    let hasCrossCompanyHotel = false;
+    const latestByHotel = pickLatestRequestPerHotelMap(allLinkRequests);
+    const removedSet = new Set(removedHotelIds.map(String));
 
-    // Collect cross-company requests grouped by hotel
+    for (const hotelId of closeRequestHotelIds) {
+      const latest = latestByHotel.get(String(hotelId));
+      if (!latest) continue;
+      if (!["pending", "approved", "partially_approved"].includes(latest.status)) {
+        continue;
+      }
+
+      const toName = latest.toCompanyName || "công ty chủ khách sạn";
+      const hotelLabel = latest.hotelName || "khách sạn";
+      let body;
+
+      if (removedSet.has(String(hotelId))) {
+        body =
+          `Company admin công ty «${fromDisp}» đã gỡ ${hotelLabel} khỏi cấu hình tour khi xác nhận lại. ` +
+          `Yêu cầu liên kết tới ${hotelLabel} (thuộc công ty «${toName}») được hệ thống đóng và giải phóng phòng đã giữ (nếu có). ` +
+          `Đây không phải do công ty «${toName}» từ chối trên màn hình «Yêu cầu nhận được».`;
+      } else {
+        body =
+          `Company admin công ty «${fromDisp}» đã xác nhận lại cấu hình tour, nên yêu cầu cũ tới ${hotelLabel} (thuộc công ty «${toName}») được hệ thống đóng để tạo yêu cầu mới theo cấu hình mới. ` +
+          `Đây không phải do công ty «${toName}» từ chối trên màn hình «Yêu cầu nhận được».`;
+      }
+
+      await HotelLinkRequest.updateOne(
+        { _id: latest._id },
+        {
+          $set: {
+            status: "rejected",
+            responseNote: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG + body,
+          },
+        }
+      );
+    }
+
+    const newLinkRequestIds = [];
     const crossCompanyRequests = {};
 
-    for (const seg of tourSeg.segments) {
-      const checkIn  = new Date(seg.fromDate);
+    for (let segIdx = 0; segIdx < tourSeg.segments.length; segIdx++) {
+      const seg = tourSeg.segments[segIdx];
+      const checkIn = new Date(seg.fromDate);
       const checkOut = new Date(seg.toDate);
+      const frameIndex = segIdx + 1;
 
       for (const hotelEntry of seg.hotels) {
+        const hotelKey = String(hotelEntry.hotelId);
+        if (!needsNewSet.has(hotelKey)) continue;
+
         const hotelDoc = await Hotel.findById(hotelEntry.hotelId)
           .select("name rooms roomTypes companyId")
           .lean();
@@ -524,114 +647,31 @@ module.exports.confirmSegments = async (req, res) => {
 
         const isSameCompany = String(hotelDoc.companyId) === String(companyId);
 
-        // Tour-only admin không được auto-hold ngay cả khi cùng công ty:
-        // cần gửi link request để hotel admin / company admin có toàn quyền duyệt.
-        const isTourOnlyAdmin =
-          !req.account.isSuperAdmin &&
-          (req.account.tabAccessScope === "tour_only" ||
-            req.account.tabAccessScope === "tour_staff" ||
-            (req.tabAccess?.restricted === true &&
-              req.tabAccess?.hasTour &&
-              !req.tabAccess?.hasHotel));
-        const canAutoHold = isSameCompany && !isTourOnlyAdmin;
-
-        if (canAutoHold) {
-          // ── Hotel cùng company + người dùng có quyền KS: tạo booking giữ phòng ngay ──
-          const existingBookings = await HotelBooking.find({
-            "hotel.hotelId": hotelEntry.hotelId,
-            status: { $nin: ["cancelled", "checked_out"] },
-            checkIn:  { $lt: checkOut },
-            checkOut: { $gt: checkIn },
-          })
-            .select("roomTypeId roomId rooms status checkIn checkOut tourSegmentId")
-            .lean();
-
-          for (const ra of hotelEntry.roomAllocations) {
-            if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
-
-            const availableRoomIds = getAvailableRoomsForType(
-              hotelDoc.rooms || [],
-              ra.roomTypeId,
-              existingBookings,
-              checkIn,
-              checkOut
-            );
-
-            const roomsToBook = Math.min(ra.assignedRooms, availableRoomIds.length);
-
-            if (roomsToBook < ra.assignedRooms) {
-              warnings.push(
-                `${hotelDoc.name} / ${ra.roomTypeName}: chỉ còn ${availableRoomIds.length} phòng thực trống (cần ${ra.assignedRooms})`
-              );
-            }
-
-            if (roomsToBook === 0) continue;
-
-            const selectedRoomIds = availableRoomIds.slice(0, roomsToBook);
-            for (const roomId of selectedRoomIds) {
-              const holdCode = "TH" + generateRandomNumber(10);
-              const booking = await HotelBooking.create({
-                code:       holdCode,
-                checkIn,
-                checkOut,
-                rooms:      1,
-                adults:     ra.baseOccupancy || 2,
-                roomId,
-                roomTypeId: ra.roomTypeId,
-                hotel: {
-                  hotelId: hotelEntry.hotelId,
-                  name:    hotelEntry.hotelName,
-                },
-                status:          "confirmed",
-                isTemporaryHold: false,
-                tourSegmentId:   tourSeg._id,
-                note: `[Tour Hold] ${tourName} | ${depDateFmt} – ${endDateFmt} | ${ra.roomTypeName}`,
-                guest: { fullName: "[Tour Hold]", phone: "", email: "" },
-              });
-              newHoldIds.push(booking._id);
-              totalRoomsBlocked++;
-
-              existingBookings.push({
-                roomTypeId: ra.roomTypeId,
-                roomId,
-                rooms: 1,
-                status: "confirmed",
-                checkIn,
-                checkOut,
-              });
-            }
-          }
-        } else {
-          // ── Hotel khác company HOẶC cùng công ty nhưng tour-only admin:
-          //    thu thập để tạo HotelLinkRequest chờ duyệt ──
-          hasCrossCompanyHotel = true;
-          const hotelKey = String(hotelDoc._id);
-          if (!crossCompanyRequests[hotelKey]) {
-            crossCompanyRequests[hotelKey] = {
-              hotelDoc,
-              requestedRooms: [],
-              isSameCompany,    // ghi nhận để notification gửi đúng link
-            };
-          }
-          for (const ra of hotelEntry.roomAllocations) {
-            if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
-            crossCompanyRequests[hotelKey].requestedRooms.push({
-              roomTypeId: ra.roomTypeId,
-              roomTypeName: ra.roomTypeName || "",
-              baseOccupancy: ra.baseOccupancy || 2,
-              assignedRooms: ra.assignedRooms,
-              fromDate: checkIn,
-              toDate: checkOut,
-            });
-          }
+        if (!crossCompanyRequests[hotelKey]) {
+          crossCompanyRequests[hotelKey] = {
+            hotelDoc,
+            requestedRooms: [],
+            isSameCompany,
+          };
+        }
+        for (const ra of hotelEntry.roomAllocations) {
+          if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
+          crossCompanyRequests[hotelKey].requestedRooms.push({
+            roomTypeId: ra.roomTypeId,
+            roomTypeName: ra.roomTypeName || "",
+            baseOccupancy: ra.baseOccupancy || 2,
+            assignedRooms: ra.assignedRooms,
+            fromDate: checkIn,
+            toDate: checkOut,
+            stayFrameIndex: frameIndex,
+          });
         }
       }
     }
 
-    // Tạo HotelLinkRequest cho từng hotel cần duyệt
-    // (khác company HOẶC cùng company nhưng tour-only admin gửi)
     for (const hotelKey of Object.keys(crossCompanyRequests)) {
-      const { hotelDoc, requestedRooms, isSameCompany: sameComp } = crossCompanyRequests[hotelKey];
+      const { hotelDoc, requestedRooms, isSameCompany: sameComp } =
+        crossCompanyRequests[hotelKey];
       if (requestedRooms.length === 0) continue;
 
       const toCompany = await Company.findById(hotelDoc.companyId).select("name").lean();
@@ -671,9 +711,6 @@ module.exports.confirmSegments = async (req, res) => {
         metadata: { requestedRooms: requestedRooms.length, sameCompany: !!sameComp },
       });
 
-      // Gửi notification cho company sở hữu khách sạn.
-      // Khi cùng công ty nhưng tour-only admin gửi, vẫn trỏ về /hotel/link-requests
-      // để hotel admin / company admin toàn quyền trong công ty đó duyệt.
       await Notification.create({
         companyId: hotelDoc.companyId,
         type: "other",
@@ -683,32 +720,72 @@ module.exports.confirmSegments = async (req, res) => {
       });
     }
 
-    // Xác định status của tourSegment
-    if (hasCrossCompanyHotel) {
-      tourSeg.status = "pending_approval";
-    } else {
-      tourSeg.status = "confirmed";
+    const activeHolds = await HotelBooking.find({
+      tourSegmentId: tourSeg._id,
+      status: { $nin: ["cancelled", "checked_out"] },
+    })
+      .select("_id")
+      .lean();
+
+    const existingLinkIds = (tourSeg.linkRequestIds || []).map((id) => String(id));
+    for (const id of newLinkRequestIds) {
+      const sid = String(id);
+      if (!existingLinkIds.includes(sid)) {
+        existingLinkIds.push(sid);
+      }
     }
 
-    tourSeg.holdBookingIds = newHoldIds;
-    tourSeg.linkRequestIds = newLinkRequestIds;
+    tourSeg.holdBookingIds = activeHolds.map((b) => b._id);
+    tourSeg.linkRequestIds = existingLinkIds;
     await tourSeg.save();
 
+    await _recomputeTourSegmentStatus(tourSeg._id);
+
+    const nameIds = [
+      ...unchangedHotelIds,
+      ...changedHotelIds,
+      ...addedHotelIds,
+      ...removedHotelIds,
+    ];
+    const nameRows =
+      nameIds.length > 0
+        ? await Hotel.find({ _id: { $in: nameIds } }).select("name").lean()
+        : [];
+    const nameById = Object.fromEntries(
+      nameRows.map((h) => [String(h._id), h.name || ""])
+    );
+    const pickNames = (ids) =>
+      ids.map((id) => nameById[String(id)] || "Khách sạn").filter(Boolean);
+
+    const summary = {
+      unchanged: pickNames(unchangedHotelIds),
+      updated: pickNames([...changedHotelIds, ...addedHotelIds]),
+      removed: pickNames(removedHotelIds),
+    };
+
     let message = "";
-    if (totalRoomsBlocked > 0) {
-      message += `Đã giữ thành công ${totalRoomsBlocked} phòng cho khách sạn cùng công ty.`;
+    if (unchangedHotelIds.length > 0) {
+      message += `${unchangedHotelIds.length} khách sạn giữ nguyên yêu cầu hiện tại.`;
     }
     if (newLinkRequestIds.length > 0) {
-      message += ` Đã gửi ${newLinkRequestIds.length} yêu cầu liên kết. Vui lòng chờ phía quản lý khách sạn phê duyệt.`;
+      message += `${message ? " " : ""}Đã gửi ${newLinkRequestIds.length} yêu cầu liên kết mới. Vui lòng vào mục "Yêu cầu nhận được" để duyệt hoặc từ chối.`;
     }
-    if (warnings.length > 0) {
-      message += ` Cảnh báo: ${warnings.join("; ")}`;
+    if (removedHotelIds.length > 0) {
+      message += `${message ? " " : ""}Đã gỡ ${removedHotelIds.length} khách sạn khỏi cấu hình và đóng yêu cầu tương ứng.`;
     }
     if (!message) {
-      message = "Không có phòng nào được giữ.";
+      message = "Đã xác nhận cấu hình.";
     }
 
-    return res.json({ success: true, message, hasPendingApproval: hasCrossCompanyHotel });
+    const refreshed = await TourSegment.findById(tourSeg._id).select("status").lean();
+    const hasPendingApproval = refreshed?.status === "pending_approval";
+
+    return res.json({
+      success: true,
+      message,
+      hasPendingApproval,
+      summary,
+    });
   } catch (err) {
     console.error("[tour-hotel.confirmSegments]", err);
     return res.json({ success: false, message: "Lỗi server" });
@@ -735,11 +812,16 @@ module.exports.cancelSegments = async (req, res) => {
     const fromCo = await Company.findById(companyId).select("name").lean();
     const fromCompanyName = fromCo?.name || "công ty tổ chức tour";
 
-    const pendingLink = await HotelLinkRequest.find({
+    // Vô hiệu hoá TOÀN BỘ link request còn hiệu lực (pending / approved /
+    // partially_approved). Nếu chỉ huỷ pending, các request đã approved sẽ bị
+    // diffHotelsForConfirm coi là "unchanged" khi admin cấu hình lại → bỏ qua
+    // bước duyệt → trạng thái lại quay về "Đã xác nhận". Cancel toàn bộ để
+    // mọi cấu hình mới đều phải gửi yêu cầu duyệt lại.
+    const activeLinks = await HotelLinkRequest.find({
       tourSegmentId: tourSeg._id,
-      status: "pending",
+      status: { $in: ["pending", "approved", "partially_approved"] },
     }).lean();
-    for (const lr of pendingLink) {
+    for (const lr of activeLinks) {
       const toName = lr.toCompanyName || "công ty chủ khách sạn";
       const hotel = lr.hotelName || "khách sạn";
       const body =
@@ -747,7 +829,7 @@ module.exports.cancelSegments = async (req, res) => {
         `Yêu cầu liên kết tới ${hotel} (thuộc công ty «${toName}») được hệ thống đóng tự động — không phải do công ty «${toName}» từ chối trên màn hình «Yêu cầu nhận được».`;
       await HotelLinkRequest.updateOne(
         { _id: lr._id },
-        { $set: { status: "rejected", responseNote: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG + body } }
+        { $set: { status: "cancelled", responseNote: HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG + body } }
       );
     }
 
@@ -755,6 +837,12 @@ module.exports.cancelSegments = async (req, res) => {
     tourSeg.holdBookingIds = [];
     tourSeg.linkRequestIds = [];
     await tourSeg.save();
+
+    // Tour đang Hoạt động → chuyển sang Tạm dừng ngay khi admin huỷ cấu hình lịch
+    await Tour.updateOne(
+      { _id: tourId, status: "active" },
+      { $set: { status: "inactive" } }
+    );
 
     return res.json({ success: true, message: "Đã huỷ và giải phóng phòng" });
   } catch (err) {
@@ -1180,15 +1268,32 @@ module.exports.saveAssignments = async (req, res) => {
     const _endDateFmt = moment(tourSeg.endDate).format("DD/MM/YYYY");
     const resetNote   = `[Tour Hold] ${_tourName} | ${_depDateFmt} – ${_endDateFmt}`;
 
-    for (const hbId of Object.keys(holdMap)) {
-      if (newAssignedBookingIds.has(hbId)) continue;
-      const doc = await HotelBooking.findById(hbId);
-      if (!doc) continue;
-      doc.guest.fullName = "[Tour Hold]";
-      doc.guest.phone    = "";
-      doc.note   = resetNote;
-      doc.status = "confirmed";
-      await doc.save();
+    // Reset toàn diện: ngoài fullName/phone/note/status còn phải clear email,
+    // orderCode, holdExpiresAt, userId — nếu không, Tour Hold sẽ vẫn còn
+    // `orderCode` cũ → đơn ở ghép mới không bind được (query có điều kiện
+    // orderCode rỗng).
+    const idsToReset = Object.keys(holdMap).filter(
+      (hbId) => !newAssignedBookingIds.has(hbId)
+    );
+    if (idsToReset.length > 0) {
+      await HotelBooking.updateMany(
+        { _id: { $in: idsToReset } },
+        {
+          $set: {
+            "guest.fullName": "[Tour Hold]",
+            "guest.phone":    "",
+            "guest.email":    "",
+            note:             resetNote,
+            status:           "confirmed",
+            isTemporaryHold:  false,
+          },
+          $unset: {
+            orderCode:     "",
+            holdExpiresAt: "",
+            userId:        "",
+          },
+        }
+      );
     }
 
     tourSeg.assignments = cleanAssignments;
@@ -1211,5 +1316,213 @@ module.exports.saveAssignments = async (req, res) => {
   } catch (err) {
     console.error("[tour-hotel.saveAssignments]", err);
     return res.json({ success: false, message: "Lỗi server" });
+  }
+};
+
+// ── API: Yêu cầu bổ sung phòng cho tour segment ──────────────────────────────
+// POST /admin/tour-hotel/api/request-additional-rooms
+// Body: { tourSegmentId, items: [{ hotelId, fromDate, toDate, roomTypeId, additionalRooms, note? }] }
+module.exports.requestAdditionalRooms = async (req, res) => {
+  try {
+    const companyId = req.account.companyId;
+    const fromCompanyName = req.account.companyName || "";
+    const { tourSegmentId, items } = req.body;
+
+    if (!tourSegmentId || !Array.isArray(items) || items.length === 0) {
+      return res.json({ success: false, message: "Thiếu dữ liệu bắt buộc." });
+    }
+
+    const tourSeg = await TourSegment.findOne({ _id: tourSegmentId, companyId }).lean();
+    if (!tourSeg) {
+      return res.json({ success: false, message: "Không tìm thấy tour segment." });
+    }
+    if (!["confirmed", "pending_approval"].includes(tourSeg.status)) {
+      return res.json({ success: false, message: "Segment chưa được xác nhận." });
+    }
+
+    const tourDoc = await Tour.findById(tourSeg.tourId).select("name").lean();
+    const tourName = tourDoc?.name || "";
+    const depDateFmt = moment(tourSeg.departureDate).format("DD/MM/YYYY");
+    const endDateFmt = moment(tourSeg.endDate).format("DD/MM/YYYY");
+
+    // Validate items
+    for (const item of items) {
+      if (!item.hotelId || !item.roomTypeId || !item.fromDate || !item.toDate) {
+        return res.json({ success: false, message: "Mỗi mục phải có hotelId, roomTypeId, fromDate, toDate." });
+      }
+      const rooms = Number(item.additionalRooms);
+      if (!Number.isInteger(rooms) || rooms < 1) {
+        return res.json({ success: false, message: "additionalRooms phải là số nguyên >= 1." });
+      }
+      // Kiểm tra hotel + roomType có thuộc segment này không
+      let found = false;
+      const fromStr = String(item.fromDate).slice(0, 10);
+      const toStr = String(item.toDate).slice(0, 10);
+      for (const seg of tourSeg.segments || []) {
+        const segFrom = moment(seg.fromDate).format("YYYY-MM-DD");
+        const segTo = moment(seg.toDate).format("YYYY-MM-DD");
+        if (segFrom !== fromStr || segTo !== toStr) continue;
+        for (const h of seg.hotels || []) {
+          if (String(h.hotelId) !== String(item.hotelId)) continue;
+          for (const ra of h.roomAllocations || []) {
+            if (String(ra.roomTypeId) === String(item.roomTypeId)) {
+              found = true;
+            }
+          }
+        }
+      }
+      if (!found) {
+        return res.json({
+          success: false,
+          message: `Loại phòng hoặc khách sạn không thuộc cấu hình segment này.`,
+        });
+      }
+    }
+
+    // Nhóm items theo hotelId
+    const byHotel = {};
+    for (const item of items) {
+      const hotelKey = String(item.hotelId);
+      if (!byHotel[hotelKey]) byHotel[hotelKey] = [];
+      byHotel[hotelKey].push(item);
+    }
+
+    const { _recomputeTourSegmentStatus } = require("./hotel-link-request.controller");
+    const { maybeNotifyTourQuotaPressure, evaluateTourHotelQuotaPressure } = require("../../helpers/tour-hotel-quota-pressure.helper");
+
+    const createdRequestIds = [];
+
+    for (const hotelKey of Object.keys(byHotel)) {
+      const hotelItems = byHotel[hotelKey];
+      const hotelId = hotelItems[0].hotelId;
+
+      // Kiểm tra có pending request nào cho cùng hotel + segment chưa
+      const existingPending = await HotelLinkRequest.findOne({
+        tourSegmentId,
+        hotelId,
+        status: "pending",
+      }).lean();
+      if (existingPending) {
+        return res.json({
+          success: false,
+          message: `Đang có yêu cầu chờ duyệt cho khách sạn này. Vui lòng đợi hoặc hủy yêu cầu cũ trước.`,
+        });
+      }
+
+      const hotelDoc = await Hotel.findById(hotelId).select("name companyId").lean();
+      if (!hotelDoc) continue;
+
+      const toCompany = await Company.findById(hotelDoc.companyId).select("name").lean();
+      const toCompanyName = toCompany?.name || "";
+
+      // Tăng assignedRooms trực tiếp trên TourSegment (delta)
+      for (const item of hotelItems) {
+        const delta = Number(item.additionalRooms);
+        const fromStr = String(item.fromDate).slice(0, 10);
+        const toStr = String(item.toDate).slice(0, 10);
+        // Dùng positional operator để update đúng room allocation
+        await TourSegment.updateOne(
+          {
+            _id: tourSegmentId,
+            "segments.fromDate": new Date(fromStr),
+            "segments.toDate": new Date(toStr),
+          },
+          {
+            $inc: {
+              "segments.$[seg].hotels.$[hot].roomAllocations.$[ra].assignedRooms": delta,
+              "segments.$[seg].hotels.$[hot].roomAllocations.$[ra].totalPeople": delta * (item.baseOccupancy || 2),
+            },
+          },
+          {
+            arrayFilters: [
+              { "seg.fromDate": new Date(fromStr), "seg.toDate": new Date(toStr) },
+              { "hot.hotelId": new mongoose.Types.ObjectId(String(hotelId)) },
+              { "ra.roomTypeId": new mongoose.Types.ObjectId(String(item.roomTypeId)) },
+            ],
+          }
+        );
+      }
+
+      // Tạo HotelLinkRequest delta
+      const requestedRooms = hotelItems.map((item) => {
+        const fromStr = String(item.fromDate).slice(0, 10);
+        const toStr = String(item.toDate).slice(0, 10);
+        const segIdx = (tourSeg.segments || []).findIndex(
+          (s) =>
+            moment(s.fromDate).format("YYYY-MM-DD") === fromStr &&
+            moment(s.toDate).format("YYYY-MM-DD") === toStr
+        );
+        return {
+          roomTypeId: item.roomTypeId,
+          roomTypeName: item.roomTypeName || "",
+          baseOccupancy: item.baseOccupancy || 2,
+          assignedRooms: Number(item.additionalRooms),
+          fromDate: new Date(fromStr),
+          toDate: new Date(toStr),
+          stayFrameIndex: segIdx >= 0 ? segIdx + 1 : null,
+        };
+      });
+
+      const linkRequest = await HotelLinkRequest.create({
+        fromCompanyId: companyId,
+        fromCompanyName,
+        toCompanyId: hotelDoc.companyId,
+        toCompanyName,
+        tourSegmentId,
+        tourId: tourSeg.tourId,
+        tourName,
+        departureDate: tourSeg.departureDate,
+        endDate: tourSeg.endDate,
+        hotelId: hotelDoc._id,
+        hotelName: hotelDoc.name,
+        requestedRooms,
+        note: hotelItems[0].note || "",
+        status: "pending",
+      });
+
+      createdRequestIds.push(linkRequest._id);
+
+      // Cập nhật linkRequestIds trên segment
+      await TourSegment.updateOne(
+        { _id: tourSegmentId },
+        { $addToSet: { linkRequestIds: linkRequest._id } }
+      );
+
+      auditLogHelper.log(req, {
+        action: "tour-hotel.request-additional-rooms",
+        resourceType: "HotelLinkRequest",
+        resourceId: linkRequest._id,
+        resourceLabel: `${hotelDoc.name} – ${tourName}`,
+        after: { status: "pending", additionalRooms: requestedRooms.length },
+        summary: `Yêu cầu bổ sung phòng tại "${hotelDoc.name}" cho tour "${tourName}" (${depDateFmt} – ${endDateFmt})`,
+      });
+
+      // Thông báo cho admin KS
+      await Notification.create({
+        companyId: hotelDoc.companyId,
+        type: "other",
+        title: "Yêu cầu bổ sung phòng",
+        content: `${fromCompanyName} yêu cầu bổ sung phòng tại ${hotelDoc.name} cho tour "${tourName}" (${depDateFmt} – ${endDateFmt})`,
+        link: `/${pathAdmin}/hotel/link-requests`,
+      });
+    }
+
+    await _recomputeTourSegmentStatus(tourSegmentId);
+
+    // Cập nhật lại áp lực quota cho admin tour
+    try {
+      const pressure = await evaluateTourHotelQuotaPressure({ tourSegmentId: String(tourSegmentId) });
+      await maybeNotifyTourQuotaPressure(pressure);
+    } catch (_) {}
+
+    return res.json({
+      success: true,
+      message: "Đã gửi yêu cầu bổ sung phòng thành công.",
+      linkRequestIds: createdRequestIds.map(String),
+      linkRequestsUrl: `/${pathAdmin}/tour-hotel/link-requests`,
+    });
+  } catch (err) {
+    console.error("[tour-hotel.requestAdditionalRooms]", err);
+    return res.json({ success: false, message: "Lỗi server." });
   }
 };

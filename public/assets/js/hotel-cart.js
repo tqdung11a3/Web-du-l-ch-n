@@ -476,10 +476,14 @@ function showDateRequiredMessage() {
     
     // Tính tổng tiền với dịch vụ thêm
     function calculateTotalWithServices() {
-      // Lấy base total từ DOM mỗi lần tính (để có giá mới sau khi update quantity)
       let baseTotal = 0;
-      
-      // Lấy tất cả các summary-row KHÔNG phải summary-total và KHÔNG phải summary-section
+
+      // Cộng giá từng loại phòng (pricePerNight × nights × quantity)
+      hotelCartTab.querySelectorAll('.item-subtotal strong').forEach(el => {
+        baseTotal += parsePrice(el.textContent);
+      });
+
+      // Cộng thuế, phí dịch vụ, phụ thu vượt sức chứa từ summary
       const summaryRows = hotelCartTab.querySelectorAll('.summary-rows > .summary-row:not(.summary-total)');
       summaryRows.forEach(row => {
         const priceSpan = row.querySelector('span:last-child');

@@ -42,14 +42,24 @@ block main
 
     if sentRequests && sentRequests.length > 0
       each req in sentRequests
-        .lr-card(class=`lr-card--${req.status}`)
+        - var _autoTagBadge = hotelLinkAutoBySenderTag || ''
+        - var _isAutoClosed = req.status === 'rejected' && _autoTagBadge && (req.responseNote || '').indexOf(_autoTagBadge) === 0
+        .lr-card(class=(_isAutoClosed ? 'lr-card--auto-closed' : `lr-card--${req.status}`))
           .lr-card-header
             .lr-card-info
               h3.lr-card-title= req.tourName
               .lr-card-meta
-                span.lr-meta-item
+                span.lr-meta-item.lr-meta-item--tour
                   i.fa-solid.fa-calendar-day
-                  |  #{req.departureDateDisplay} → #{req.endDateDisplay}
+                  |  Lịch tour: #{req.departureDateDisplay} → #{req.endDateDisplay}
+                if req.hotelStayFrames && req.hotelStayFrames.length > 0
+                  each frame, fi in req.hotelStayFrames
+                    span.lr-meta-item.lr-meta-item--hotel-stay
+                      i.fa-solid.fa-bed
+                      if req.hotelStayFrames.length > 1
+                        |  Khung #{fi + 1} (KS): #{frame.fromDateDisplay} → #{frame.toDateDisplay}
+                      else
+                        |  Lưu trú KS: #{frame.fromDateDisplay} → #{frame.toDateDisplay}
                 span.lr-meta-item
                   i.fa-solid.fa-building
                   |  Đến công ty: #{req.toCompanyName}
@@ -71,6 +81,8 @@ block main
                 span.lr-badge.lr-badge--partial Duyệt một phần
               else if req.status === 'cancelled'
                 span.lr-badge.lr-badge--cancelled Đã thu hồi
+              else if _isAutoClosed
+                span.lr-badge.lr-badge--auto-closed(title="Hệ thống đóng do bên gửi cấu hình lại — không phải KS từ chối") Đóng tự động
               else
                 span.lr-badge.lr-badge--rejected Từ chối
 
@@ -88,8 +100,9 @@ block main
                   th Loại phòng
                   th Số phòng yêu cầu
                   th Sức chứa
-                  th Từ ngày
-                  th Đến ngày
+                  th Khung KS
+                  th Check-in
+                  th Check-out
                   if req.status !== 'pending'
                     th Đã duyệt
               tbody
@@ -98,6 +111,7 @@ block main
                     td= rr.roomTypeName
                     td= rr.assignedRooms
                     td= rr.baseOccupancy + ' người/phòng'
+                    td= rr.stayFrameIndex ? ('Khung ' + rr.stayFrameIndex) : '—'
                     td= rr.fromDateDisplay
                     td= rr.toDateDisplay
                     if req.status !== 'pending'
@@ -105,7 +119,7 @@ block main
                       td= approved ? approved.approvedRooms : 0
 
             //- Người duyệt / từ chối (phía công ty nhận)
-            if req.status !== 'pending' && req.status !== 'cancelled' && req.reviewerName
+            if req.status !== 'pending' && req.status !== 'cancelled' && req.reviewerName && !_isAutoClosed
               .lr-reviewer-info(class=(req.status === 'rejected' ? 'lr-reviewer-info--rejected' : ''))
                 i.fa-solid.fa-user-check
                 if req.status === 'rejected'
@@ -183,6 +197,7 @@ block main
     .lr-card--partially_approved { border-left: 4px solid #3b82f6; }
     .lr-card--rejected         { border-left: 4px solid #ef4444; opacity: .7; }
     .lr-card--cancelled        { border-left: 4px solid #94a3b8; opacity: .6; }
+    .lr-card--auto-closed      { border-left: 4px solid #94a3b8; opacity: .75; }
     .lr-card-header {
       display: flex; justify-content: space-between; align-items: flex-start;
       padding: 16px 20px; background: #f8fafc;
@@ -199,6 +214,7 @@ block main
     .lr-badge--partial  { background: #dbeafe; color: #1e40af; }
     .lr-badge--rejected  { background: #fee2e2; color: #991b1b; }
     .lr-badge--cancelled { background: #f1f5f9; color: #64748b; }
+    .lr-badge--auto-closed { background: #e2e8f0; color: #475569; border: 1px dashed #94a3b8; }
     .lr-card-actions {
       display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
     }

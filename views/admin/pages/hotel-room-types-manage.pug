@@ -31,7 +31,10 @@ block main
           .room-type-card-body
             .room-info-row
               span.label Tối đa người:
-              span.value= room.maxOccupancy || 3
+              span.value= (room.maxOccupancy || 3) + ' người'
+            .room-info-row
+              span.label Sức chứa cơ bản:
+              span.value= (room.baseOccupancy != null ? room.baseOccupancy : 2) + ' người'
             .room-info-row
               span.label Giá từ:
               span.value= room.basePrice ? room.basePrice.toLocaleString('vi-VN') + ' VND' : '0 VND'

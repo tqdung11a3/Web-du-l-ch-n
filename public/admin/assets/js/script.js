@@ -350,6 +350,38 @@ if (superAdminCategoryEditForm) {
 
 // Tour Create Form
 const tourCreateForm = document.querySelector("#tour-create-form");
+function collectTourCategoryIds(formEl) {
+  if (!formEl) return [];
+  return Array.from(formEl.querySelectorAll('input[name="categories"]:checked'))
+    .map((el) => el.value)
+    .filter(Boolean);
+}
+
+function wireTourCategoryTree(formEl) {
+  if (!formEl) return;
+  formEl.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!target || target.name !== "categories") return;
+
+    const allBoxes = Array.from(
+      formEl.querySelectorAll('input[name="categories"]')
+    );
+    const fromIdx = allBoxes.indexOf(target);
+    if (fromIdx < 0) return;
+
+    const parentLevel = parseInt(target.dataset.level || "0", 10) || 0;
+    const nextChecked = !!target.checked;
+
+    // Chọn/Bỏ chọn danh mục cha -> áp cho toàn bộ danh mục con phía dưới.
+    for (let i = fromIdx + 1; i < allBoxes.length; i++) {
+      const lvl = parseInt(allBoxes[i].dataset.level || "0", 10) || 0;
+      if (lvl <= parentLevel) break;
+      allBoxes[i].checked = nextChecked;
+    }
+  });
+}
+wireTourCategoryTree(tourCreateForm);
+
 if (tourCreateForm) {
   const validator = new JustValidate("#tour-create-form");
 
@@ -908,7 +940,7 @@ if (tourCreateForm) {
       const f = event.target;
 
       const name = f.name.value;
-      const category = f.category.value;
+      const categoryIds = collectTourCategoryIds(f);
       const position = f.position.value;
       const status = f.status.value;
       const avatar = filePond.avatar.getFile()?.file;
@@ -1046,8 +1078,10 @@ if (tourCreateForm) {
 
       // Tạo FormData
       const formData = new FormData();
+      formData.append("customId", (tourCreateForm.querySelector("#customId")?.value || "").trim());
       formData.append("name", name);
-      formData.append("category", category);
+      categoryIds.forEach((id) => formData.append("categories", id));
+      formData.append("category", categoryIds[0] || "");
       formData.append("position", position);
       formData.append("status", status);
       formData.append("avatar", avatar);
@@ -1063,6 +1097,19 @@ if (tourCreateForm) {
       // Cấu hình Em bé
       formData.append("babyPricingMode", babyPricingMode);
       formData.append("babyPricingRulesJson", babyPricingRulesJson);
+      const maxBabiesPerAdultEl = tourCreateForm.querySelector("#maxBabiesPerAdult");
+      const babySeatFeeEl = tourCreateForm.querySelector("#babySeatFee");
+      const maxBabiesPerAdult = maxBabiesPerAdultEl
+        ? Math.max(0, parseInt(maxBabiesPerAdultEl.value, 10) || 0)
+        : 1;
+      const babySeatFee =
+        maxBabiesPerAdult === 0
+          ? 0
+          : babySeatFeeEl
+          ? Math.max(0, parseInt(babySeatFeeEl.value, 10) || 0)
+          : 0;
+      formData.append("maxBabiesPerAdult", maxBabiesPerAdult);
+      formData.append("babySeatFee", babySeatFee);
 
       // ==== GỬI THỜI HẠN KHUYẾN MÃI NẾU CÓ ====
       if (hasManualOldPrice && discountFrom && discountTo) {
@@ -2636,6 +2683,7 @@ if (boxPagination) {
 
 // Tour Edit Form
 const tourEditForm = document.querySelector("#tour-edit-form");
+wireTourCategoryTree(tourEditForm);
 if (tourEditForm) {
   const validator = new JustValidate("#tour-edit-form");
 
@@ -3175,7 +3223,7 @@ if (tourEditForm) {
       }
 
       const name = f.name.value;
-      const category = f.category.value;
+      const categoryIds = collectTourCategoryIds(f);
       const position = f.position.value;
       const status = f.status.value;
       let avatarFile = filePond.avatar.getFile()?.file;
@@ -3335,8 +3383,10 @@ if (tourEditForm) {
 
       // FormData
       const formData = new FormData();
+      formData.append("customId", (tourEditForm.querySelector("#customId")?.value || "").trim());
       formData.append("name", name);
-      formData.append("category", category);
+      categoryIds.forEach((id) => formData.append("categories", id));
+      formData.append("category", categoryIds[0] || "");
       formData.append("position", position);
       formData.append("status", status);
       if (avatarFile) formData.append("avatar", avatarFile);
@@ -3352,6 +3402,19 @@ if (tourEditForm) {
       // Cấu hình Em bé
       formData.append("babyPricingMode", babyPricingMode);
       formData.append("babyPricingRulesJson", babyPricingRulesJson);
+      const maxBabiesPerAdultEl = tourEditForm.querySelector("#maxBabiesPerAdult");
+      const babySeatFeeEl = tourEditForm.querySelector("#babySeatFee");
+      const maxBabiesPerAdult = maxBabiesPerAdultEl
+        ? Math.max(0, parseInt(maxBabiesPerAdultEl.value, 10) || 0)
+        : 1;
+      const babySeatFee =
+        maxBabiesPerAdult === 0
+          ? 0
+          : babySeatFeeEl
+          ? Math.max(0, parseInt(babySeatFeeEl.value, 10) || 0)
+          : 0;
+      formData.append("maxBabiesPerAdult", maxBabiesPerAdult);
+      formData.append("babySeatFee", babySeatFee);
 
       // ==== GỬI THỜI HẠN KHUYẾN MÃI NẾU CÓ (EDIT) ====
       if (hasManualOldPriceE && discountFromE && discountToE) {

@@ -104,6 +104,11 @@ block main
                     b= it.departureDateFormat
                     |  • Mã đơn: #{it.orderCode}
                     |  • Thanh toán: #{it.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                  .order-status-row
+                    - var osMap = { initial: { label: 'Khởi tạo', cls: 'initial' }, done: { label: 'Hoàn thành', cls: 'done' }, cancel: { label: 'Đã hủy', cls: 'cancel' } }
+                    - var osEntry = osMap[it.orderStatus] || { label: it.orderStatus || 'Khởi tạo', cls: 'initial' }
+                    span.order-status-label Trạng thái đơn hàng:
+                    span.order-status-badge(class='order-status-badge--' + osEntry.cls)= osEntry.label
                   .qty Số lượng: NL #{it.qtyA} • TE #{it.qtyC} • EB #{it.qtyB}
                   if it.roomSelections && it.roomSelections.length > 0
                     - var segMap = {}
@@ -122,10 +127,70 @@ block main
                             .trip-rooms__row
                               span.trip-rooms__hotel= rs.hotelName
                               span.trip-rooms__info= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
+                    if it.privateAssignments && it.privateAssignments.length > 0
+                      .trip-rooms.trip-rooms--assigned
+                        .trip-rooms__title
+                          i.fa-solid.fa-key(style="margin-right:4px;color:#2563eb")
+                          | Phân công phòng cụ thể:
+                        - var paStatusMap = { confirmed: { label: 'Chưa nhận phòng', cls: 'waiting' }, checked_in: { label: 'Đã nhận phòng', cls: 'checkedin' }, checked_out: { label: 'Đã trả phòng', cls: 'checkedout' } }
+                        each a in it.privateAssignments
+                          .trip-rooms__assigned-room
+                            .trip-rooms__assigned-header
+                              span.trip-rooms__hotel= a.hotelName
+                              span.trip-rooms__room-num
+                                i.fa-solid.fa-door-open(style="margin-right:4px")
+                                | Phòng #{a.roomNumber || '—'}
+                              if a.roomTypeName
+                                span.trip-rooms__room-type= a.roomTypeName
+                              - var paEntry = paStatusMap[a.bookingStatus] || paStatusMap['confirmed']
+                              span.trip-rooms__badge(class='trip-rooms__badge--' + paEntry.cls)= paEntry.label
+                            if a.passengers && a.passengers.length > 0
+                              .trip-rooms__passengers
+                                each p in a.passengers
+                                  span.trip-rooms__passenger
+                                    - var ptLabel = p.type === 'child' ? 'TE' : p.type === 'baby' ? 'EB' : 'NL'
+                                    | #{p.name}
+                                    span.trip-rooms__pax-type= ' (' + ptLabel + (p.age != null ? ', ' + p.age + ' tuổi' : '') + ')'
+                  else if it.accommodationMode === 'shared'
+                    if it.sharedAssignments && it.sharedAssignments.length > 0
+                      .trip-rooms.trip-rooms--assigned
+                        .trip-rooms__title
+                          i.fa-solid.fa-bed(style="margin-right:4px")
+                          | Phòng khách sạn (ở ghép):
+                        - var gsMap = { confirmed: { label: 'Chưa nhận phòng', cls: 'waiting' }, checked_in: { label: 'Đã nhận phòng', cls: 'checkedin' }, checked_out: { label: 'Đã trả phòng', cls: 'checkedout' } }
+                        each a in it.sharedAssignments
+                          .trip-rooms__assigned-room
+                            .trip-rooms__assigned-header
+                              span.trip-rooms__hotel= a.hotelName
+                              span.trip-rooms__room-num
+                                i.fa-solid.fa-door-open(style="margin-right:4px")
+                                | Phòng #{a.roomNumber || '—'}
+                              if a.roomTypeName
+                                span.trip-rooms__room-type= a.roomTypeName
+                              - var gsEntry = gsMap[a.displayStatus || a.bookingStatus || a.guestStatus] || gsMap['confirmed']
+                              span.trip-rooms__badge(class='trip-rooms__badge--' + gsEntry.cls)= gsEntry.label
+                            if a.passengers && a.passengers.length > 0
+                              .trip-rooms__passengers
+                                each p in a.passengers
+                                  span.trip-rooms__passenger
+                                    - var ptLabel = p.type === 'child' ? 'TE' : p.type === 'baby' ? 'EB' : 'NL'
+                                    | #{p.name}
+                                    span.trip-rooms__pax-type= ' (' + ptLabel + (p.age != null ? ', ' + p.age + ' tuổi' : '') + ')'
+                            else
+                              p.trip-rooms__pending(style="margin:4px 0 0;font-size:12px") Đang cập nhật danh sách khách trong phòng.
+                    else
+                      .trip-rooms
+                        .trip-rooms__title
+                          i.fa-solid.fa-bed(style="margin-right:4px")
+                          | Phòng khách sạn (ở ghép):
+                        if it.orderStatus === 'cancel'
+                          p.trip-rooms__pending Đơn hàng đã hủy — không có phân phòng.
+                        else
+                          p.trip-rooms__pending Chưa được phân công phòng — vui lòng chờ thông báo.
                   if it.extraRoomCost && it.extraRoomCost > 0
                     .trip-extra-cost
                       i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
-                      | Chi phí phòng dư: 
+                      | Chi phí phòng cộng thêm: 
                       strong #{Number(it.extraRoomCost).toLocaleString('vi-VN')}đ
                 .money #{(it.total||0).toLocaleString('vi-VN')}đ
 
@@ -152,6 +217,11 @@ block main
                     b= it.departureDateFormat || '—'
                     |  • Mã đơn: #{it.orderCode}
                     |  • Thanh toán: #{it.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                  .order-status-row
+                    - var osMap3 = { initial: { label: 'Khởi tạo', cls: 'initial' }, done: { label: 'Hoàn thành', cls: 'done' }, cancel: { label: 'Đã hủy', cls: 'cancel' } }
+                    - var osEntry3 = osMap3[it.orderStatus] || { label: it.orderStatus || 'Khởi tạo', cls: 'initial' }
+                    span.order-status-label Trạng thái đơn hàng:
+                    span.order-status-badge(class='order-status-badge--' + osEntry3.cls)= osEntry3.label
                   .qty Số lượng: NL #{it.qtyA} • TE #{it.qtyC} • EB #{it.qtyB}
                   if it.roomSelections && it.roomSelections.length > 0
                     - var segMap2 = {}
@@ -170,10 +240,72 @@ block main
                             .trip-rooms__row
                               span.trip-rooms__hotel= rs.hotelName
                               span.trip-rooms__info= rs.roomTypeName + ' × ' + rs.selectedRooms + ' phòng' + (rs.baseOccupancy ? ' (' + rs.baseOccupancy + ' người/phòng)' : '')
+                    if it.privateAssignments && it.privateAssignments.length > 0
+                      .trip-rooms.trip-rooms--assigned
+                        .trip-rooms__title
+                          i.fa-solid.fa-key(style="margin-right:4px;color:#2563eb")
+                          | Phân công phòng cụ thể:
+                        - var paStatusMap2 = { confirmed: { label: 'Chưa nhận phòng', cls: 'waiting' }, checked_in: { label: 'Đã nhận phòng', cls: 'checkedin' }, checked_out: { label: 'Đã trả phòng', cls: 'checkedout' } }
+                        each a in it.privateAssignments
+                          .trip-rooms__assigned-room
+                            .trip-rooms__assigned-header
+                              span.trip-rooms__hotel= a.hotelName
+                              span.trip-rooms__room-num
+                                i.fa-solid.fa-door-open(style="margin-right:4px")
+                                | Phòng #{a.roomNumber || '—'}
+                              if a.roomTypeName
+                                span.trip-rooms__room-type= a.roomTypeName
+                              - var paEntry2 = paStatusMap2[a.bookingStatus] || paStatusMap2['confirmed']
+                              span.trip-rooms__badge(class='trip-rooms__badge--' + paEntry2.cls)= paEntry2.label
+                            if a.passengers && a.passengers.length > 0
+                              .trip-rooms__passengers
+                                each p in a.passengers
+                                  span.trip-rooms__passenger
+                                    - var ptLabel2 = p.type === 'child' ? 'TE' : p.type === 'baby' ? 'EB' : 'NL'
+                                    | #{p.name}
+                                    span.trip-rooms__pax-type= ' (' + ptLabel2 + (p.age != null ? ', ' + p.age + ' tuổi' : '') + ')'
+                  else if it.accommodationMode === 'shared'
+                    if it.sharedAssignments && it.sharedAssignments.length > 0
+                      .trip-rooms.trip-rooms--assigned
+                        .trip-rooms__title
+                          i.fa-solid.fa-bed(style="margin-right:4px")
+                          | Phòng khách sạn (ở ghép):
+                        - var gsMap2 = { confirmed: { label: 'Chưa nhận phòng', cls: 'waiting' }, checked_in: { label: 'Đã nhận phòng', cls: 'checkedin' }, checked_out: { label: 'Đã trả phòng', cls: 'checkedout' } }
+                        each a in it.sharedAssignments
+                          .trip-rooms__assigned-room
+                            .trip-rooms__assigned-header
+                              span.trip-rooms__hotel= a.hotelName
+                              span.trip-rooms__room-num
+                                i.fa-solid.fa-door-open(style="margin-right:4px")
+                                | Phòng #{a.roomNumber || '—'}
+                              if a.roomTypeName
+                                span.trip-rooms__room-type= a.roomTypeName
+                              - var gsEntry2 = gsMap2[a.displayStatus || a.bookingStatus || a.guestStatus] || gsMap2['confirmed']
+                              span.trip-rooms__badge(class='trip-rooms__badge--' + gsEntry2.cls)= gsEntry2.label
+                            if a.passengers && a.passengers.length > 0
+                              .trip-rooms__passengers
+                                each p in a.passengers
+                                  span.trip-rooms__passenger
+                                    - var ptLabel2 = p.type === 'child' ? 'TE' : p.type === 'baby' ? 'EB' : 'NL'
+                                    | #{p.name}
+                                    span.trip-rooms__pax-type= ' (' + ptLabel2 + (p.age != null ? ', ' + p.age + ' tuổi' : '') + ')'
+                            else
+                              p.trip-rooms__pending(style="margin:4px 0 0;font-size:12px") Đang cập nhật danh sách khách trong phòng.
+                    else
+                      .trip-rooms
+                        .trip-rooms__title
+                          i.fa-solid.fa-bed(style="margin-right:4px")
+                          | Phòng khách sạn (ở ghép):
+                        if it.orderStatus === 'cancel'
+                          p.trip-rooms__pending Đơn hàng đã hủy — không có phân phòng.
+                        else if it.orderStatus === 'done'
+                          p.trip-rooms__pending Tour đã hoàn thành — không còn dữ liệu phân phòng.
+                        else
+                          p.trip-rooms__pending Chưa được phân công phòng — vui lòng chờ thông báo.
                   if it.extraRoomCost && it.extraRoomCost > 0
                     .trip-extra-cost
                       i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
-                      | Chi phí phòng dư: 
+                      | Chi phí phòng cộng thêm: 
                       strong #{Number(it.extraRoomCost).toLocaleString('vi-VN')}đ
                 .money #{(it.total||0).toLocaleString('vi-VN')}đ
 
@@ -187,7 +319,9 @@ block main
             .empty-box Chưa có lịch sử đặt phòng nào.
           else
             each booking in hotelBookings
-              .trip-card(class=(booking.status === 'cancelled' ? 'is-muted' : ''))
+              - const hbStatusCls = booking.status === 'cancelled' ? 'is-muted' : ''
+              - const hbHighlightCls = booking.isHighlighted ? ' trip-card--highlight' : ''
+              .trip-card(class=hbStatusCls + hbHighlightCls data-booking-code=booking.code)
                 .pic
                   if booking.hotelThumbnail
                     img(src=booking.hotelThumbnail alt=booking.hotelName)
@@ -206,18 +340,64 @@ block main
                     b= booking.checkOutDate
                     |  (#{booking.nights} đêm)
                     br
-                    | Mã đơn: #{booking.code}
-                    |  • Thanh toán: #{booking.paymentStatus==='paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
-                    |  • Trạng thái: 
-                    if booking.status === 'pending'
-                      span Chờ xác nhận
-                    else if booking.status === 'confirmed'
-                      span.status-confirmed Đã xác nhận
-                    else if booking.status === 'checked_in'
-                      span Đã nhận phòng
-                    else if booking.status === 'checked_out'
-                      span Đã trả phòng
-                    else if booking.status === 'cancelled'
-                      span Đã hủy
-                  .qty Số phòng: #{booking.rooms} • Người lớn: #{booking.adults} • Trẻ em: #{booking.children}
+                    | Mã đơn: 
+                    b= booking.code
+                  .hb-status-row
+                    - const bookingStatusMap = { pending: { label: 'Chờ xác nhận', cls: 'hb-badge--pending' }, confirmed: { label: 'Đã xác nhận', cls: 'hb-badge--confirmed' }, checked_in: { label: 'Đã nhận phòng', cls: 'hb-badge--checkedin' }, checked_out: { label: 'Đã trả phòng', cls: 'hb-badge--done' }, cancelled: { label: 'Đã hủy', cls: 'hb-badge--cancelled' } }
+                    - const paymentMap = { paid: { label: 'Đã thanh toán', cls: 'hb-badge--paid' }, unpaid: { label: 'Chưa thanh toán', cls: 'hb-badge--unpaid' } }
+                    - const bsEntry = bookingStatusMap[booking.status] || { label: booking.statusLabel || booking.status, cls: 'hb-badge--pending' }
+                    - const pyEntry = paymentMap[booking.paymentStatus] || { label: booking.paymentStatusLabel || booking.paymentStatus, cls: 'hb-badge--unpaid' }
+                    span.hb-badge(class=bsEntry.cls)
+                      i.fa-solid.fa-circle-dot
+                      |  #{bsEntry.label}
+                    span.hb-badge(class=pyEntry.cls)
+                      i.fa-solid.fa-circle-dollar-to-slot
+                      |  #{pyEntry.label}
+                  .qty
+                    | #{booking.rooms} phòng • #{booking.adults} người lớn
+                    if booking.children > 0
+                      |  • #{booking.children} trẻ em
+                  if booking.assignedRooms && booking.assignedRooms.length > 0
+                    .hb-assigned-rooms
+                      i.fa-solid.fa-key(style="margin-right:5px;color:#2d3e90")
+                      | Phòng đã xếp: 
+                      each ar, ari in booking.assignedRooms
+                        if ari > 0
+                          | , 
+                        strong Phòng #{ar.roomNumber}
+                        if ar.floor
+                          span  (Tầng #{ar.floor})
+                        if ar.roomType
+                          span  — #{ar.roomType}
+                  .hb-detail-link
+                    a(href=`/hotel-booking/pending?bookingCode=${booking.code}&phone=${user.phone || ''}`)
+                      i.fa-solid.fa-arrow-right
+                      |  Xem chi tiết đặt phòng
                 .money #{(booking.totalAmount||0).toLocaleString('vi-VN')} VND
+
+        //- Tự cuộn đến card được highlight
+        if highlight
+          script.
+            (function () {
+              var el = document.querySelector('[data-booking-code="!{highlight}"]');
+              if (el) {
+                setTimeout(function () { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 200);
+              }
+            })();
+
+        style.
+          .hb-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+          .hb-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+          .hb-badge--pending  { background: #fef9c3; color: #854d0e; }
+          .hb-badge--confirmed { background: #dbeafe; color: #1d4ed8; }
+          .hb-badge--checkedin { background: #d1fae5; color: #065f46; }
+          .hb-badge--done { background: #e0e7ff; color: #3730a3; }
+          .hb-badge--cancelled { background: #fee2e2; color: #991b1b; }
+          .hb-badge--paid { background: #d1fae5; color: #065f46; }
+          .hb-badge--unpaid { background: #fef3c7; color: #92400e; }
+          .hb-assigned-rooms { margin: 6px 0 2px; font-size: 13px; color: #374151; background: #eef1fb; border: 1px solid #d8ddf0; border-radius: 8px; padding: 6px 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+          .hb-detail-link { margin-top: 6px; font-size: 13px; }
+          .hb-detail-link a { color: #2d3e90; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
+          .hb-detail-link a:hover { text-decoration: underline; }
+          .trip-card--highlight { border: 2px solid #2d3e90 !important; box-shadow: 0 0 0 4px rgba(45,62,144,.12) !important; animation: hb-flash 1.4s ease-in-out 2; }
+          @keyframes hb-flash { 0%,100% { background: inherit; } 50% { background: #eef1fb; } }

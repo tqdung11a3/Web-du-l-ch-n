@@ -311,6 +311,7 @@ module.exports.detail = async (req, res) => {
   // ⬇️ PHẦN: Lấy khách sạn liên kết tour từ TourSegment (đã xác nhận)
   let tourHotels = [];
   let tourRoomOptions = [];
+  let hotelAccommodationRequired = false;
   try {
     const TourSegment = require("../../models/tour-segment.model");
     const Hotel = require("../../models/hotel.model");
@@ -342,6 +343,13 @@ module.exports.detail = async (req, res) => {
     }).lean();
 
     if (tourSegs.length > 0) {
+      hotelAccommodationRequired = tourSegs.some((ts) =>
+        (ts.segments || []).some((seg) =>
+          (seg.hotels || []).some((h) =>
+            (h.roomAllocations || []).some((ra) => ra.assignedRooms > 0)
+          )
+        )
+      );
       const hotelIdSet = new Set();
       tourSegs.forEach((ts) => {
         (ts.segments || []).forEach((seg) => {
@@ -621,7 +629,84 @@ module.exports.detail = async (req, res) => {
     tourHotels: tourHotels,
     tourRoomOptions: tourRoomOptions,
     tourRoomSegments: tourRoomSegments,
+    hotelAccommodationRequired,
   });
+};
+
+/**
+ * POST — Kiểm tra khả thi ở ghép (NL + TE/EB) trước khi đặt tour.
+ * Body: { passengers: [...], frames: [{ tourSegmentId, fromDate, toDate, candidateHotels }] }
+ */
+module.exports.checkSharedFeasibility = async (req, res) => {
+  try {
+    const { evaluateSharedFeasibilityV2Multi } = require("../../helpers/tour-shared-room.helper");
+
+    const passengers = Array.isArray(req.body.passengers)
+      ? req.body.passengers
+      : [];
+    const frames = Array.isArray(req.body.frames) ? req.body.frames : [];
+
+    if (frames.length === 0) {
+      return res.json({
+        code: "success",
+        ok: true,
+        message: "Không có khung lưu trú cần kiểm tra.",
+      });
+    }
+
+    const failures = [];
+    for (const frame of frames) {
+      const tourSegmentId = frame.tourSegmentId;
+      const fromDate = frame.fromDate;
+      const toDate = frame.toDate;
+      const candidateHotels = Array.isArray(frame.candidateHotels)
+        ? frame.candidateHotels
+        : [];
+
+      if (!tourSegmentId || !fromDate || !toDate) continue;
+
+      const fea = await evaluateSharedFeasibilityV2Multi({
+        tourSegmentId: String(tourSegmentId),
+        fromDate,
+        toDate,
+        hotels: candidateHotels.map((h) => ({
+          hotelId: String(h.hotelId || ""),
+          hotelName: h.hotelName || "",
+        })),
+        passengers,
+        excludeOrderId: null,
+      });
+
+      if (!fea.ok) {
+        failures.push({
+          tourSegmentId: String(tourSegmentId),
+          fromDate,
+          toDate,
+          reason: fea.reason || "cannot_fit",
+          message: fea.message || "Phương án ở ghép không khả thi.",
+        });
+      }
+    }
+
+    if (failures.length > 0) {
+      return res.json({
+        code: "error",
+        ok: false,
+        reason: failures[0].reason,
+        message: failures[0].message,
+        failures,
+      });
+    }
+
+    return res.json({ code: "success", ok: true });
+  } catch (err) {
+    console.error("tour.checkSharedFeasibility error:", err);
+    return res.json({
+      code: "error",
+      ok: false,
+      message: "Không thể kiểm tra phương án ở ghép. Vui lòng thử lại.",
+    });
+  }
 };
 
 // ========= DANH SÁCH TẤT CẢ TOUR ĐANG KHUYẾN MÃI =========

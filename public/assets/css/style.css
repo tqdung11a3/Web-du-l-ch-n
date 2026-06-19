@@ -1425,7 +1425,9 @@ button {
 }
 
 .room-selection-required-warning,
-.shared-room-required-warning {
+.private-min-adults-warning,
+.shared-room-required-warning,
+.shared-feasibility-warning {
   margin-top: 8px;
   padding: 8px 12px;
   border-radius: 6px;
@@ -1731,6 +1733,11 @@ button {
   color: #0ea5e9;
 }
 
+.shared-passenger-list .private-min-adults-warning {
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
 .shared-passenger-list__rows {
   display: flex;
   flex-direction: column;
@@ -1848,6 +1855,57 @@ button {
 
 .passenger-guardian:focus {
   border-color: #0071c2;
+}
+
+/* Em bé tự động chiếm ghế (auto mode khi maxBabiesPerAdult = 0) */
+.baby-seat-auto-badge {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 5px 10px;
+  margin-top: 2px;
+}
+
+/* Baby seat picker — per-baby radio chỗ ngồi */
+.baby-seat-picker {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin-top: 2px;
+  padding: 8px 10px;
+  background: #fdf4ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 6px;
+}
+
+.baby-seat-picker__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+
+.baby-seat-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.baby-seat-option input[type="radio"] {
+  accent-color: #7c3aed;
+  cursor: pointer;
 }
 
 .passenger-row .passenger-na {
@@ -4496,9 +4554,104 @@ button {
   padding-left: 2px;
 }
 
-.cart-passenger-guardian strong {
-  color: #0369a1;
+.cart-baby-seats-info {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #eef1f8;
+  border: 1px solid #c5cde6;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.cart-baby-seats-info__title {
   font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: 6px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cart-baby-seats-info__title i {
+  color: var(--color-primary);
+  font-size: 12px;
+}
+
+.cart-baby-seats-info__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: #475569;
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+
+.cart-baby-seats-info__row i {
+  font-size: 11px;
+  margin-right: 1px;
+  width: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cart-baby-seats-info__row i.icon-shared {
+  color: var(--color-primary);
+}
+
+.cart-baby-seats-info__row i.icon-private {
+  color: var(--brand-2);
+}
+
+.cart-baby-seats-info__row i.icon-auto {
+  color: #1a66cc;
+}
+
+.cart-baby-seats-info__row:last-of-type {
+  margin-bottom: 0;
+}
+
+.cart-baby-seats-info__row strong {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.cart-baby-seats-info__fee {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #c5cde6;
+  font-size: 12px;
+  color: var(--color-primary);
+}
+
+.cart-baby-seats-info__fee strong {
+  font-weight: 600;
+}
+
+.cart-passenger-guardian strong {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.cart-passenger-guardian i {
+  font-size: 10px;
+  margin-right: 3px;
+}
+
+.cart-passenger-guardian i.icon-shared {
+  color: var(--color-primary);
+}
+
+.cart-passenger-guardian i.icon-private {
+  color: var(--brand-2);
+}
+
+.cart-passenger-guardian i.icon-auto {
+  color: #1a66cc;
+}
+
+.cart-passenger-guardian i.icon-muted {
+  color: #94a3b8;
 }
 /* ── End phòng khách sạn trong giỏ hàng ── */
 
@@ -7466,6 +7619,133 @@ button {
   color: #4b5563;
 }
 
+.trip-rooms__status {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+
+.trip-rooms__statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 8px;
+  margin-top: 2px;
+}
+
+.trip-rooms__badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.trip-rooms__badge--waiting    { background: #fffbeb; color: #b45309; }
+.trip-rooms__badge--checkedin  { background: #ecfdf5; color: #059669; }
+.trip-rooms__badge--checkedout { background: #f1f5f9; color: #64748b; }
+.trip-rooms__badge--cancelled  { background: #fef2f2; color: #dc2626; }
+.trip-rooms__badge--pending    { background: #fef9ec; color: #d97706; }
+
+.order-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 2px;
+}
+
+.order-status-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.order-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.order-status-badge--initial    { background: #f1f5f9; color: #475569; }
+.order-status-badge--confirmed  { background: #eff6ff; color: #2563eb; }
+.order-status-badge--processing { background: #fffbeb; color: #b45309; }
+.order-status-badge--done       { background: #ecfdf5; color: #059669; }
+.order-status-badge--cancel     { background: #fef2f2; color: #dc2626; }
+
+.trip-rooms--assigned {
+  margin-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 6px;
+}
+
+.trip-rooms__assigned-room {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+}
+
+.trip-rooms__assigned-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.trip-rooms__room-num {
+  font-weight: 600;
+  color: #1e40af;
+  font-size: 13px;
+}
+
+.trip-rooms__room-type {
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 1px 7px;
+  border-radius: 6px;
+}
+
+.trip-rooms__passengers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.trip-rooms__passenger {
+  font-size: 12px;
+  background: #eff6ff;
+  color: #1e40af;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.trip-rooms__pax-type {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.trip-rooms__pending {
+  font-size: 12px;
+  color: #9ca3af;
+  font-style: italic;
+  margin: 4px 0 0 8px;
+}
+
 .trip-extra-cost {
   margin-top: 6px;
   padding: 5px 10px;
@@ -7948,27 +8228,171 @@ button {
   margin-top: 6px;
 }
 
-/* Cột “Số khách” làm mốc định vị cho popup */
+/* Cột “Số khách” */
 .hotel-search-top__item--guests {
-  position: relative;
+  min-width: 0;
 }
 
-/* Nút tóm tắt “Số khách” – text CĂN GIỮA thật sự */
+/* Modal chọn khách — overlay toàn màn hình */
+.guests-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+}
+
+.guests-modal.is-open {
+  display: flex;
+}
+
+body.guests-modal-open {
+  overflow: hidden;
+}
+
+.guests-modal__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(2px);
+}
+
+.guests-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(580px, 100%);
+  max-height: min(88vh, 760px);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.guests-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.guests-modal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.guests-modal__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.guests-modal__close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px #e2e8f0;
+}
+
+.guests-modal__close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.guests-modal__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.guests-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.guests-modal__add-room {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 1px dashed #93c5fd;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.guests-modal__add-room:hover {
+  background: #dbeafe;
+  border-color: #3b82f6;
+}
+
+.guests-modal__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 10px;
+  background: #2d3e90;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.guests-modal__done:hover {
+  background: #24366f;
+}
+
+/* Xoay chevron khi mở modal */
+.hotel-search-top__guests[aria-expanded="true"] .hotel-search-top__chev {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+/* Nút tóm tắt “Số khách” */
 .hotel-search-top__guests {
-  position: relative; /* để đặt chevron absolute bên trong */
+  position: relative;
   width: 100%;
   height: 56px;
   padding: 0 14px;
-  padding-right: 40px; /* chừa chỗ cho chevron */
+  padding-right: 40px;
   border: 1px solid #ddd;
   border-radius: 12px;
   background: #fff;
   display: flex;
-  align-items: center; /* căn giữa theo trục dọc */
-  justify-content: center; /* text nằm đúng giữa */
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   font-size: 16px;
-  line-height: 1; /* tránh icon bị lệch do line-height */
+  line-height: 1;
 }
 
 /* Nội dung tóm tắt: chiếm full width để trung tâm,
@@ -7995,31 +8419,7 @@ button {
   color: #111827;
 }
 
-/* Xoay chevron khi mở popup (JS chỉ cần toggle aria-expanded=true) */
-.hotel-search-top__guests[aria-expanded="true"] + .guests-popup,
-.guests-popup.is-open {
-  display: block;
-}
-.hotel-search-top__guests[aria-expanded="true"] .hotel-search-top__chev {
-  transform: translateY(-50%) rotate(180deg);
-}
-
-/* Popup: neo tuyệt đối NGAY DƯỚI nút, KHÔNG đè lên nút */
-.guests-popup {
-  position: absolute;
-  top: calc(100% + 8px); /* đặt dưới nút, cách 8px */
-  left: 0;
-  min-width: 320px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
-  padding: 14px;
-  display: none;
-  z-index: 30; /* nổi trên các phần khác */
-}
-
-/* Hàng điều khiển trong popup */
+/* Hàng điều khiển trong modal khách */
 .guests-popup__row {
   display: flex;
   align-items: center;
@@ -8058,14 +8458,17 @@ button {
 
 /* Container cho các phòng */
 .guests-rooms-container {
-  max-height: 400px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 /* Mỗi phòng */
 .guests-popup__room {
-  padding: 12px 0;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
 
 .guests-popup__room:last-child {
@@ -8213,6 +8616,97 @@ button {
 .guests-popup__add-room-btn:hover {
   background: #3b82f6;
   color: #fff;
+}
+
+.guests-popup__type-block {
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 6px;
+  margin-top: 4px;
+}
+
+.guests-popup__type-block:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.guests-popup__guests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding-left: 4px;
+}
+
+.guests-popup__guest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.guests-popup__guest-label {
+  flex: 1;
+  min-width: 88px;
+  color: #475569;
+  font-size: 12.5px;
+}
+
+.guests-popup__age-input {
+  width: 64px;
+  height: 34px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  padding: 0 6px;
+}
+
+.guests-popup__age-input:focus {
+  outline: none;
+  border-color: #2d3e90;
+  box-shadow: 0 0 0 2px rgba(45, 62, 144, 0.12);
+}
+
+.guests-popup__age-input.is-invalid {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.guests-popup__btn--remove-guest {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.guests-popup__btn--remove-guest:hover {
+  background: #fef2f2;
+}
+
+.guests-popup__room-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #b91c1c;
+  line-height: 1.4;
+}
+
+.guests-popup__room-warn i {
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 /* ======= CSS đã được di chuyển lên trên ======= */
@@ -14159,4 +14653,24 @@ body {
 /* ======== Hotel checkout CCCD (form-group--full) ======== */
 .form-group--full {
   grid-column: 1 / -1;
+}
+
+/* ── Banner hết phòng KS (client tour-detail) ─────────────────────────────── */
+.hotel-quota-exhausted-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: #fff1f2;
+  border: 1.5px solid #f87171;
+  border-radius: 10px;
+  color: #7f1d1d;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 12px 0;
+}
+.hotel-quota-exhausted-banner i {
+  font-size: 20px;
+  color: #dc2626;
+  flex-shrink: 0;
 }

@@ -26,14 +26,17 @@ block main
         input(type="hidden" id="tourId" name="id" value=tourDetail.id)
 
       .inner-group
+        label(for="customId" class="inner-label") ID tour
+        input(type="text" id="customId" name="customId" value=(tourDetail.customId || '') style="font-family:monospace")
+
+      .inner-group
         label(for="name" class="inner-label") Tên tour
         input(type="text" id="name" name="name" value=tourDetail.name)
 
-      .inner-group
-        label(for="category" class="inner-label") Danh mục
-        select(id="category" name="category")
-          option(value="") -- Chọn danh mục --
-          +options(categoryList, 0, tourDetail.category)
+      .inner-group.inner-group--tour-categories
+        label(class="inner-label") Danh mục
+        .tour-category-checkboxes
+          +categoryCheckboxes(categoryList, tourDetail.categoryIds || [])
 
       .inner-group
         label(class="inner-label") Tags (Loại hình trải nghiệm)
@@ -192,6 +195,50 @@ block main
           name="babyPricingRulesJson"
           value=tourDetail.babyPricingRulesJson
         )
+
+      //- ==== CẤU HÌNH CHỖ NGỒI EM BÉ ====
+      - var _initMaxBabies = tourDetail.maxBabiesPerAdult != null ? Number(tourDetail.maxBabiesPerAdult) : 1
+      .inner-group
+        label(class="inner-label") Cấu hình chỗ ngồi Em bé
+        .inner-desc#baby-seat-desc-shared(style=_initMaxBabies === 0 ? 'display:none' : '')
+        .inner-desc#baby-seat-desc-auto(style=_initMaxBabies !== 0 ? 'display:none' : '')
+          | Khi Số em bé tối đa/người lớn = 0, tất cả em bé mặc định chiếm 1 vị trí tour. Không hiển thị lựa chọn ghế riêng.
+        .inner-input-list.baby-seat-config-list
+          .inner-input-item
+            label(for="maxBabiesPerAdult") Số em bé tối đa/người lớn
+            input#maxBabiesPerAdult(
+              type="number"
+              name="maxBabiesPerAdult"
+              min="0"
+              value=_initMaxBabies
+              placeholder="1"
+            )
+          #babySeatFeeWrap(style=_initMaxBabies === 0 ? 'display:none' : '')
+            .inner-input-item
+              label(for="babySeatFee") Phí ghế ngồi riêng (VND/em bé)
+              input#babySeatFee(
+                type="number"
+                name="babySeatFee"
+                min="0"
+                value=tourDetail.babySeatFee != null ? tourDetail.babySeatFee : 0
+                placeholder="0"
+              )
+      script.
+        (function () {
+          var inp = document.getElementById('maxBabiesPerAdult');
+          var feeWrap = document.getElementById('babySeatFeeWrap');
+          var descShared = document.getElementById('baby-seat-desc-shared');
+          var descAuto = document.getElementById('baby-seat-desc-auto');
+          function toggle() {
+            var v = parseInt(inp.value, 10);
+            var isAuto = !isNaN(v) && v === 0;
+            if (feeWrap) feeWrap.style.display = isAuto ? 'none' : '';
+            if (descShared) descShared.style.display = isAuto ? 'none' : '';
+            if (descAuto) descAuto.style.display = isAuto ? '' : 'none';
+          }
+          inp && inp.addEventListener('input', toggle);
+          toggle();
+        })();
 
       //- (ghế đã chuyển vào từng lịch khởi hành bên dưới)
 

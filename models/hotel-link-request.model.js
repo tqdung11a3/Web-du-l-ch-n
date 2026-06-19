@@ -9,6 +9,8 @@ const requestedRoomSchema = new Schema(
     assignedRooms: { type: Number, default: 0 },
     fromDate: { type: Date, required: true },
     toDate: { type: Date, required: true },
+    /** Số thứ tự khung thời gian KS gốc (1-based) từ TourSegment.segments[]. */
+    stayFrameIndex: { type: Number, default: null },
   },
   { _id: false }
 );

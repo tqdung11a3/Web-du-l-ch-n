@@ -59,6 +59,37 @@ block main
               td(colspan="5" style="text-align: center; padding: 40px;")
                 .empty-message Không có phòng nào
 
+    //- Phân trang theo tầng
+    - var fp = typeof floorPagination !== 'undefined' ? floorPagination : null
+    if fp && fp.totalPages > 0
+      .rooms-floor-bar.rooms-floor-bar--below
+        .rooms-floor-bar__info
+          if fp.currentFloor
+            strong= fp.currentFloor
+            span  (#{fp.currentFloorRoomCount} phòng)
+          else
+            span Chưa có phòng
+        if fp.totalPages > 1
+          .rooms-floor-bar__nav
+            - var prevPage = fp.currentPage > 1 ? fp.currentPage - 1 : null
+            - var nextPage = fp.currentPage < fp.totalPages ? fp.currentPage + 1 : null
+            if prevPage
+              a.rooms-floor-nav-btn(href=`/${pathAdmin}/hotel/${hotelId}/rooms/list?page=${prevPage}` title="Tầng trước")
+                i.fa-solid.fa-chevron-left
+            else
+              span.rooms-floor-nav-btn.rooms-floor-nav-btn--disabled
+                i.fa-solid.fa-chevron-left
+            select.rooms-floor-select(box-pagination)
+              each f in fp.floors
+                option(value=f.page selected=(f.page === fp.currentPage))= f.floor + ' (' + f.roomCount + ' phòng)'
+            if nextPage
+              a.rooms-floor-nav-btn(href=`/${pathAdmin}/hotel/${hotelId}/rooms/list?page=${nextPage}` title="Tầng sau")
+                i.fa-solid.fa-chevron-right
+            else
+              span.rooms-floor-nav-btn.rooms-floor-nav-btn--disabled
+                i.fa-solid.fa-chevron-right
+            span.rooms-floor-bar__counter Trang #{fp.currentPage}/#{fp.totalPages}
+
     //- Summary Cards
     .summary-cards
       .summary-card

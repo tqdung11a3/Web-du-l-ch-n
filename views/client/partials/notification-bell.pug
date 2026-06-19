@@ -1,0 +1,20 @@
+if account
+  .client-notify-wrap
+    button#clientNotificationBell.client-notify-bell(type="button" title="Thông báo" aria-label="Thông báo")
+      i.fa-regular.fa-bell
+      if unreadNotificationCount && unreadNotificationCount > 0
+        span#clientNotificationBadge.client-notify-badge= unreadNotificationCount > 99 ? '99+' : unreadNotificationCount
+      else
+        span#clientNotificationBadge.client-notify-badge(style="display:none") 0
+
+  #clientNotificationModal.client-notification-modal
+    .client-notification-overlay
+    .client-notification-panel
+      .client-notification-header
+        h3 Thông báo
+        button.client-notification-close(type="button" aria-label="Đóng")
+          i.fa-solid.fa-xmark
+      .client-notification-list
+        .client-notification-loading Đang tải...
+      .client-notification-footer
+        a(href="/notifications") Xem tất cả thông báo

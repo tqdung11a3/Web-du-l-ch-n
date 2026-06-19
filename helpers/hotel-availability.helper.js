@@ -13,36 +13,34 @@ function calculateEffectiveOccupancy(roomsData, ageBands) {
     return 0;
   }
 
+  const { normalizeRoom } = require("./hotel-guest-rooms.helper");
   let totalEffective = 0;
 
-  roomsData.forEach(room => {
-    // Người lớn luôn tính đủ 1
-    const adults = room.adults || 0;
-    totalEffective += adults;
+  roomsData.forEach((rawRoom) => {
+    const room = normalizeRoom(rawRoom);
 
-    // Trẻ em tính theo age bands
-    if (room.children && Array.isArray(room.children)) {
-      room.children.forEach(child => {
-        const age = child.age;
-        
-        // Tìm age band phù hợp
-        const band = ageBands.find(b => {
-          const minAge = b.minAge || 0;
-          const maxAge = b.maxAge;
-          
-          if (maxAge === null || maxAge === undefined) {
-            // Không giới hạn trên
-            return age >= minAge;
-          } else {
-            return age >= minAge && age <= maxAge;
-          }
-        });
+    // Người lớn (12+) luôn tính đủ 1
+    totalEffective += (room.adults || []).length;
 
-        if (band && band.countInOccupancy) {
-          totalEffective += (band.occupancyWeight || 1);
+    // Trẻ em + em bé tính theo age bands
+    const minors = [...(room.children || []), ...(room.babies || [])];
+    minors.forEach((person) => {
+      const age = Number(person.age);
+
+      const band = ageBands.find((b) => {
+        const minAge = b.minAge || 0;
+        const maxAge = b.maxAge;
+
+        if (maxAge === null || maxAge === undefined) {
+          return age >= minAge;
         }
+        return age >= minAge && age <= maxAge;
       });
-    }
+
+      if (band && band.countInOccupancy) {
+        totalEffective += band.occupancyWeight || 1;
+      }
+    });
   });
 
   return totalEffective;

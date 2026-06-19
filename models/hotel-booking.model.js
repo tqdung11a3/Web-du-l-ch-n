@@ -106,6 +106,22 @@ const schema = new Schema(
       default: null,
       index: true,
     },
+
+    // ==== TỰ ĐỘNG HUỶ THEO TOUR ====
+    // Khi admin xoá mềm Tour ở /admin/tour/list, các HotelBooking thuộc
+    // các TourSegment của tour đó sẽ được set status = 'cancelled' để giải
+    // phóng phòng trên lịch. `statusBeforeTourDelete` lưu lại status cũ và
+    // `tourDeletedAt` đánh dấu thời điểm để khôi phục lại khi admin bấm
+    // hoàn tác (undoPatch).
+    statusBeforeTourDelete: {
+      type: String,
+      enum: ["pending", "confirmed", "checked_in", "checked_out", "cancelled"],
+      default: null,
+    },
+    tourDeletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

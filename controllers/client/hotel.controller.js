@@ -8,6 +8,11 @@ const City = require("../../models/city.model");
 const SettingWebsiteInfo = require("../../models/setting-website-info.model");
 const { generateRandomNumber } = require("../../helpers/generate.helper");
 const { checkHotelAvailability } = require("../../helpers/hotel-availability.helper");
+const {
+  normalizeRoomsData,
+  countGuests,
+  buildAllocationRoomsDisplay,
+} = require("../../helpers/hotel-guest-rooms.helper");
 
 /* ========================================================================
  * SEARCH: GET /hotel/search
@@ -157,7 +162,9 @@ module.exports.search = async (req, res) => {
     let parsedRoomsData = null;
     if (roomsData) {
       try {
-        parsedRoomsData = JSON.parse(decodeURIComponent(roomsData));
+        parsedRoomsData = normalizeRoomsData(
+          JSON.parse(decodeURIComponent(roomsData))
+        );
       } catch (e) {
         console.warn("Failed to parse roomsData:", e);
       }
@@ -167,11 +174,14 @@ module.exports.search = async (req, res) => {
     let numRooms = Number(rooms) || 1;
     let numAdults = Number(adults) || 1;
     let numChildren = Number(children) || 0;
+    let numBabies = Number(req.query.babies) || 0;
     
-    if (parsedRoomsData && Array.isArray(parsedRoomsData) && parsedRoomsData.length > 0) {
-      numRooms = parsedRoomsData.length;
-      numAdults = parsedRoomsData.reduce((sum, r) => sum + (r.adults || 1), 0);
-      numChildren = parsedRoomsData.reduce((sum, r) => sum + (r.children?.length || 0), 0);
+    if (parsedRoomsData && parsedRoomsData.length > 0) {
+      const counts = countGuests(parsedRoomsData);
+      numRooms = counts.rooms;
+      numAdults = counts.adults;
+      numChildren = counts.children;
+      numBabies = counts.babies;
     }
 
     const hasSearched = !!(
@@ -382,6 +392,7 @@ module.exports.search = async (req, res) => {
         checkOutDate: effectiveCheckOut || "",
         adults: numAdults,
         children: numChildren,
+        babies: numBabies,
         rooms: numRooms,
         roomsData: roomsData || "",
       },
@@ -436,17 +447,26 @@ module.exports.detail = async (req, res) => {
     const rooms = Number(q.rooms) || 1;
     const adults = Number(q.adults) || 1;
     const children = Number(q.children) || 0;
+    const babies = Number(q.babies) || 0;
     const roomsData = q.roomsData || "";
 
-    // Parse roomsData nếu có
+    // Parse & chuẩn hoá roomsData
     let parsedRoomsData = null;
+    let allocationRooms = [];
     if (roomsData) {
       try {
-        parsedRoomsData = JSON.parse(decodeURIComponent(roomsData));
+        parsedRoomsData = normalizeRoomsData(
+          JSON.parse(decodeURIComponent(roomsData))
+        );
+        allocationRooms = buildAllocationRoomsDisplay(parsedRoomsData);
       } catch (e) {
         console.warn("Failed to parse roomsData in detail:", e);
       }
     }
+
+    const guestCounts = parsedRoomsData
+      ? countGuests(parsedRoomsData)
+      : { rooms, adults, children, babies };
 
     // Chỉ tạo searchInfo nếu có dates
     let searchInfo = null;
@@ -454,9 +474,10 @@ module.exports.detail = async (req, res) => {
       searchInfo = {
         checkInDate,
         checkOutDate,
-        rooms,
-        adults,
-        children,
+        rooms: guestCounts.rooms,
+        adults: guestCounts.adults,
+        children: guestCounts.children,
+        babies: guestCounts.babies,
         roomsData,
         checkInLabel: moment(checkInDate, "YYYY-MM-DD").format("DD-MM-YYYY"),
         checkOutLabel: moment(checkOutDate, "YYYY-MM-DD").format("DD-MM-YYYY"),
@@ -705,6 +726,7 @@ module.exports.detail = async (req, res) => {
       mainImage,
       galleryImages,
       searchInfo,
+      allocationRooms,
       ratingStats,
       highlights: hotel.highlights || [],
       promotionShortText: hotel.promotionShortText || "",
@@ -734,11 +756,12 @@ module.exports.detail = async (req, res) => {
       isLoggedIn: !!(req.account && req.account.id),
       currentUser: req.account || null,
       googleMapsEmbedUrl: googleMapsEmbedUrl || "",
-      checkInDate, // Thêm cho add-to-cart
+      checkInDate,
       checkOutDate,
-      rooms,
-      adults,
-      children,
+      rooms: guestCounts.rooms,
+      adults: guestCounts.adults,
+      children: guestCounts.children,
+      babies: guestCounts.babies,
       roomsData,
     });
   } catch (err) {

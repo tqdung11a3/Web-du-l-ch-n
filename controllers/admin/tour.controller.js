@@ -58,8 +58,23 @@ async function buildTourAuditSnapshot(doc) {
     }
   }
 
-  // category → tên
-  if (raw.category) {
+  // category → tên (hỗ trợ nhiều danh mục)
+  const assignedCatIds = categoryHelper.getTourAssignedCategoryIds(raw);
+  if (assignedCatIds.length) {
+    try {
+      const cats = await Category.find({ _id: { $in: assignedCatIds } })
+        .select("name")
+        .lean();
+      const nameById = Object.fromEntries(
+        cats.map((c) => [String(c._id), c.name])
+      );
+      out["danh mục"] = assignedCatIds
+        .map((id) => nameById[id] || id)
+        .join(", ");
+    } catch {
+      out["danh mục"] = assignedCatIds.join(", ");
+    }
+  } else if (raw.category) {
     try {
       const cat = await Category.findById(raw.category).select("name").lean();
       out["danh mục"] = (cat && cat.name) ? cat.name : String(raw.category);
@@ -584,9 +599,11 @@ module.exports.list = async (req, res) => {
           const categoryChild = await categoryHelper.getCategoryChild(parentId);
           categoryIds = [parentId, ...categoryChild.map((item) => item.id)];
           
-          // Lọc tour theo category
+          // Lọc tour theo category (hỗ trợ categories[] + cascade)
           if (categoryIds.length > 0) {
-            find.category = { $in: categoryIds };
+            const catFilter =
+              categoryHelper.buildTourCategoryMatchFilter(categoryIds);
+            if (catFilter) Object.assign(find, catFilter);
           }
         }
       } catch (categoryError) {
@@ -1133,6 +1150,19 @@ module.exports.createPost = async (req, res) => {
       req.body.priceNewBaby = 0;
     }
 
+    // --- Cấu hình chỗ ngồi em bé ---
+    const parsedMaxBabies = parseInt(req.body.maxBabiesPerAdult, 10);
+    req.body.maxBabiesPerAdult = Number.isFinite(parsedMaxBabies)
+      ? Math.max(0, parsedMaxBabies)
+      : 1;
+    const parsedBabySeatFee = parseInt(req.body.babySeatFee, 10);
+    req.body.babySeatFee =
+      req.body.maxBabiesPerAdult === 0
+        ? 0
+        : Number.isFinite(parsedBabySeatFee)
+        ? Math.max(0, parsedBabySeatFee)
+        : 0;
+
     // Ghế đã chuyển sang từng departure; giữ top-level = tổng tất cả departures (backward compat)
     const depArr = req.body.departures || [];
     req.body.seatsTotal = depArr.reduce((s, d) => s + (d.seatsTotal || 0), 0);
@@ -1142,6 +1172,25 @@ module.exports.createPost = async (req, res) => {
     delete req.body.stockAdult;
     delete req.body.stockChildren;
     delete req.body.stockBaby;
+
+    // --- customId ---
+    const rawCustomId = String(req.body.customId || "").trim();
+    req.body.customId = rawCustomId;
+    if (rawCustomId) {
+      const existed = await Tour.findOne({
+        customId: rawCustomId,
+        deleted: false,
+      }).select("_id").lean();
+      if (existed) {
+        return res.json({ code: "error", message: `ID tour "${rawCustomId}" đã được sử dụng bởi tour khác. Vui lòng chọn ID khác.` });
+      }
+    }
+
+    // --- Danh mục (nhiều + đồng bộ category legacy) ---
+    categoryHelper.applyTourCategoryFields(
+      req.body,
+      categoryHelper.parseTourCategoriesFromBody(req.body)
+    );
 
     // --- audit & file & company ---
     req.body.createdBy = req.account.id;
@@ -1279,9 +1328,10 @@ module.exports.edit = async (req, res) => {
       tourDetail.babyPricingRules || []
     );
 
-    const categoryList = await categoryHelper.getCategoriesForCompanyTourSelect(
-      { includeCategoryId: tourDetail.category }
-    );
+    tourDetail.categoryIds = categoryHelper.getTourAssignedCategoryIds(tourDetail);
+    const categoryList = await categoryHelper.getCategoriesForCompanyTourSelect({
+      includeCategoryIds: tourDetail.categoryIds,
+    });
     const categoryTree = categoryHelper.buildCategoryTree(categoryList, "");
 
     // Lấy danh sách thành phố Việt Nam (không có countryId hoặc countryName không phải Châu Âu)
@@ -1339,21 +1389,24 @@ module.exports.edit = async (req, res) => {
       };
     });
 
-    // Xác định tour là trong nước hay nước ngoài dựa trên category
+    // Xác định tour là trong nước hay nước ngoài dựa trên danh mục đã gán
     let isInternationalTour = false;
-    if (tourDetail.category) {
-      const category = await Category.findById(tourDetail.category);
-      if (category && category.parent) {
-        const parentCategory = await Category.findById(category.parent);
-        if (parentCategory) {
-          const parentName = parentCategory.name.toLowerCase();
-          const parentSlug = parentCategory.slug?.toLowerCase() || "";
-          isInternationalTour =
-            parentName.includes("nước ngoài") ||
-            parentSlug.includes("nuoc-ngoai") ||
-            parentName.includes("international") ||
-            parentSlug.includes("international");
-        }
+    const assignedCatIds = tourDetail.categoryIds || [];
+    for (const catId of assignedCatIds) {
+      const category = await Category.findById(catId);
+      if (!category || !category.parent) continue;
+      const parentCategory = await Category.findById(category.parent);
+      if (!parentCategory) continue;
+      const parentName = parentCategory.name.toLowerCase();
+      const parentSlug = parentCategory.slug?.toLowerCase() || "";
+      if (
+        parentName.includes("nước ngoài") ||
+        parentSlug.includes("nuoc-ngoai") ||
+        parentName.includes("international") ||
+        parentSlug.includes("international")
+      ) {
+        isInternationalTour = true;
+        break;
       }
     }
 
@@ -1649,6 +1702,26 @@ module.exports.editPatch = async (req, res) => {
       req.body.babyPricingRules = [];
     }
 
+    // --- Cấu hình chỗ ngồi em bé ---
+    const rawMaxBabies = req.body.maxBabiesPerAdult;
+    if (rawMaxBabies !== undefined && rawMaxBabies !== "") {
+      req.body.maxBabiesPerAdult = Math.max(0, parseInt(rawMaxBabies, 10) || 0);
+    } else {
+      req.body.maxBabiesPerAdult =
+        existed.maxBabiesPerAdult != null ? existed.maxBabiesPerAdult : 1;
+    }
+    if (req.body.maxBabiesPerAdult === 0) {
+      req.body.babySeatFee = 0;
+    } else {
+      const rawSeatFee = req.body.babySeatFee;
+      if (rawSeatFee !== undefined && rawSeatFee !== "") {
+        req.body.babySeatFee = Math.max(0, parseInt(rawSeatFee, 10) || 0);
+      } else {
+        req.body.babySeatFee =
+          existed.babySeatFee != null ? existed.babySeatFee : 0;
+      }
+    }
+
     // Ghế đã chuyển sang từng departure; giữ top-level = tổng tất cả departures (backward compat)
     const depArrE = req.body.departures || [];
     req.body.seatsTotal = depArrE.reduce((s, d) => s + (d.seatsTotal || 0), 0);
@@ -1658,6 +1731,26 @@ module.exports.editPatch = async (req, res) => {
     delete req.body.stockAdult;
     delete req.body.stockChildren;
     delete req.body.stockBaby;
+
+    // --- customId ---
+    const rawCustomIdE = String(req.body.customId || "").trim();
+    req.body.customId = rawCustomIdE;
+    if (rawCustomIdE) {
+      const conflict = await Tour.findOne({
+        customId: rawCustomIdE,
+        deleted: false,
+        _id: { $ne: existed._id },
+      }).select("_id").lean();
+      if (conflict) {
+        return res.json({ code: "error", message: `ID tour "${rawCustomIdE}" đã được sử dụng bởi tour khác. Vui lòng chọn ID khác.` });
+      }
+    }
+
+    // --- Danh mục (nhiều + đồng bộ category legacy) ---
+    categoryHelper.applyTourCategoryFields(
+      req.body,
+      categoryHelper.parseTourCategoriesFromBody(req.body)
+    );
 
     // --- Audit & avatar ---
     req.body.updatedBy = req.account.id;
@@ -1748,15 +1841,63 @@ module.exports.deletePatch = async (req, res) => {
       });
     }
 
+    // 4) Cascade: GIẢI PHÓNG các phòng tour đang giữ cho tour này.
+    //   - Tìm tất cả TourSegment thuộc tour vừa xoá.
+    //   - Với mỗi HotelBooking có tourSegmentId nằm trong đó và status hiện
+    //     tại KHÁC 'cancelled' → lưu status cũ vào statusBeforeTourDelete,
+    //     đặt status = 'cancelled', tourDeletedAt = now. Phòng sẽ tự được trả
+    //     lại lịch (vì helpers/hotel-availability.helper.js bỏ qua booking
+    //     'cancelled'). undoPatch sẽ khôi phục lại theo các cờ này.
+    let releasedCount = 0;
+    try {
+      const TourSegment = require("../../models/tour-segment.model");
+      const HotelBooking = require("../../models/hotel-booking.model");
+      const segments = await TourSegment.find({ tourId: id })
+        .select("_id")
+        .lean();
+      const segmentIds = segments.map((s) => s._id);
+      if (segmentIds.length > 0) {
+        const releaseRes = await HotelBooking.updateMany(
+          {
+            tourSegmentId: { $in: segmentIds },
+            status: { $ne: "cancelled" },
+            tourDeletedAt: null,
+          },
+          [
+            {
+              $set: {
+                statusBeforeTourDelete: "$status",
+                status: "cancelled",
+                tourDeletedAt: new Date(),
+              },
+            },
+          ]
+        );
+        releasedCount = releaseRes.modifiedCount || 0;
+      }
+    } catch (cascadeErr) {
+      console.error("tour.deletePatch cascade release error:", cascadeErr);
+    }
+
     auditLogHelper.log(req, {
       action: "tour.delete",
       resourceType: "Tour",
       resourceId: id,
       resourceLabel: (tourBefore && tourBefore.name) || "",
-      summary: `Xóa tour "${(tourBefore && tourBefore.name) || ""}"`,
+      summary:
+        `Xóa tour "${(tourBefore && tourBefore.name) || ""}"` +
+        (releasedCount > 0
+          ? ` (đã giải phóng ${releasedCount} phòng giữ cho tour)`
+          : ""),
     });
 
-    return res.json({ code: "success", message: "Xóa tour thành công!" });
+    return res.json({
+      code: "success",
+      message:
+        releasedCount > 0
+          ? `Xóa tour thành công! Đã giải phóng ${releasedCount} phòng giữ cho tour.`
+          : "Xóa tour thành công!",
+    });
   } catch (error) {
     console.error("tour.deletePatch error:", error);
     return res.json({ code: "error", message: "Dữ liệu không hợp lệ!" });
@@ -1806,7 +1947,93 @@ module.exports.undoPatch = async (req, res) => {
       });
     }
 
-    return res.json({ code: "success", message: "Đã khôi phục!" });
+    // Cascade: KHÔI PHỤC các HotelBooking đã bị tự huỷ khi xoá tour.
+    //   - Lấy danh sách booking có tourDeletedAt set + tourSegmentId thuộc
+    //     các segment của tour này.
+    //   - Với MỖI booking: kiểm tra xem trong khoảng [checkIn, checkOut)
+    //     phòng đó (roomId) đã bị booking khác (status != 'cancelled' &&
+    //     tourDeletedAt = null) chiếm chưa.
+    //     + Nếu CHƯA: khôi phục status = statusBeforeTourDelete, clear cờ.
+    //     + Nếu RỒI: để nguyên 'cancelled' (đã có khách khác đặt mất), trả
+    //       về cho admin biết để xử lý thủ công.
+    let restoredCount = 0;
+    let conflictCount = 0;
+    try {
+      const TourSegment = require("../../models/tour-segment.model");
+      const HotelBooking = require("../../models/hotel-booking.model");
+      const {
+        hasTimeOverlap,
+      } = require("../../helpers/hotel-availability.helper");
+
+      const segments = await TourSegment.find({ tourId: id })
+        .select("_id")
+        .lean();
+      const segmentIds = segments.map((s) => s._id);
+      if (segmentIds.length > 0) {
+        const heldBookings = await HotelBooking.find({
+          tourSegmentId: { $in: segmentIds },
+          tourDeletedAt: { $ne: null },
+          status: "cancelled",
+        }).lean();
+
+        // Gom mọi booking hiện hành (KHÔNG do tour-delete gây ra) có
+        // overlap với roomId tương ứng để check xung đột.
+        const roomIds = [
+          ...new Set(
+            heldBookings.map((b) => String(b.roomId)).filter(Boolean)
+          ),
+        ];
+        const activeOthers = roomIds.length
+          ? await HotelBooking.find({
+              roomId: {
+                $in: roomIds.map(
+                  (rid) => new mongoose.Types.ObjectId(rid)
+                ),
+              },
+              status: { $nin: ["cancelled", "checked_out"] },
+              tourDeletedAt: null,
+            })
+              .select("_id roomId checkIn checkOut")
+              .lean()
+          : [];
+
+        for (const b of heldBookings) {
+          const hasConflict =
+            b.roomId &&
+            activeOthers.some(
+              (o) =>
+                String(o.roomId) === String(b.roomId) &&
+                hasTimeOverlap(b.checkIn, b.checkOut, o.checkIn, o.checkOut)
+            );
+          if (hasConflict) {
+            conflictCount++;
+            continue;
+          }
+          await HotelBooking.updateOne(
+            { _id: b._id },
+            {
+              $set: {
+                status: b.statusBeforeTourDelete || "confirmed",
+                statusBeforeTourDelete: null,
+                tourDeletedAt: null,
+              },
+            }
+          );
+          restoredCount++;
+        }
+      }
+    } catch (cascadeErr) {
+      console.error("tour.undoPatch cascade restore error:", cascadeErr);
+    }
+
+    let msg = "Đã khôi phục!";
+    if (restoredCount > 0) {
+      msg += ` Đã khôi phục ${restoredCount} phòng giữ cho tour.`;
+    }
+    if (conflictCount > 0) {
+      msg += ` ${conflictCount} phòng KHÔNG khôi phục được do đã có khách khác đặt mất — cần xếp lại thủ công.`;
+    }
+    return res.json({ code: "success", message: msg });
   } catch (error) {
     console.error("tour.undoPatch error:", error);
     return res.json({ code: "error", message: "Dữ liệu không hợp lệ!" });
@@ -1838,6 +2065,26 @@ module.exports.destroyDelete = async (req, res) => {
         message:
           "Tour không tồn tại, không thuộc công ty của bạn, hoặc chưa bị xoá tạm!",
       });
+    }
+
+    // 4) Cascade: xoá vĩnh viễn các HotelBooking giữ phòng cho tour này.
+    //   Lúc này tour đã không còn khả năng khôi phục, nên cũng không cần giữ
+    //   lại các bản ghi 'cancelled' do tour-delete tạo ra; đồng thời để
+    //   trang /admin/hotel/booking/tour-holds/... không còn rác.
+    try {
+      const TourSegment = require("../../models/tour-segment.model");
+      const HotelBooking = require("../../models/hotel-booking.model");
+      const segments = await TourSegment.find({ tourId: id })
+        .select("_id")
+        .lean();
+      const segmentIds = segments.map((s) => s._id);
+      if (segmentIds.length > 0) {
+        await HotelBooking.deleteMany({
+          tourSegmentId: { $in: segmentIds },
+        });
+      }
+    } catch (cascadeErr) {
+      console.error("tour.destroyDelete cascade cleanup error:", cascadeErr);
     }
 
     return res.json({ code: "success", message: "Đã xoá vĩnh viễn!" });

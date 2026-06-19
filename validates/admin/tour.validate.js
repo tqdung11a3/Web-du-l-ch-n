@@ -8,11 +8,17 @@ const numericOrEmpty = Joi.alternatives().try(
 
 module.exports.createPost = async (req, res, next) => {
   const schema = Joi.object({
+    customId: Joi.string().allow("").optional(),
+
     name: Joi.string().required().messages({
       "string.empty": "Vui lòng nhập tên tour!",
     }),
 
     category: Joi.string().allow(""),
+    categories: Joi.alternatives().try(
+      Joi.array().items(Joi.string()),
+      Joi.string().allow("")
+    ),
     position: numericOrEmpty,
     status: Joi.string().allow(""),
     avatar: Joi.string().allow(""),
@@ -68,6 +74,10 @@ module.exports.createPost = async (req, res, next) => {
       Joi.array().items(Joi.string().valid("phiêu lưu", "biển", "văn hóa", "leo núi", "tham quan thành phố")),
       Joi.string().allow("")
     ).optional(),
+
+    // Cấu hình chỗ ngồi em bé
+    maxBabiesPerAdult: numericOrEmpty,
+    babySeatFee: numericOrEmpty,
 
     // Cấu hình giá em bé
     babyPricingMode: Joi.string().valid("fixed", "tiered").default("fixed"),

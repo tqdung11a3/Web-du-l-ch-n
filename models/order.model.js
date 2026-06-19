@@ -4,7 +4,11 @@ const mongoose = require("mongoose");
 // {
 //   tourId, name, slug, avatar, companyId,
 //   departureCity, departureDateDisplay, departureDate,
-//   quantityAdult, quantityChildren, quantityBaby, babySeat,
+//   quantityAdult, quantityChildren, quantityBaby,
+//   babySeat,            // (legacy) true nếu TẤT CẢ em bé đặt ghế riêng
+//   babySeats,           // (mới) mảng per-baby: [{ babyIdx, seatType: 'private'|'shared', guardianIdx }]
+//   babySeatFeeTotal,    // tổng phí ghế riêng em bé (VND)
+//   maxBabiesPerAdult,   // snapshot cấu hình lúc đặt
 //   priceNewAdult, priceNewChildren, priceNewBaby,
 //   babyPricingMode, babyPricingRules,
 //

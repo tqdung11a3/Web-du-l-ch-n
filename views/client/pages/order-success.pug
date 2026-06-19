@@ -1,5 +1,7 @@
 extends ../layouts/default.pug
 
+include ../partials/order-baby-seats-mixins
+
 block main
   .container
     .section-11(style="padding-top: 20px;")
@@ -76,6 +78,8 @@ block main
                       .inner-ages-info.inner-ages-info--inline
                         each age, idx in item.babyAges
                           span.inner-age-tag Bé #{idx + 1}: #{age} tuổi
+              if item.babySeatsDisplay && item.babySeatsDisplay.lines && item.babySeatsDisplay.lines.length
+                +babySeatsSummary(item.babySeatsDisplay)
               if (item.accommodationMode === 'shared' && item.sharedRoomRequest && item.sharedRoomRequest.length > 0) || (item.roomSelections && item.roomSelections.length > 0) || (item.extraRoomCost && item.extraRoomCost > 0)
                 .inner-success-booking-extra
                   if item.accommodationMode === 'shared' && item.sharedRoomRequest && item.sharedRoomRequest.length > 0
@@ -101,8 +105,12 @@ block main
                     if item.passengers && item.passengers.length
                       -
                         var psList = item.passengers || [];
+                        var GUARDIAN_MIN_AGE = 18;
+                        function _isAnchorAdult(p){
+                          return p && p.type === 'adult' && Number(p.age || 0) >= GUARDIAN_MIN_AGE;
+                        }
                         var adultByIdx = {};
-                        psList.forEach(function(p){ if (p.type === 'adult') adultByIdx[p.idx] = p; });
+                        psList.forEach(function(p){ if (_isAnchorAdult(p)) adultByIdx[p.idx] = p; });
                       .pending-passenger-list
                         .pending-passenger-list__title
                           i.fa-solid.fa-id-card(style="margin-right:6px")
@@ -127,12 +135,8 @@ block main
                                 span.pending-passenger-gender
                                   i.fa-solid.fa-venus(style="color:#ec4899")
                                   |  Nữ
-                              if p.type !== 'adult'
-                                - var guardian = adultByIdx[p.guardianIdx];
-                                span.pending-passenger-guardian
-                                  i.fa-solid.fa-link(style="margin-right:3px")
-                                  |  Ở cùng:
-                                  strong #{guardian ? (guardian.name || ('Người lớn #' + (guardian.idx + 1))) : '—'}
+                              +babySeatPassengerRow(p)
+                              +roomGuardianRow(p, adultByIdx)
                   if item.accommodationMode !== 'shared' && item.roomSelections && item.roomSelections.length > 0
                     -
                       var paxByIdxPrivate = {};
@@ -175,6 +179,13 @@ block main
                                               if p.age !== undefined && p.age !== ''
                                                 =  ' · ' + p.age + 't'
                     if item.passengers && item.passengers.length
+                      -
+                        var GUARDIAN_MIN_AGE_P = 18;
+                        function _isAnchorAdultP(p){
+                          return p && p.type === 'adult' && Number(p.age || 0) >= GUARDIAN_MIN_AGE_P;
+                        }
+                        var adultByIdxP = {};
+                        (item.passengers || []).forEach(function(p){ if (_isAnchorAdultP(p)) adultByIdxP[p.idx] = p; });
                       .pending-passenger-list
                         .pending-passenger-list__title
                           i.fa-solid.fa-id-card(style="margin-right:6px")
@@ -199,10 +210,12 @@ block main
                                 span.pending-passenger-gender
                                   i.fa-solid.fa-venus(style="color:#ec4899")
                                   |  Nữ
+                              +babySeatPassengerRow(p)
+                              +roomGuardianRow(p, adultByIdxP)
                   if item.extraRoomCost && item.extraRoomCost > 0
                     .inner-room-selections__extra
                       i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
-                      | Chi phí phòng dư: #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
+                      | Chi phí phòng cộng thêm: #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
         .inner-list-price
           .inner-item
             .inner-label Tạm tính:
@@ -229,5 +242,5 @@ block main
     .pending-passenger-name { font-weight: 600; color: #0f172a; flex: 1; min-width: 80px; }
     .pending-passenger-age { color: #64748b; font-size: 12px; white-space: nowrap; }
     .pending-passenger-gender { color: #334155; font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
-    .pending-passenger-guardian { font-size: 11.5px; color: #64748b; display: flex; align-items: center; flex-basis: 100%; }
-    .pending-passenger-guardian strong { color: #0369a1; font-weight: 600; }
+    .pending-passenger-guardian { font-size: 11.5px; color: #64748b; display: flex; align-items: center; gap: 4px; flex-basis: 100%; }
+    .pending-passenger-guardian strong { color: #0369a1; font-weight: 600; margin-left: 2px; }

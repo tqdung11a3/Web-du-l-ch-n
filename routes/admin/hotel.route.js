@@ -71,8 +71,14 @@ router.get("/booking/detail/:bookingId", hotelController.bookingDetail);
 // Quản lý số phòng
 router.get("/booking/room-management", hotelController.roomManagement);
 
+// Thay đổi phòng (sau khi đã xếp)
+router.get("/booking/change-room", hotelController.changeRoom);
+
 // Assign phòng cho booking
 router.post("/booking/assign-room", hotelController.assignRoom);
+
+// Đổi phòng đã xếp sang phòng khác
+router.post("/booking/reassign-room", hotelController.reassignRoom);
 
 // Huỷ xếp phòng
 router.post("/booking/unassign-room", hotelController.unassignRoom);

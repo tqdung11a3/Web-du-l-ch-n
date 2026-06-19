@@ -1,0 +1,35 @@
+//- Trigger + hidden inputs (đặt trong form tìm kiếm)
+mixin hotelGuestPickerFields(query)
+  .hotel-search-top__item.hotel-search-top__item--guests
+    .hotel-search-top__label Số khách
+    button#guestBtn.hotel-search-top__guests(type="button" aria-expanded="false" aria-haspopup="dialog" aria-controls="guestsPopup")
+      - const qRooms = Number((query && query.rooms) || 1)
+      span#guestText.hotel-search-top__guests-summary
+        | #{qRooms} phòng - 1 người lớn
+      i.hotel-search-top__chev.fa-solid.fa-chevron-down
+    input(type="hidden" name="roomsData" id="roomsDataInput" value=(query && query.roomsData) || "")
+    input(type="hidden" name="rooms" id="roomsInput" value=(query && query.rooms) || "1")
+    input(type="hidden" name="adults" id="adultsInput" value=(query && query.adults) || "1")
+    input(type="hidden" name="children" id="childrenInput" value=(query && query.children) || "0")
+    input(type="hidden" name="babies" id="babiesInput" value=(query && query.babies) || "0")
+
+//- Modal chọn khách (đặt ngoài form hoặc cuối section)
+mixin hotelGuestModal()
+  #guestsPopup.guests-modal(role="dialog" aria-modal="true" aria-labelledby="guestsModalTitle" aria-hidden="true")
+    .guests-modal__overlay(data-guests-close tabindex="-1")
+    .guests-modal__panel
+      .guests-modal__header
+        div
+          h3#guestsModalTitle.guests-modal__title Số khách & phòng
+          p.guests-modal__subtitle Nhập số lượng và tuổi từng khách trong mỗi phòng
+        button.guests-modal__close(type="button" data-guests-close aria-label="Đóng")
+          i.fa-solid.fa-xmark
+      .guests-modal__body
+        #roomsContainer.guests-rooms-container
+      .guests-modal__footer
+        button#addRoomBtn.guests-modal__add-room(type="button")
+          i.fa-solid.fa-plus
+          |  Thêm phòng khác
+        button#guestsDoneBtn.guests-modal__done(type="button")
+          i.fa-solid.fa-check
+          |  Xong

@@ -94,9 +94,12 @@ async function buildHomeSection4Block(categoryRootId) {
 
   const categoryChildSection4 = await categoryHelper.getCategoryChild(root);
   const categoryChildIdSection4 = categoryChildSection4.map((item) => item.id);
+  const section4MatchIds = [root, ...categoryChildIdSection4];
+  const section4CategoryFilter =
+    categoryHelper.buildTourCategoryMatchFilter(section4MatchIds);
 
   let tourListSection4 = await Tour.find({
-    category: { $in: [root, ...categoryChildIdSection4] },
+    ...section4CategoryFilter,
     deleted: false,
     status: "active",
   })

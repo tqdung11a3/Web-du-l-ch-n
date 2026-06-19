@@ -1,6 +1,7 @@
 //- views/client/pages/hotel-search.pug
 extends ../layouts/default.pug
 include ../mixins/box-breadcrumb.pug
+include ../partials/hotel-guest-picker.pug
 
 block main
   +box-breadcrumb(breadcrumb)
@@ -55,27 +56,13 @@ block main
               )
 
             // Số khách
-            .hotel-search-top__item.hotel-search-top__item--guests
-              .hotel-search-top__label Số khách
-              button#guestBtn.hotel-search-top__guests(type="button" aria-expanded="false")
-                - const qRooms = Number((query && query.rooms) || 1)
-                span#guestText.hotel-search-top__guests-summary
-                  | #{qRooms} phòng - 1 người lớn
-                i.hotel-search-top__chev.fa-solid.fa-chevron-down
-              .guests-popup#guestsPopup(aria-hidden="true")
-                #roomsContainer.guests-rooms-container
-                  // Phòng sẽ được render bằng JavaScript
-                .guests-popup__add-room
-                  button#addRoomBtn.guests-popup__add-room-btn(type="button") Thêm phòng khác
-                // Hidden input để lưu dữ liệu JSON
-                input(type="hidden" name="roomsData" id="roomsDataInput" value="")
-                input(type="hidden" name="rooms" id="roomsInput" value=(query && query.rooms) || "1")
-                input(type="hidden" name="adults" id="adultsInput" value=(query && query.adults) || "1")
-                input(type="hidden" name="children" id="childrenInput" value=(query && query.children) || "0")
+            +hotelGuestPickerFields(query)
 
             // Nút search (cột cuối)
             button.hotel-search-top__submit(type="submit" aria-label="Tìm kiếm")
               i.fa-solid.fa-magnifying-glass
+
+      +hotelGuestModal()
 
       // ================== PHẦN DƯỚI: DANH SÁCH ==================
       .inner-wrap(style="grid-template-columns: 1fr;")

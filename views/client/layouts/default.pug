@@ -39,6 +39,11 @@ html
       href="/assets/css/cart-unified.css" 
       rel="stylesheet"
       )
+    if account
+      link(
+        href="/assets/css/client-notification.css"
+        rel="stylesheet"
+      )
 
   body
     include ../partials/top-header.pug
@@ -61,6 +66,10 @@ html
       // Truyền thông tin user vào JavaScript
       window.currentUserId = !{account && account.id ? `"${account.id}"` : 'null'};
     script(src="/assets/js/script.js")
+    script(src="/assets/js/hotel-guest-rooms-utils.js")
+    script(src="/assets/js/hotel-guest-picker.js")
+    if account
+      script(src="/assets/js/client-notification.js")
     script.
       // Load hotel-cart.js trên các trang hotel và trang /cart (có tab hotel)
       if (window.location.pathname.includes('/hotel') || window.location.pathname === '/cart') {

@@ -6,7 +6,29 @@ const HotelBooking = require("../../models/hotel-booking.model");
 const Tour = require("../../models/tour.model");
 const moment = require("moment");
 const { v4: uuidv4 } = require('uuid');
-const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
+const { getAvailableRoomsForType, calculateEffectiveOccupancy } = require("../../helpers/hotel-availability.helper");
+const {
+  normalizeRoomsData,
+  buildAllocationRoomsDisplay,
+  countGuests,
+  normalizeRoom,
+} = require("../../helpers/hotel-guest-rooms.helper");
+
+function parseItemRoomsData(roomsDataStr) {
+  if (!roomsDataStr) return null;
+  try {
+    const raw = JSON.parse(decodeURIComponent(roomsDataStr));
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    const normalized = normalizeRoomsData(raw);
+    return {
+      normalized,
+      display: buildAllocationRoomsDisplay(normalized),
+      counts: countGuests(normalized),
+    };
+  } catch (e) {
+    return null;
+  }
+}
 
 /**
  * GET /cart - Hiển thị trang giỏ hàng thống nhất (Tour + Hotel)
@@ -67,16 +89,15 @@ module.exports.index = async (req, res) => {
           
           // Parse roomsData để lấy chi tiết từng phòng
           if (item.roomsData) {
-            try {
-              const parsedRoomsData = JSON.parse(decodeURIComponent(item.roomsData));
-              if (Array.isArray(parsedRoomsData) && parsedRoomsData.length > 0) {
-                item.roomsDetails = parsedRoomsData;
-                // Cập nhật đúng số lượng phòng dựa trên roomsData
-                item.rooms = parsedRoomsData.length;
-                item.quantity = parsedRoomsData.length; // Số lượng phòng = số phòng trong roomsData
-              }
-            } catch (e) {
-              console.warn('Failed to parse roomsData in cart:', e);
+            const parsed = parseItemRoomsData(item.roomsData);
+            if (parsed) {
+              item.roomsDetails = parsed.display;
+              item.adults = parsed.counts.adults;
+              item.children = parsed.counts.children;
+              item.babies = parsed.counts.babies;
+              item.rooms = parsed.normalized.length;
+              item.quantity = parsed.normalized.length;
+            } else {
               item.roomsDetails = [];
             }
           }
@@ -87,123 +108,81 @@ module.exports.index = async (req, res) => {
         // Tính tổng tiền (bao gồm phụ thu vượt base occupancy)
         let hotelSubtotalCalc = 0;
         hotelExtraOccupancyFee = 0; // Reset phụ thu vượt base occupancy
-        
-        const { calculateEffectiveOccupancy } = require("../../helpers/hotel-availability.helper");
-        
         for (const item of hotelCart.items) {
           // Giá cơ bản
           const basePrice = item.pricePerNight * item.nights * item.quantity;
           hotelSubtotalCalc += basePrice;
           
           // Tính phụ thu vượt base occupancy nếu có roomsData
-          if (item.roomsData) {
-            try {
-              const parsedRoomsData = JSON.parse(decodeURIComponent(item.roomsData));
-              
-              // Lấy room type
-              const roomType = hotelInfo.roomTypes?.find(rt => String(rt._id) === String(item.roomTypeId));
-              if (roomType) {
-                // Age Bands chỉ lấy từ hotel level
-                const ageBands = hotelInfo.ageBands || [];
-                
-                // Lấy base occupancy
-                const baseOccupancy = roomType.baseOccupancy || 2;
-                
-                // Tính phụ thu cho từng phòng trong parsedRoomsData
-                let itemExtraFee = 0;
-                
-                // Tính phụ thu cho từng phòng
-                parsedRoomsData.forEach((roomData) => {
-                  const roomAdults = roomData.adults || 0;
-                  const roomChildren = Array.isArray(roomData.children) ? roomData.children : [];
-                  
-                  // Tính effective occupancy cho phòng này
-                  let roomEffectiveOccupancy = roomAdults; // Người lớn luôn tính đủ 1
-                  
-                  // Đếm trẻ em theo occupancy weight
-                  roomChildren.forEach(child => {
-                    const age = child.age || 0;
-                    const band = ageBands.find(b => {
-                      const minAge = b.minAge || 0;
-                      const maxAge = b.maxAge;
-                      if (maxAge === null || maxAge === undefined) {
-                        return age >= minAge;
-                      }
-                      return age >= minAge && age <= maxAge;
-                    });
-                    
-                    if (band && band.countInOccupancy) {
-                      roomEffectiveOccupancy += (band.occupancyWeight || 1);
+          const parsed = parseItemRoomsData(item.roomsData);
+          if (parsed) {
+            const parsedRoomsData = parsed.normalized;
+            const roomType = hotelInfo.roomTypes?.find(rt => String(rt._id) === String(item.roomTypeId));
+            if (roomType) {
+              const ageBands = hotelInfo.ageBands || [];
+              const baseOccupancy = roomType.baseOccupancy || 2;
+              let itemExtraFee = 0;
+
+              parsedRoomsData.forEach((roomData) => {
+                const room = normalizeRoom(roomData);
+                const roomAdults = room.adults.length;
+                const minors = [...(room.children || []), ...(room.babies || [])];
+                const roomEffectiveOccupancy = calculateEffectiveOccupancy([roomData], ageBands);
+
+                if (roomEffectiveOccupancy > baseOccupancy) {
+                  const roomExcessOccupancy = roomEffectiveOccupancy - baseOccupancy;
+                  let roomExtraFee = 0;
+                  let remainingExcessOccupancy = roomExcessOccupancy;
+
+                  if (roomAdults > baseOccupancy && remainingExcessOccupancy > 0) {
+                    const adultExcess = Math.min(roomAdults - baseOccupancy, remainingExcessOccupancy);
+                    const adultBand = ageBands.find(band =>
+                      (band.bandType === 'adult' || (band.minAge >= 12 && (band.maxAge === null || band.maxAge >= 12))) &&
+                      band.applyExtraPersonFee === true &&
+                      band.extraPersonFeePerNight > 0
+                    );
+
+                    if (adultBand) {
+                      roomExtraFee += adultExcess * adultBand.extraPersonFeePerNight;
+                      remainingExcessOccupancy -= adultExcess;
+                    } else if (roomType.extraPersonFeePerNight) {
+                      roomExtraFee += adultExcess * roomType.extraPersonFeePerNight;
+                      remainingExcessOccupancy -= adultExcess;
                     }
-                  });
-                  
-                  // Nếu phòng này vượt base occupancy
-                  if (roomEffectiveOccupancy > baseOccupancy) {
-                    const roomExcessOccupancy = roomEffectiveOccupancy - baseOccupancy;
-                    
-                    // Tính phụ thu chi tiết theo từng người vượt và age band của họ
-                    let roomExtraFee = 0;
-                    let remainingExcessOccupancy = roomExcessOccupancy;
-                    
-                    // Bước 1: Tính phụ thu cho người lớn vượt trước (nếu có)
-                    if (roomAdults > baseOccupancy && remainingExcessOccupancy > 0) {
-                      const adultExcess = Math.min(roomAdults - baseOccupancy, remainingExcessOccupancy);
-                      
-                      // Tìm age band cho người lớn (thường là 12+)
-                      const adultBand = ageBands.find(band => 
-                        (band.bandType === 'adult' || (band.minAge >= 12 && (band.maxAge === null || band.maxAge >= 12))) &&
-                        band.applyExtraPersonFee === true &&
-                        band.extraPersonFeePerNight > 0
-                      );
-                      
-                      if (adultBand) {
-                        roomExtraFee += adultExcess * adultBand.extraPersonFeePerNight;
-                        remainingExcessOccupancy -= adultExcess;
-                      } else if (roomType.extraPersonFeePerNight) {
-                        roomExtraFee += adultExcess * roomType.extraPersonFeePerNight;
-                        remainingExcessOccupancy -= adultExcess;
-                      }
-                    }
-                    
-                    // Bước 2: Tính phụ thu cho trẻ em vượt (nếu còn excess)
-                    if (remainingExcessOccupancy > 0 && roomChildren.length > 0) {
-                      for (const child of roomChildren) {
-                        if (remainingExcessOccupancy <= 0) break;
-                        
-                        const age = child.age || 0;
-                        const band = ageBands.find(b => {
-                          const minAge = b.minAge || 0;
-                          const maxAge = b.maxAge;
-                          if (maxAge === null || maxAge === undefined) {
-                            return age >= minAge;
-                          }
-                          return age >= minAge && age <= maxAge;
-                        });
-                        
-                        if (band && band.countInOccupancy && band.applyExtraPersonFee && band.extraPersonFeePerNight > 0) {
-                          const childWeight = band.occupancyWeight || 1;
-                          if (childWeight > 0 && remainingExcessOccupancy >= childWeight) {
-                            roomExtraFee += 1 * band.extraPersonFeePerNight;
-                            remainingExcessOccupancy -= childWeight;
-                          }
+                  }
+
+                  if (remainingExcessOccupancy > 0 && minors.length > 0) {
+                    for (const person of minors) {
+                      if (remainingExcessOccupancy <= 0) break;
+
+                      const age = person.age || 0;
+                      const band = ageBands.find(b => {
+                        const minAge = b.minAge || 0;
+                        const maxAge = b.maxAge;
+                        if (maxAge === null || maxAge === undefined) {
+                          return age >= minAge;
+                        }
+                        return age >= minAge && age <= maxAge;
+                      });
+
+                      if (band && band.countInOccupancy && band.applyExtraPersonFee && band.extraPersonFeePerNight > 0) {
+                        const childWeight = band.occupancyWeight || 1;
+                        if (childWeight > 0 && remainingExcessOccupancy >= childWeight) {
+                          roomExtraFee += 1 * band.extraPersonFeePerNight;
+                          remainingExcessOccupancy -= childWeight;
                         }
                       }
-      }
-
-                    // Nhân với số đêm
-                    itemExtraFee += roomExtraFee * item.nights;
+                    }
                   }
-                });
-                
-                // CHỈ nhân với quantity nếu parsedRoomsData chỉ có 1 phòng đại diện
-                // Nếu parsedRoomsData đã bao gồm nhiều phòng (length === quantity), không nhân nữa
-                if (parsedRoomsData.length < item.quantity) {
-                  itemExtraFee = itemExtraFee * item.quantity;
+
+                  itemExtraFee += roomExtraFee * item.nights;
                 }
-                hotelExtraOccupancyFee += itemExtraFee;
+              });
+
+              if (parsedRoomsData.length < item.quantity) {
+                itemExtraFee = itemExtraFee * item.quantity;
               }
-            } catch (e) {
-              console.warn('Failed to parse roomsData for extra occupancy fee:', e);
+              hotelExtraOccupancyFee += itemExtraFee;
             }
           }
         }
@@ -279,13 +258,13 @@ module.exports.index = async (req, res) => {
         hotelCartData.items.forEach((item, itemIndex) => {
           // Re-parse roomsData để lấy roomsDetails (vì toObject() làm mất field này)
           if (item.roomsData) {
-            try {
-              const parsedRoomsData = JSON.parse(decodeURIComponent(item.roomsData));
-              if (Array.isArray(parsedRoomsData) && parsedRoomsData.length > 0) {
-                item.roomsDetails = parsedRoomsData;
-              }
-            } catch (e) {
-              console.warn('Failed to re-parse roomsData after toObject:', e);
+            const parsed = parseItemRoomsData(item.roomsData);
+            if (parsed) {
+              item.roomsDetails = parsed.display;
+              item.adults = parsed.counts.adults;
+              item.children = parsed.counts.children;
+              item.babies = parsed.counts.babies;
+            } else {
               item.roomsDetails = [];
             }
           }
@@ -316,14 +295,16 @@ module.exports.index = async (req, res) => {
             let totalAdultsInItem = 0;
             const childrenInThisItem = [];
             if (item.roomsDetails && Array.isArray(item.roomsDetails)) {
-              item.roomsDetails.forEach(roomData => {
-                // Đếm người lớn
-                totalAdultsInItem += roomData.adults || 0;
-                
-                // Đếm và lưu độ tuổi trẻ em
+              item.roomsDetails.forEach((roomData) => {
+                totalAdultsInItem += roomData.adultCount || 0;
                 if (roomData.children && Array.isArray(roomData.children)) {
-                  roomData.children.forEach(child => {
+                  roomData.children.forEach((child) => {
                     childrenInThisItem.push(child.age || 0);
+                  });
+                }
+                if (roomData.babies && Array.isArray(roomData.babies)) {
+                  roomData.babies.forEach((baby) => {
+                    childrenInThisItem.push(baby.age || 0);
                   });
                 }
               });
@@ -331,49 +312,49 @@ module.exports.index = async (req, res) => {
             
             hotelInfo.ageBands.forEach((band, bandIndex) => {
               if (!band.breakfastIsFree && band.breakfastFeePerPersonPerMeal && band.breakfastFeePerPersonPerMeal > 0) {
-                let description = `Tối đa ${totalNights} bữa/phòng`;
-                let detailText = '';
-                
-                // Kiểm tra nếu là age band cho người lớn (thường minAge >= 12 hoặc bandType === 'adult')
-                const isAdultBand = band.bandType === 'adult' || 
+                const isAdultBand = band.bandType === 'adult' ||
                                    (band.minAge >= 12 && (band.maxAge === null || band.maxAge >= 18));
-                
+
+                let bandPersonCount = 0;
+                let detailText = '';
+
                 if (isAdultBand) {
-                  // Hiển thị số lượng người lớn
+                  bandPersonCount = totalAdultsInItem;
                   if (totalAdultsInItem > 0) {
                     detailText = `${totalAdultsInItem} người lớn`;
                   }
                 } else {
-                  // Lọc trẻ em thuộc age band này
                   const childrenInBand = childrenInThisItem.filter(age => {
                     const minAge = band.minAge || 0;
                     const maxAge = band.maxAge;
-                    if (maxAge === null || maxAge === undefined) {
-                      return age >= minAge;
-                    }
+                    if (maxAge === null || maxAge === undefined) return age >= minAge;
                     return age >= minAge && age <= maxAge;
                   });
-                  
-                  // Hiển thị chi tiết độ tuổi trẻ em
+                  bandPersonCount = childrenInBand.length;
                   if (childrenInBand.length > 0) {
                     const childAgesText = childrenInBand.map(age => `${age} tuổi`).join(', ');
                     detailText = `${childrenInBand.length} trẻ em (${childAgesText})`;
                   }
                 }
-                
-                // Kết hợp detail text với description
-                if (detailText) {
-                  description = `${detailText} • Tối đa ${totalNights} bữa/phòng`;
-                }
-                
+
+                // Không hiện nếu không có ai thuộc band này trong phòng
+                if (bandPersonCount === 0) return;
+
+                const description = detailText
+                  ? `${detailText} • ${totalNights} buổi sáng`
+                  : `${totalNights} buổi sáng`;
+
                 itemServices.push({
                   id: `breakfast_${band.bandName.toLowerCase().replace(/\s+/g, '_')}_${bandIndex}_item_${itemIndex}`,
                   itemIndex: itemIndex,
                   roomTypeId: String(item.roomTypeId),
                   name: `Ăn sáng / ${band.bandName}`,
                   price: band.breakfastFeePerPersonPerMeal,
-                  unit: 'người/bữa',
-                  maxQuantity: totalNights * item.quantity,
+                  unit: 'người',
+                  // maxQuantity = số người trong band (counter = số người muốn ăn sáng)
+                  maxQuantity: bandPersonCount,
+                  // JS sẽ tính: qty × price × nights
+                  nights: totalNights,
                   isBreakfast: true,
                   ageBandName: band.bandName,
                   description: description

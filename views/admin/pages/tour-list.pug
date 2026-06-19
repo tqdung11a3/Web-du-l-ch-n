@@ -225,7 +225,7 @@ block main
             th
               input(type="checkbox" class="inner-check" check-all)
             th Tên tour
-            th(class="inner-center" title="6 ký tự cuối MongoDB _id, dùng để đối chiếu trên lịch phòng khách sạn") ID tour
+            th(class="inner-center") ID tour
             th(class="inner-center") Ảnh đại diện
             th Giá
             th Còn lại
@@ -242,7 +242,10 @@ block main
                 input(type="checkbox" class="inner-check" check-item=item.id)
               td #{item.name}
               td.inner-center
-                span.tour-short-id ##{String(item.id).slice(-6)}
+                if item.customId
+                  span.tour-short-id(style="font-family:monospace") #{item.customId}
+                else
+                  span.tour-short-id(style="font-family:monospace;color:#94a3b8" title="Chưa đặt ID tuỳ chỉnh — hiển thị 6 ký tự cuối _id") ##{String(item.id).slice(-6)}
               td.inner-center
                 img(src=item.avatar class="inner-avatar")
 

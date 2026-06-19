@@ -42,6 +42,7 @@ header.header
             span.cart-badge(style="display: none") 0
         
         if account
+          include notification-bell.pug
           .user-menu
             // dùng button để dễ bắt focus/click trên mobile
             button.user-trigger(type="button" aria-haspopup="true" aria-expanded="false")
@@ -49,6 +50,10 @@ header.header
               span.user-name #{account.fullName}
               i.fa-solid.fa-chevron-down
             ul.user-dropdown
+              li
+                a(href="/notifications")
+                  i.fa-regular.fa-bell
+                  span Thông báo
               li
                 a(href="/account/profile")
                   i.fa-regular.fa-user

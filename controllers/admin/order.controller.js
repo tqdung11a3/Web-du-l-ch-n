@@ -14,6 +14,14 @@ const {
 } = require("../../config/variable.config");
 const moment = require("moment");
 const auditLogHelper = require("../../helpers/audit-log.helper");
+const {
+  notifyCustomerOrderUpdate,
+  diffChanges,
+  buildTourOrderProfileLink,
+} = require("../../helpers/customer-order-notify.helper");
+const {
+  enrichItemBabySeatsDisplay,
+} = require("../../helpers/order-baby-seats-display.helper");
 
 // Chuẩn hoá rules như phía client/cart.controller.js
 function normalizeRules(rawRules) {
@@ -294,15 +302,23 @@ async function buildOrderEditLocals(id, companyId) {
     const babyUnitForUi = babyUnitAt(ctx, Math.max(1, qBaby || 1));
 
     const extraRoomCost = Number(i.extraRoomCost || 0);
+    const babySeatFeeTotal = Number(i.babySeatFeeTotal || 0);
 
-    subTotalView += qAdult * unitAdult + qChild * unitChild + babyTotal + extraRoomCost;
+    subTotalView +=
+      qAdult * unitAdult +
+      qChild * unitChild +
+      babyTotal +
+      extraRoomCost +
+      babySeatFeeTotal;
 
-    return {
+    const enriched = enrichItemBabySeatsDisplay({
       ...i,
       departureDateFormat,
       cityName,
       babyUnitForUi,
-    };
+    });
+
+    return enriched;
   });
 
   const discountView = 0;
@@ -387,7 +403,7 @@ module.exports.editPatch = async (req, res) => {
     // Đọc đơn hàng đầy đủ trước khi cập nhật
     // (cho audit + khôi phục/trừ ghế/phòng khi đổi trạng thái)
     const orderSnapshot = await Order.findOne(filter)
-      .select("code status paymentStatus paymentMethod note")
+      .select("code status paymentStatus paymentMethod note userId email fullName items")
       .lean();
 
     // Đọc đầy đủ items cho 2 trường hợp:
@@ -480,6 +496,53 @@ module.exports.editPatch = async (req, res) => {
         await recreateHotelHoldsForOrder(orderBefore);
       } catch (err) {
         console.error("[editPatch] recreateHotelHoldsForOrder error:", err);
+      }
+    }
+
+    if (orderSnapshot) {
+      const afterState = {
+        status: allow.status ?? orderSnapshot.status,
+        paymentStatus: allow.paymentStatus ?? orderSnapshot.paymentStatus,
+        paymentMethod: allow.paymentMethod ?? orderSnapshot.paymentMethod,
+        note: "note" in allow ? allow.note : orderSnapshot.note,
+      };
+      const beforeState = {
+        status: orderSnapshot.status,
+        paymentStatus: orderSnapshot.paymentStatus,
+        paymentMethod: orderSnapshot.paymentMethod,
+        note: orderSnapshot.note,
+      };
+      const changes = diffChanges(beforeState, afterState, [
+        "status",
+        "paymentStatus",
+        "paymentMethod",
+        "note",
+      ]);
+      if (changes.length > 0) {
+        try {
+          const tourNameFromOrder = (orderSnapshot.items || [])
+            .map((i) => i.name).filter(Boolean)[0] || "";
+          await notifyCustomerOrderUpdate({
+            userId: orderSnapshot.userId,
+            email: orderSnapshot.email,
+            customerName: orderSnapshot.fullName,
+            type: "tour_order",
+            tourName: tourNameFromOrder,
+            resourceLabel: orderSnapshot.code || "Đơn tour",
+            orderCode: orderSnapshot.code,
+            orderId: id,
+            link: buildTourOrderProfileLink(
+              orderSnapshot.code,
+              afterState.status
+            ),
+            changes,
+            introLine: tourNameFromOrder
+              ? `Đơn tour "${tourNameFromOrder}" của bạn đã được cập nhật.`
+              : "Đơn tour của bạn đã được cập nhật bởi nhân viên quản trị.",
+          });
+        } catch (notifyErr) {
+          console.error("[editPatch] notifyCustomerOrderUpdate:", notifyErr);
+        }
       }
     }
 
@@ -936,9 +999,12 @@ module.exports.deletePatch = async (req, res) => {
     // vẫn hiện khách của đơn đã bị xoá; số phòng còn trống ở /company/.../tour
     // bị tính nhầm; tour-assignments giữ entry rỗng tham chiếu Order đã xoá).
     try {
-      // 1) Trả lại ghế cho tour (cả seatsRemaining tổng và seatsRemaining
-      //    cho đúng departure date).
-      await restoreSeatsForOrder(order);
+      // 1) Trả lại ghế cho tour — CHỈ khi đơn chưa hủy. Nếu đơn đã ở
+      //    trạng thái "cancel" thì ghế đã được trả về lúc editPatch chuyển
+      //    sang cancel rồi, không được restore thêm lần nữa (double-restore).
+      if (order.status !== "cancel") {
+        await restoreSeatsForOrder(order);
+      }
 
       // 2) Reset các TH (Tour Hold) đang được gán cho đơn này về placeholder
       //    + xóa entry assignments — phải làm BƯỚC NÀY trước bước 3 để

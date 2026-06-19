@@ -17,3 +17,15 @@ mixin optionsMulti(list, selectedIds, level = 0)
     option(value=sid selected=_sel.includes(sid)) #{prefix} #{item.name}
     if (item.children && item.children.length > 0)
       +optionsMulti(item.children, selectedIds, level + 1)
+
+//- Checkbox chọn nhiều danh mục tour (create/edit)
+mixin categoryCheckboxes(list, selectedIds, level = 0)
+  - var _sel = Array.isArray(selectedIds) ? selectedIds.map(String) : []
+  each item in list
+    - var sid = String(item.id)
+    - var isChild = level > 0
+    label.tour-category-check(class=isChild ? 'tour-category-check--child' : 'tour-category-check--root' style= isChild ? ('--tcc-indent:' + (level * 16) + 'px') : '')
+      input(type="checkbox" name="categories" value=sid checked=_sel.includes(sid) data-level=String(level))
+      span.tour-category-check__text= item.name
+    if item.children && item.children.length > 0
+      +categoryCheckboxes(item.children, selectedIds, level + 1)

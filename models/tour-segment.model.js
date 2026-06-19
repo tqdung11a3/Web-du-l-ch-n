@@ -71,6 +71,9 @@ const roomAssignmentSchema = new Schema(
     accommodationMode: { type: String, enum: ["private", "shared"], default: "private" },
     gender:            { type: String, enum: ["male", "female", null], default: null }, // shared: 'male'|'female'; private: null
     atomLabels:        { type: [String], default: [] }, // labels của các atoms thuộc đơn này trong phòng
+    // anchorIdx (NL ≥ 18) của từng atom — dùng để resolve passengers/effectiveSize
+    // chính xác khi admin/đơn khác đọc lại, không phụ thuộc parse atomLabels.
+    atomAnchorIdxs:    { type: [Number], default: [] },
 
     // Trạng thái nhận/trả phòng riêng của từng đơn (tách khỏi HotelBooking.status
     // để nhiều khách share cùng 1 phòng vật lý có trạng thái độc lập).

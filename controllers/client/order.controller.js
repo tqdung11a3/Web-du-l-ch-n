@@ -19,6 +19,13 @@ const Notification = require("../../models/notification.model");
 const TourSegment = require("../../models/tour-segment.model");
 const auditLogHelper = require("../../helpers/audit-log.helper");
 const {
+  notifyCustomerOrderUpdate,
+  buildTourOrderProfileLink,
+} = require("../../helpers/customer-order-notify.helper");
+const {
+  enrichItemBabySeatsDisplay,
+} = require("../../helpers/order-baby-seats-display.helper");
+const {
   evaluateSharedFeasibility,
   evaluateSharedFeasibilityV2,
   evaluateSharedFeasibilityV2Multi,
@@ -27,9 +34,48 @@ const {
 const {
   buildAtomsFromPassengers,
   reweightAtomsForAgeBands,
+  SHARED_INSUFFICIENT_ADULTS_MESSAGE,
+  GUARDIAN_MIN_AGE,
+  passengerNeedsGuardian,
+  isAnchorAdult,
 } = require("../../helpers/passenger-atom.helper");
 const {
+  evaluateTourHotelQuotaPressure,
+  maybeNotifyTourQuotaPressure,
+} = require("../../helpers/tour-hotel-quota-pressure.helper");
+
+// Gom tourSegmentId duy nhất từ tất cả items trong groups (fire-and-forget notify).
+async function _firePressureNotifyForGroups(groups) {
+  const segIds = new Set();
+  for (const cid of Object.keys(groups || {})) {
+    for (const item of groups[cid].items || []) {
+      for (const rs of item.roomSelections || []) {
+        if (rs.tourSegmentId) segIds.add(String(rs.tourSegmentId));
+      }
+      for (const r of item.sharedRoomRequest || []) {
+        if (r.tourSegmentId) segIds.add(String(r.tourSegmentId));
+      }
+    }
+  }
+  for (const segId of segIds) {
+    try {
+      const pressure = await evaluateTourHotelQuotaPressure({ tourSegmentId: segId });
+      await maybeNotifyTourQuotaPressure(pressure);
+    } catch (_) {}
+  }
+}
+
+/** Chuẩn hoá thông báo lỗi ở ghép cho khách (đặc biệt NL–TE). */
+function formatSharedFeasibilityFailureMessage(fea) {
+  if (!fea) return "Không đủ chỗ ở ghép.";
+  if (fea.reason === "insufficient_adults_for_children") {
+    return fea.message || SHARED_INSUFFICIENT_ADULTS_MESSAGE;
+  }
+  return fea.message || "Không đủ chỗ ở ghép.";
+}
+const {
   validatePrivateAssignmentsForItem,
+  validatePrivateMinAdultsForItem,
 } = require("../../helpers/private-room-assignment.helper");
 const Hotel = require("../../models/hotel.model");
 
@@ -213,7 +259,46 @@ module.exports.createPost = async (req, res) => {
       const quantityAdult = Number(raw.quantityAdult || 0);
       const quantityChildren = Number(raw.quantityChildren || 0);
       const quantityBaby = Number(raw.quantityBaby || 0);
-      const babySeat = !!raw.babySeat;
+
+      if (quantityAdult < 1) {
+        return res.json({
+          code: "error",
+          message: `Tour "${tourInfo.name}" phải có ít nhất 1 người lớn.`,
+        });
+      }
+
+      // maxBabiesPerAdult snapshot từ tour config (0 = auto mode: tất cả em bé chiếm ghế)
+      const snapshotMaxBabiesPerAdult = Number(tourInfo.maxBabiesPerAdult != null ? tourInfo.maxBabiesPerAdult : 1);
+      const isAutoBabyMode = snapshotMaxBabiesPerAdult === 0;
+
+      // Phí ghế riêng em bé (chỉ dùng khi picker mode)
+      const tourBabySeatFee = Number(tourInfo.babySeatFee || 0);
+
+      // === CHỖ NGỒI EM BÉ ===
+      let babySeats, privateSeatBabyCount, babySeat, babySeatFeeTotal;
+
+      if (isAutoBabyMode) {
+        // Auto mode: tất cả em bé tự động chiếm 1 ghế tour, không có lựa chọn
+        babySeats = [];
+        privateSeatBabyCount = quantityBaby;
+        babySeat = quantityBaby > 0;
+        babySeatFeeTotal = 0;
+      } else {
+        // Picker mode: babySeats[i] = { babyIdx, seatType: 'private'|'shared', guardianIdx }
+        babySeats = Array.isArray(raw.babySeats)
+          ? raw.babySeats.map((b) => ({
+              babyIdx: typeof b.babyIdx === "number" ? b.babyIdx : null,
+              seatType: b.seatType === "private" ? "private" : "shared",
+              guardianIdx: b.guardianIdx != null ? Number(b.guardianIdx) : null,
+            }))
+          : [];
+        // Số em bé chọn ghế riêng (chiếm ghế tour)
+        privateSeatBabyCount = babySeats.length > 0
+          ? babySeats.filter((b) => b.seatType === "private").length
+          : (!!raw.babySeat ? quantityBaby : 0);
+        babySeat = privateSeatBabyCount > 0;
+        babySeatFeeTotal = babySeats.filter((b) => b.seatType === "private").length * tourBabySeatFee;
+      }
 
       // Tuổi từng trẻ em / em bé (do client cung cấp)
       const childrenAges = Array.isArray(raw.childrenAges)
@@ -274,12 +359,29 @@ module.exports.createPost = async (req, res) => {
               (p.gender === "male" || p.gender === "female")
                 ? p.gender
                 : null;
-            const guardianIdx =
-              type === "adult"
-                ? null
-                : p.guardianIdx === null || p.guardianIdx === undefined
+            const rawGuardian =
+              p.guardianIdx === null || p.guardianIdx === undefined
                 ? null
                 : Math.floor(Number(p.guardianIdx));
+            const guardianIdx =
+              type === "adult" && ageNum >= GUARDIAN_MIN_AGE
+                ? null
+                : rawGuardian;
+            const babySeatType =
+              type === "baby" &&
+              (p.babySeatType === "private" || p.babySeatType === "shared")
+                ? p.babySeatType
+                : undefined;
+            // roomGuardianIdx: chỉ áp dụng cho em bé khi ở ghép.
+            // Quyết định em bé sẽ ở chung PHÒNG với người lớn nào (anchor 18+).
+            const rawRoomGuardian =
+              p.roomGuardianIdx === null || p.roomGuardianIdx === undefined
+                ? null
+                : Math.floor(Number(p.roomGuardianIdx));
+            const roomGuardianIdx =
+              type === "baby" && accommodationMode === "shared"
+                ? rawRoomGuardian
+                : null;
             return {
               idx,
               name: String(p.name || "").trim(),
@@ -287,6 +389,8 @@ module.exports.createPost = async (req, res) => {
               type,
               gender,
               guardianIdx,
+              roomGuardianIdx,
+              babySeatType,
             };
           })
           .filter(
@@ -315,7 +419,12 @@ module.exports.createPost = async (req, res) => {
         }
 
         // Validate adult fields + guardian references.
-        const adultIdxSet = new Set(
+        const anchorAdultIdxSet = new Set(
+          passengers
+            .filter((p) => p.type === "adult" && isAnchorAdult(p))
+            .map((p) => p.idx)
+        );
+        const allAdultIdxSet = new Set(
           passengers.filter((p) => p.type === "adult").map((p) => p.idx)
         );
         for (const p of passengers) {
@@ -334,18 +443,46 @@ module.exports.createPost = async (req, res) => {
             }
             if (p.gender === "male") derivedMales++;
             else derivedFemales++;
-          } else {
-            // Guardian chỉ bắt buộc ở mode "ở ghép"; "ở riêng" không cần.
             if (
               accommodationMode === "shared" &&
-              (p.guardianIdx === null || !adultIdxSet.has(p.guardianIdx))
+              isAnchorAdult(p) &&
+              p.guardianIdx !== null
             ) {
               return res.json({
                 code: "error",
-                message: `${p.type === "child" ? "Trẻ em" : "Em bé"} "${p.name}" chưa chọn người lớn đi cùng hợp lệ.`,
+                message: `Người lớn "${p.name}" từ ${GUARDIAN_MIN_AGE} tuổi trở lên không thể chọn người đi cùng.`,
               });
             }
           }
+          // Guardian bắt buộc: TE và NL tính giá NL nhưng < 18 tuổi (ở ghép).
+          // Em bé xử lý riêng theo babySeats bên dưới.
+          if (
+            p.type !== "baby" &&
+            accommodationMode === "shared" &&
+            passengerNeedsGuardian(p)
+          ) {
+            if (
+              p.guardianIdx === null ||
+              !anchorAdultIdxSet.has(p.guardianIdx)
+            ) {
+              const who = p.type === "child" ? "Trẻ em" : "Hành khách";
+              return res.json({
+                code: "error",
+                message: `${who} "${p.name}" chưa chọn người lớn đi cùng từ ${GUARDIAN_MIN_AGE} tuổi trở lên hợp lệ.`,
+              });
+            }
+          }
+        }
+
+        if (
+          accommodationMode === "shared" &&
+          passengers.length > 0 &&
+          !passengers.some((p) => isAnchorAdult(p))
+        ) {
+          return res.json({
+            code: "error",
+            message: `Đoàn phải có ít nhất 1 người lớn từ ${GUARDIAN_MIN_AGE} tuổi trở lên.`,
+          });
         }
 
         if (derivedMales + derivedFemales !== adults) {
@@ -353,6 +490,82 @@ module.exports.createPost = async (req, res) => {
             code: "error",
             message: `Tổng số người lớn theo giới tính (${derivedMales} nam + ${derivedFemales} nữ) không khớp số người lớn đăng ký (${adults}).`,
           });
+        }
+
+        // === Validate chỗ ngồi em bé ===
+        if (quantityBaby > 0) {
+          // Đoàn phải có ít nhất 1 người lớn 18+ dù em bé ở chế độ nào
+          if (anchorAdultIdxSet.size === 0) {
+            return res.json({
+              code: "error",
+              message: `Đoàn có em bé phải có ít nhất 1 người lớn từ ${GUARDIAN_MIN_AGE} tuổi trở lên đi cùng.`,
+            });
+          }
+
+          // Em bé khi ở ghép phải chọn roomGuardianIdx = anchor adult 18+
+          if (accommodationMode === "shared") {
+            const babyPassengersForRoom = passengers.filter(
+              (p) => p.type === "baby"
+            );
+            for (const baby of babyPassengersForRoom) {
+              if (
+                baby.roomGuardianIdx === null ||
+                baby.roomGuardianIdx === undefined
+              ) {
+                return res.json({
+                  code: "error",
+                  message: `Em bé "${baby.name}" chưa chọn người lớn ở cùng phòng khách sạn.`,
+                });
+              }
+              if (!anchorAdultIdxSet.has(baby.roomGuardianIdx)) {
+                return res.json({
+                  code: "error",
+                  message: `Em bé "${baby.name}" có người ở cùng phòng không hợp lệ (phải là người lớn từ ${GUARDIAN_MIN_AGE} tuổi trở lên trong đoàn).`,
+                });
+              }
+            }
+          }
+
+          if (!isAutoBabyMode) {
+            // Picker mode: kiểm tra guardian và maxBabiesPerAdult
+            if (babySeats.length > 0) {
+              const babiesPerGuardian = {};
+              for (const bs of babySeats) {
+                if (bs.seatType === "shared") {
+                  if (bs.guardianIdx === null || !allAdultIdxSet.has(bs.guardianIdx)) {
+                    return res.json({
+                      code: "error",
+                      message: `Một em bé chọn "Ngồi cùng người lớn" nhưng chưa chọn người lớn đi cùng hợp lệ trong đoàn.`,
+                    });
+                  }
+                  babiesPerGuardian[bs.guardianIdx] = (babiesPerGuardian[bs.guardianIdx] || 0) + 1;
+                }
+              }
+              // Kiểm tra maxBabiesPerAdult
+              for (const [adultIdx, count] of Object.entries(babiesPerGuardian)) {
+                if (count > snapshotMaxBabiesPerAdult) {
+                  const guardian = passengers.find((p) => p.idx === parseInt(adultIdx, 10));
+                  const guardianLabel = guardian && guardian.name ? guardian.name : `Người lớn #${parseInt(adultIdx, 10) + 1}`;
+                  return res.json({
+                    code: "error",
+                    message: `${guardianLabel} đang đi cùng ${count} em bé, vượt quá giới hạn tối đa ${snapshotMaxBabiesPerAdult} em bé/người lớn.`,
+                  });
+                }
+              }
+            } else if (accommodationMode === "shared") {
+              // Legacy: không có babySeats → validate guardian ở ghép như cũ
+              const babyPassengers = passengers.filter((p) => p.type === "baby");
+              for (const p of babyPassengers) {
+                if (p.guardianIdx === null || !anchorAdultIdxSet.has(p.guardianIdx)) {
+                  return res.json({
+                    code: "error",
+                    message: `Em bé "${p.name}" chưa chọn người lớn đi cùng từ ${GUARDIAN_MIN_AGE} tuổi trở lên hợp lệ.`,
+                  });
+                }
+              }
+            }
+          }
+          // Auto mode (isAutoBabyMode === true): không cần validate thêm, tất cả em bé đã tự chiếm ghế
         }
       }
 
@@ -425,16 +638,36 @@ module.exports.createPost = async (req, res) => {
         }
       }
 
+      // ── Chặn đặt tour khi tour có KS bắt buộc nhưng client không chọn phòng ──
+      // Kiểm tra xem tourId này có TourSegment confirmed với roomAllocations không.
+      // Nếu có, phải có ít nhất 1 roomSelections hoặc sharedRoomRequest hợp lệ.
+      {
+        const hasRoomSelection = Array.isArray(raw.roomSelections) && raw.roomSelections.length > 0;
+        const hasSharedRequest = sharedRoomRequest.length > 0;
+        if (!hasRoomSelection && !hasSharedRequest) {
+          const segWithRooms = await TourSegment.findOne({
+            tourId: tourInfo._id,
+            status: { $in: ["confirmed", "pending_approval"] },
+            "segments.hotels.roomAllocations.0": { $exists: true },
+          }).select("_id").lean();
+          if (segWithRooms) {
+            return res.json({
+              code: "room_unavailable",
+              message: "Tour này yêu cầu chọn lưu trú. Tất cả phòng trong quota hiện đã hết chỗ. Vui lòng liên hệ công ty du lịch để được hỗ trợ.",
+            });
+          }
+        }
+      }
+
       // Mode "shared" KHÔNG cộng phụ phí phòng (giữ giá tour cơ bản),
       // dù client có gửi extraRoomCost > 0 cũng bỏ qua.
       const extraRoomCost =
         accommodationMode === "shared" ? 0 : Number(raw.extraRoomCost || 0);
-      const lineSubTotal = moneyAdult + moneyChild + moneyBaby + extraRoomCost;
+      const lineSubTotal = moneyAdult + moneyChild + moneyBaby + extraRoomCost + babySeatFeeTotal;
 
       // ==== TÍNH GHẾ & CẬP NHẬT ATOMIC ====
-      // seatsUsed = số ghế thực sự chiếm trên xe / máy bay
-      const seatsUsed =
-        quantityAdult + quantityChildren + (babySeat ? quantityBaby : 0);
+      // seatsUsed: NL + TE + số EB chiếm ghế (auto mode: tất cả; picker mode: chỉ ghế riêng)
+      const seatsUsed = quantityAdult + quantityChildren + privateSeatBabyCount;
 
       // ── Kiểm tra & giảm ghế bằng atomic conditional update ──────────────────
       // Điều kiện: seatsRemaining >= seatsUsed (tránh race condition khi nhiều
@@ -590,6 +823,9 @@ module.exports.createPost = async (req, res) => {
         quantityChildren,
         quantityBaby,
         babySeat,
+        babySeats,
+        babySeatFeeTotal,
+        maxBabiesPerAdult: snapshotMaxBabiesPerAdult,
         childrenAges,
         babyAges,
 
@@ -681,6 +917,8 @@ module.exports.createPost = async (req, res) => {
           item.roomSelections.length === 0
         )
           continue;
+        const minAdultsCheck = validatePrivateMinAdultsForItem(item);
+        if (!minAdultsCheck.ok) privateFailures.push(...minAdultsCheck.errors);
         // Đơn cũ / không có passengers → helper sẽ skip.
         const segIds = Array.from(
           new Set(item.roomSelections.map((s) => String(s.tourSegmentId || "")))
@@ -765,7 +1003,7 @@ module.exports.createPost = async (req, res) => {
               excludeOrderId: null,
             });
             if (!fea.ok) {
-              sharedFailures.push(fea.message || "Không đủ chỗ ở ghép.");
+              sharedFailures.push(formatSharedFeasibilityFailureMessage(fea));
               continue;
             }
             // Feasibility OK: ghi lại allocations + chọn primary hotel
@@ -878,13 +1116,14 @@ module.exports.createPost = async (req, res) => {
                 excludeOrderId: null,
               });
           if (!fea.ok) {
-            sharedFailures.push(fea.message || "Không đủ chỗ ở ghép.");
+            sharedFailures.push(formatSharedFeasibilityFailureMessage(fea));
           }
         }
       }
     }
     if (sharedFailures.length > 0) {
       await _restoreSeatsForGroups(groups);
+      _firePressureNotifyForGroups(groups).catch(() => {});
       const message =
         sharedFailures.length === 1
           ? sharedFailures[0]
@@ -1043,6 +1282,7 @@ module.exports.createPost = async (req, res) => {
             : "Một số loại phòng bạn chọn không còn đủ:\n" +
               roomConflicts.map((c, i) => `${i + 1}. ${buildLine(c)}`).join("\n");
 
+        _firePressureNotifyForGroups(groups).catch(() => {});
         return res.json({
           code: "room_unavailable",
           message,
@@ -1261,6 +1501,11 @@ module.exports.createPost = async (req, res) => {
               }
 
               // Nếu không reuse được → chiếm TH trống mới như cũ.
+              // ATOMIC: claim từng TH bằng findOneAndUpdate có điều kiện
+              // (guest.fullName vẫn là "[Tour Hold]" và orderCode trống).
+              // Tránh race condition khi 2 đơn cùng được submit gần như đồng
+              // thời pick cùng 1 TH (cùng pool candidates) → cả 2 cùng nhảy
+              // vào 1 phòng vật lý gây overcap/ghép sai giới.
               if (!pickedTh) {
                 const candidates = await HotelBooking.find({
                   tourSegmentId: String(r.tourSegmentId),
@@ -1282,24 +1527,36 @@ module.exports.createPost = async (req, res) => {
                 for (const cand of candidates) {
                   const cid = String(cand._id);
                   if (segCache.usedHoldIds.has(cid)) continue;
-                  pickedTh = cand;
+                  // Atomic claim — chỉ thành công nếu TH này VẪN còn ở
+                  // trạng thái "[Tour Hold]" (chưa bị đơn khác chiếm trong
+                  // race). Nếu thất bại (null) → thử candidate tiếp theo.
+                  const claimed = await HotelBooking.findOneAndUpdate(
+                    {
+                      _id: cand._id,
+                      "guest.fullName": "[Tour Hold]",
+                      $or: [
+                        { orderCode: { $in: [null, ""] } },
+                        { orderCode: { $exists: false } },
+                      ],
+                    },
+                    {
+                      $set: {
+                        "guest.fullName": guestFullName,
+                        "guest.phone": (body.phone || "").trim(),
+                        "guest.email": (body.email || "").trim(),
+                        orderCode: code,
+                        note: noteTxt,
+                        paymentStatus: "unpaid",
+                        paymentMethod: body.paymentMethod || "money",
+                        ...(userId ? { userId } : {}),
+                      },
+                    },
+                    { new: true }
+                  );
+                  if (!claimed) continue;
+                  pickedTh = claimed;
                   segCache.usedHoldIds.add(cid);
                   break;
-                }
-
-                if (pickedTh) {
-                  await HotelBooking.findByIdAndUpdate(pickedTh._id, {
-                    $set: {
-                      "guest.fullName": guestFullName,
-                      "guest.phone": (body.phone || "").trim(),
-                      "guest.email": (body.email || "").trim(),
-                      orderCode: code,
-                      note: noteTxt,
-                      paymentStatus: "unpaid",
-                      paymentMethod: body.paymentMethod || "money",
-                      ...(userId ? { userId } : {}),
-                    },
-                  });
                 }
               }
 
@@ -1331,6 +1588,12 @@ module.exports.createPost = async (req, res) => {
                   accommodationMode: "shared",
                   gender: ra.gender || null,
                   atomLabels: Array.isArray(ra.atomLabels) ? ra.atomLabels : [],
+                  // anchorIdx (NL ≥ 18) — giúp getPartialSharedRooms về sau
+                  // resolve effSize/gender chính xác (không phụ thuộc parse
+                  // atomLabels) khi đơn khác auto-assign vào cùng phòng.
+                  atomAnchorIdxs: Array.isArray(ra.atomAnchorIdxs)
+                    ? ra.atomAnchorIdxs.map(Number).filter((n) => Number.isFinite(n))
+                    : [],
                 });
               } else {
                 // Fallback (không nên xảy ra do feasibility đã check): vẫn
@@ -1369,6 +1632,169 @@ module.exports.createPost = async (req, res) => {
         }
       }
 
+      // ── Pre-persist validation (last line of defense) ──
+      // Trước khi push assignments mới vào TourSegment, tái-kiểm phòng vật
+      // lý (theo holdBookingId): tổng numPeople (assignments cũ + assignments
+      // sắp push) KHÔNG được vượt baseOccupancy của loại phòng, và toàn bộ
+      // phải cùng giới tính. Đây là LƯỚI AN TOÀN cuối cùng khi race condition
+      // hoặc bug ở các bước trước khiến 2 đơn cùng cố nhồi vào 1 TH.
+      //
+      // Nếu phát hiện vi phạm → ROLLBACK:
+      //   • Reset các HotelBooking đã update về "[Tour Hold]" + clear orderCode.
+      //   • Xoá Order vừa save và các HotelBooking legacy đã tạo (orderCode=code).
+      //   • Trả lỗi cho client.
+      {
+        const claimedThIds = [];
+        for (const arr of Object.values(pendingSegPushes)) {
+          for (const entry of arr || []) {
+            if (entry.holdBookingId) claimedThIds.push(String(entry.holdBookingId));
+          }
+        }
+        const segIdsToCheck = Object.keys(pendingSegPushes);
+        let conflictMsg = null;
+        for (const segId of segIdsToCheck) {
+          if (conflictMsg) break;
+          const arr = pendingSegPushes[segId] || [];
+          if (!arr.length) continue;
+
+          const segDoc = await TourSegment.findById(segId)
+            .select("assignments")
+            .lean();
+          const existing = (segDoc?.assignments || []).filter(
+            (a) => a && a.holdBookingId
+          );
+          const groupedByHold = {};
+          for (const a of existing) {
+            const k = String(a.holdBookingId);
+            if (!groupedByHold[k]) groupedByHold[k] = [];
+            groupedByHold[k].push({
+              numPeople: Number(a.numPeople) || 0,
+              gender: a.gender || null,
+              accommodationMode: a.accommodationMode || "private",
+              roomNumber: a.roomNumber || "",
+            });
+          }
+          for (const entry of arr) {
+            const k = String(entry.holdBookingId);
+            if (!groupedByHold[k]) groupedByHold[k] = [];
+            groupedByHold[k].push({
+              numPeople: Number(entry.numPeople) || 0,
+              gender: entry.gender || null,
+              accommodationMode: entry.accommodationMode || "private",
+              roomNumber: entry.roomNumber || "",
+            });
+          }
+
+          // Lookup capacity từ HotelBooking → Hotel.roomTypes.
+          const thIds = Object.keys(groupedByHold);
+          const ths = await HotelBooking.find({ _id: { $in: thIds } })
+            .select("_id hotel roomTypeId")
+            .lean();
+          const thById = Object.fromEntries(ths.map((t) => [String(t._id), t]));
+          const hotelIdsUsed = [
+            ...new Set(ths.map((t) => String(t.hotel?.hotelId || "")).filter(Boolean)),
+          ];
+          const Hotel = require("../../models/hotel.model");
+          const hotelDocs = await Hotel.find({ _id: { $in: hotelIdsUsed } })
+            .select("roomTypes")
+            .lean();
+          const hotelById = Object.fromEntries(
+            hotelDocs.map((h) => [String(h._id), h])
+          );
+
+          for (const thId of thIds) {
+            const list = groupedByHold[thId];
+            // Chỉ xét nhóm có ÍT NHẤT 1 entry shared (private = 1 đơn/phòng,
+            // không cần check ghép cùng phòng).
+            const sharedList = list.filter(
+              (x) => x.accommodationMode === "shared"
+            );
+            if (sharedList.length === 0) continue;
+
+            const th = thById[thId];
+            if (!th) continue;
+            const hotel = hotelById[String(th.hotel?.hotelId || "")];
+            const rt = hotel
+              ? (hotel.roomTypes || []).find(
+                  (x) => String(x._id) === String(th.roomTypeId)
+                )
+              : null;
+            const cap =
+              rt && Number.isFinite(Number(rt.baseOccupancy))
+                ? Math.max(1, Math.round(Number(rt.baseOccupancy)))
+                : 0;
+            if (cap <= 0) continue;
+
+            const totalUsed = sharedList.reduce(
+              (s, x) => s + (Number(x.numPeople) || 0),
+              0
+            );
+            const genders = new Set(
+              sharedList.map((x) => x.gender).filter((g) => g === "male" || g === "female")
+            );
+            const roomNumber = list[0].roomNumber || "?";
+            if (totalUsed > cap) {
+              conflictMsg =
+                `Phòng ${roomNumber} bị vượt sức chứa khi xếp khách ` +
+                `(${totalUsed}/${cap}). Có thể do một đơn khác vừa giữ chỗ ` +
+                `cùng phòng. Vui lòng thử lại hoặc liên hệ công ty du lịch.`;
+              break;
+            }
+            if (genders.size > 1) {
+              conflictMsg =
+                `Phòng ${roomNumber} bị ghép khách khác giới khi xếp tự động. ` +
+                `Có thể do một đơn khác vừa giữ chỗ cùng phòng. ` +
+                `Vui lòng thử lại hoặc chuyển sang ở riêng.`;
+              break;
+            }
+          }
+        }
+
+        if (conflictMsg) {
+          // ── ROLLBACK ──
+          // 1) Reset các TH đã claim về [Tour Hold] + clear orderCode/userId.
+          try {
+            if (claimedThIds.length > 0) {
+              await HotelBooking.updateMany(
+                { _id: { $in: claimedThIds } },
+                {
+                  $set: {
+                    "guest.fullName": "[Tour Hold]",
+                    "guest.phone": "",
+                    "guest.email": "",
+                    status: "confirmed",
+                    isTemporaryHold: false,
+                  },
+                  $unset: { orderCode: "", holdExpiresAt: "", userId: "" },
+                }
+              );
+            }
+          } catch (rollbackErr) {
+            console.error("[createPost rollback resetTH]", rollbackErr);
+          }
+          // 2) Xoá HotelBooking legacy (orderCode=code) — fallback rooms đã
+          //    tạo mới (line ~1442) cũng cần xoá.
+          try {
+            if (code) await HotelBooking.deleteMany({ orderCode: code });
+          } catch (rollbackErr) {
+            console.error("[createPost rollback delHB]", rollbackErr);
+          }
+          // 3) Xoá Order vừa save.
+          try {
+            await Order.deleteOne({ _id: newRecord._id });
+          } catch (rollbackErr) {
+            console.error("[createPost rollback delOrder]", rollbackErr);
+          }
+          // 4) Khôi phục lại ghế đã trừ (best-effort).
+          try {
+            await _restoreSeatsForGroups(groups);
+          } catch (rollbackErr) {
+            console.error("[createPost rollback restoreSeats]", rollbackErr);
+          }
+          return res.json({ code: "error", message: conflictMsg });
+        }
+      }
+
       // Persist các assignment mới vào từng TourSegment (1 update/segId).
       for (const segId of Object.keys(pendingSegPushes)) {
         const arr = pendingSegPushes[segId];
@@ -1377,6 +1803,46 @@ module.exports.createPost = async (req, res) => {
           { _id: segId },
           { $push: { assignments: { $each: arr } } }
         );
+      }
+
+      // Notify khách hàng biết phòng vừa được xếp — chỉ cho non-VNPay.
+      // VNPay: notify được dời sang paymentVNPayResult sau khi giao dịch xác nhận.
+      const allNewAssignments = Object.values(pendingSegPushes).flat();
+      if (
+        allNewAssignments.length > 0 &&
+        body.paymentMethod !== "vnpay" &&
+        (userId || (body.email || "").trim())
+      ) {
+        try {
+          const roomLines = allNewAssignments.map((a) => {
+            const parts = [];
+            if (a.hotelName) parts.push(a.hotelName);
+            if (a.roomNumber) parts.push(`Phòng ${a.roomNumber}`);
+            if (a.roomTypeName) parts.push(`(${a.roomTypeName})`);
+            return parts.join(" — ");
+          });
+          const tourNameForNotify =
+            (items.find((i) => i.accommodationMode === "shared") || items[0])
+              ?.name || "Tour";
+          await notifyCustomerOrderUpdate({
+            userId: userId || null,
+            email: (body.email || "").trim() || null,
+            customerName: (body.fullName || "").trim() || null,
+            type: "room_assignment",
+            resourceLabel: code,
+            orderCode: code,
+            orderId: newRecord._id,
+            link: buildTourOrderProfileLink(code, "initial"),
+            changes: roomLines.map((line) => ({
+              label: "Phòng được xếp",
+              from: null,
+              to: line,
+            })),
+            introLine: `Bạn đã được xếp phòng cho chuyến đi "${tourNameForNotify}".`,
+          });
+        } catch (notifyErr) {
+          console.error("[createPost] room-assign notify:", notifyErr);
+        }
       }
 
       createdOrders.push({
@@ -1412,6 +1878,7 @@ module.exports.createPost = async (req, res) => {
       }
     }
 
+    _firePressureNotifyForGroups(groups).catch(() => {});
     return res.json({
       code: "success",
       message: "Tạo đơn hàng thành công!",
@@ -1491,6 +1958,7 @@ module.exports.pending = async (req, res) => {
       } else {
         item.cityName = "";
       }
+      enrichItemBabySeatsDisplay(item);
     }
 
     return res.render("client/pages/order-pending", {
@@ -1593,6 +2061,7 @@ module.exports.success = async (req, res) => {
 
       // Thêm company slug
       item.companySlug = item.slug ? (companySlugMap[item.slug] || null) : null;
+      enrichItemBabySeatsDisplay(item);
     }
 
     return res.render("client/pages/order-success", {
@@ -1714,6 +2183,69 @@ module.exports.paymentVNPayResult = async (req, res) => {
             holdExpiresAt:   null,
           }
         );
+
+        // Notify phân phòng cho đơn VNPay (xếp phòng đã xong ở createPost,
+        // nhưng thông báo chỉ gửi sau khi thanh toán được xác nhận).
+        try {
+          const paidOrder = await Order.findOne({ code: orderCode, phone })
+            .select("_id code userId email fullName items status")
+            .lean();
+          if (paidOrder) {
+            const sharedItems = (paidOrder.items || []).filter(
+              (i) => i.accommodationMode === "shared"
+            );
+            if (sharedItems.length > 0 && (paidOrder.userId || paidOrder.email)) {
+              // Tìm assignments tương ứng trong TourSegment
+              const segIds = [
+                ...new Set(
+                  sharedItems
+                    .flatMap((i) => (i.sharedRoomRequest || []).map((r) => String(r.tourSegmentId)))
+                    .filter(Boolean)
+                ),
+              ];
+              if (segIds.length > 0) {
+                const segs = await TourSegment.find({ _id: { $in: segIds } })
+                  .select("assignments")
+                  .lean();
+                const assignedRooms = [];
+                for (const seg of segs) {
+                  for (const a of seg.assignments || []) {
+                    if (String(a.orderId) === String(paidOrder._id)) {
+                      const parts = [];
+                      if (a.hotelName) parts.push(a.hotelName);
+                      if (a.roomNumber) parts.push(`Phòng ${a.roomNumber}`);
+                      if (a.roomTypeName) parts.push(`(${a.roomTypeName})`);
+                      if (parts.length > 0) assignedRooms.push(parts.join(" — "));
+                    }
+                  }
+                }
+                if (assignedRooms.length > 0) {
+                  const tourName =
+                    sharedItems[0]?.name || "Tour";
+                  await notifyCustomerOrderUpdate({
+                    userId: paidOrder.userId || null,
+                    email: paidOrder.email || null,
+                    customerName: paidOrder.fullName || null,
+                    type: "room_assignment",
+                    resourceLabel: orderCode,
+                    orderCode,
+                    orderId: paidOrder._id,
+                    link: buildTourOrderProfileLink(orderCode, paidOrder.status),
+                    changes: assignedRooms.map((line) => ({
+                      label: "Phòng được xếp",
+                      from: null,
+                      to: line,
+                    })),
+                    introLine: `Thanh toán thành công! Bạn đã được xếp phòng cho chuyến đi "${tourName}".`,
+                  });
+                }
+              }
+            }
+          }
+        } catch (notifyErr) {
+          console.error("[paymentVNPayResult] room-assign notify:", notifyErr);
+        }
+
         return res.redirect(
           `${process.env.WEBSITE_DOMAIN}/order/success?orderCode=${orderCode}&phone=${phone}`
         );

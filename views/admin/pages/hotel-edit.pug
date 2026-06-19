@@ -781,11 +781,15 @@ block main
         .inner-button.inner-two-col
           button(type="submit") Cập nhật
 
-  .inner-back
-    if _hotelReadOnly
-      a(href=hotelsListBackUrl || `/${pathAdmin}/super-admin/hotels`) Quay lại danh sách
-    else
-      a(href=`/${pathAdmin}/hotel/list`) Quay lại danh sách
+    .hotel-form-back.inner-back
+      if _hotelReadOnly
+        a.hotel-form-back__btn(href=hotelsListBackUrl || `/${pathAdmin}/super-admin/hotels`)
+          i.fa-solid.fa-arrow-left(aria-hidden="true")
+          span Quay lại danh sách
+      else
+        a.hotel-form-back__btn(href=`/${pathAdmin}/hotel/list?hotelId=${hotelDetail._id}`)
+          i.fa-solid.fa-arrow-left(aria-hidden="true")
+          span Quay lại danh sách
 
   script.
     // Xử lý thêm/xóa điểm nổi bật

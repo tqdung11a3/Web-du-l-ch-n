@@ -709,8 +709,10 @@ block main
       .inner-button.inner-two-col
         button(type="submit") Lưu khách sạn
 
-  .inner-back
-    a(href=`/${pathAdmin}/hotel/list`) Quay lại danh sách
+    .hotel-form-back.inner-back
+      a.hotel-form-back__btn(href=backHotelId ? `/${pathAdmin}/hotel/list?hotelId=${backHotelId}` : `/${pathAdmin}/hotel/list`)
+        i.fa-solid.fa-arrow-left(aria-hidden="true")
+        span Quay lại danh sách
 
   script.
     // Xử lý thêm/xóa điểm nổi bật

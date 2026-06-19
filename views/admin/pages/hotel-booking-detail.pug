@@ -192,9 +192,24 @@ block main
                             each detail in room.roomsDetails
                               .room-detail-item
                                 strong Phòng #{detail.roomIndex}: 
-                                span #{detail.adults} người lớn, #{detail.children} trẻ em
+                                if detail.adults > 0
+                                  span #{detail.adults} người lớn
+                                  if detail.adultsAges
+                                    span  (#{detail.adultsAges})
                                 if detail.children > 0
-                                  span.children-ages  (#{detail.childrenAges})
+                                  span
+                                    if detail.adults > 0
+                                      | , 
+                                    | #{detail.children} trẻ em
+                                    if detail.childrenAges && detail.childrenAges !== 'Không có'
+                                      span  (#{detail.childrenAges})
+                                if detail.babies > 0
+                                  span
+                                    if detail.adults > 0 || detail.children > 0
+                                      | , 
+                                    | #{detail.babies} em bé
+                                    if detail.babiesAges && detail.babiesAges !== 'Không có'
+                                      span  (#{detail.babiesAges})
                         else
                           span Không có chi tiết
                       td

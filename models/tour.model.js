@@ -25,7 +25,10 @@ const schema = new Schema(
 
     // --- thông tin tour ---
     name: String,
+    /** Danh mục chính (legacy / breadcrumb) — đồng bộ với phần tử đầu của `categories`. */
     category: String,
+    /** Danh mục đã gán (có thể nhiều: cha và/hoặc các con). */
+    categories: { type: [String], default: [] },
     position: Number,
     status: String,
     avatar: String,
@@ -90,6 +93,12 @@ const schema = new Schema(
       default: [],
     },
 
+    // Cấu hình chỗ ngồi em bé
+    /** Số em bé tối đa được ngồi cùng 1 người lớn (không chiếm ghế tour). 0 = không giới hạn. */
+    maxBabiesPerAdult: { type: Number, default: 1 },
+    /** Phí ghế ngồi riêng cho mỗi em bé (VND). 0 = ghế riêng miễn phí. */
+    babySeatFee: { type: Number, default: 0 },
+
     // Khác
     time: String,
     vehicle: String,
@@ -142,6 +151,13 @@ const schema = new Schema(
 
     // Slug
     slug: { type: String, slug: "name", unique: true },
+
+    // ID tuỳ chỉnh do admin nhập (dùng thay cho 6 ký tự cuối _id trong UI)
+    customId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
     // Soft delete
     deleted: { type: Boolean, default: false },

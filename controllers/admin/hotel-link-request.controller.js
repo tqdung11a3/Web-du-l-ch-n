@@ -35,14 +35,30 @@ async function recomputeTourSegmentStatus(tourSegmentId) {
   const tourSeg = await TourSegment.findById(tourSegmentId);
   if (!tourSeg) return;
 
+  // Nếu segment đã bị admin huỷ thủ công (nút "Huỷ & Giải phóng phòng"),
+  // không tự suy lại trạng thái từ link request để tránh ghi đè "cancelled".
+  if (tourSeg.status === "cancelled") return;
+
   // Chỉ xét request mới nhất cho mỗi khách sạn — các request cũ (bị reject /
   // cancel ở lượt trước) được coi là lịch sử, không còn phản ánh trạng thái
   // hiện tại của segment sau khi admin cấu hình lại và gửi yêu cầu mới.
   const effectiveRequests = await pickLatestRequestPerHotel(tourSegmentId);
 
+  const autoTag = HOTEL_LINK_REQ_AUTO_BY_SENDING_COMPANY_TAG;
+  const isAutoClosed = (r) =>
+    r.status === "rejected" &&
+    autoTag &&
+    (r.responseNote || "").indexOf(autoTag) === 0;
+
   const hasPending = effectiveRequests.some((r) => r.status === "pending");
-  const hasRejected = effectiveRequests.some((r) => r.status === "rejected");
-  const hasCancelled = effectiveRequests.some((r) => r.status === "cancelled");
+  // Chỉ tính rejected THẬT (do KS bấm Từ chối). Auto-closed bởi bên gửi
+  // được xem như cancelled cho mục đích phân loại segment status.
+  const hasRejected = effectiveRequests.some(
+    (r) => r.status === "rejected" && !isAutoClosed(r)
+  );
+  const hasCancelled = effectiveRequests.some(
+    (r) => r.status === "cancelled" || isAutoClosed(r)
+  );
 
   let nextStatus;
   if (hasPending) {
@@ -71,6 +87,7 @@ async function pickLatestRequestPerHotel(tourSegmentId) {
     .select("status hotelId hotelName toCompanyName responseNote createdAt")
     .sort({ createdAt: -1 })
     .lean();
+  // responseNote đã có sẵn trong select → đủ dữ liệu để check auto-tag.
 
   const seen = new Set();
   const latest = [];
@@ -174,6 +191,30 @@ async function loadAllHotelsForLinkRequestFilter() {
     .lean();
 }
 
+/**
+ * Gom các khung check-in / check-out của khách sạn từ requestedRooms
+ * (mỗi khung = một cặp fromDate–toDate admin cấu hình ở tour-hotel/detail).
+ */
+function buildHotelStayFrames(requestedRooms) {
+  const seen = new Map();
+  for (const rr of requestedRooms || []) {
+    if (!rr.fromDate || !rr.toDate) continue;
+    const fromKey = moment(rr.fromDate).format("YYYY-MM-DD");
+    const toKey = moment(rr.toDate).format("YYYY-MM-DD");
+    const key = `${fromKey}|${toKey}`;
+    if (seen.has(key)) continue;
+    seen.set(key, {
+      fromDate: rr.fromDate,
+      toDate: rr.toDate,
+      fromDateDisplay: moment(rr.fromDate).format("DD/MM/YYYY"),
+      toDateDisplay: moment(rr.toDate).format("DD/MM/YYYY"),
+    });
+  }
+  return Array.from(seen.values()).sort(
+    (a, b) => new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime()
+  );
+}
+
 // ── Helper: enrich request list ─────────────────────────────────────────────
 function enrichRequests(list) {
   for (const r of list) {
@@ -184,9 +225,22 @@ function enrichRequests(list) {
     r.reviewerName = r.reviewedBy?.fullName || null;
     r.totalRequestedRooms = r.requestedRooms.reduce((s, rr) => s + rr.assignedRooms, 0);
     r.totalApprovedRooms = (r.approvedRooms || []).reduce((s, ar) => s + ar.approvedRooms, 0);
+    r.hotelStayFrames = buildHotelStayFrames(r.requestedRooms);
     for (const rr of r.requestedRooms) {
       rr.fromDateDisplay = moment(rr.fromDate).format("DD/MM/YYYY");
       rr.toDateDisplay = moment(rr.toDate).format("DD/MM/YYYY");
+      // Ưu tiên stayFrameIndex đã lưu trong DB (chứa đúng thứ tự khung gốc).
+      // Fallback tính lại cho các bản ghi cũ chưa có field này.
+      if (rr.stayFrameIndex == null) {
+        const frame = (r.hotelStayFrames || []).find(
+          (f) =>
+            moment(f.fromDate).format("YYYY-MM-DD") ===
+              moment(rr.fromDate).format("YYYY-MM-DD") &&
+            moment(f.toDate).format("YYYY-MM-DD") ===
+              moment(rr.toDate).format("YYYY-MM-DD")
+        );
+        rr.stayFrameIndex = frame ? r.hotelStayFrames.indexOf(frame) + 1 : null;
+      }
     }
   }
 }

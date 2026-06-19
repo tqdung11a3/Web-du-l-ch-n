@@ -19,6 +19,8 @@
   const pathAdmin     = JSON.parse(document.getElementById("path-admin")?.textContent    || '""');
   const currentCompanyId = JSON.parse(document.getElementById("current-company-id")?.textContent || '""');
   const isTourOnlyAdmin  = JSON.parse(document.getElementById("is-tour-only-admin")?.textContent || "false");
+  // hotelId → link request status: 'pending'|'approved'|'partially_approved'|'rejected'|'cancelled'
+  const hotelLinkStatusMap = JSON.parse(document.getElementById("hotel-link-status-map")?.textContent || "{}");
 
   /** Thông báo góc màn hình (Notyf), thay alert */
   function toastError(msg) {
@@ -41,9 +43,14 @@
     const title = opts.title || "Xác nhận";
     const confirmText = opts.confirmText || "Tiếp tục";
     const cancelText = opts.cancelText || "Huỷ";
+    const alertOnly = !!opts.alertOnly;
 
     const wrap = document.getElementById("th-app-dialog");
     if (!wrap) {
+      if (alertOnly) {
+        window.alert(message);
+        return Promise.resolve(false);
+      }
       return Promise.resolve(window.confirm(message));
     }
 
@@ -56,14 +63,25 @@
       const backdrop = wrap.querySelector(".th-app-dialog__backdrop");
 
       if (!titleEl || !bodyEl || !okBtn || !cancelBtn || !closeBtn || !backdrop) {
-        resolve(window.confirm(message));
+        if (alertOnly) {
+          window.alert(message);
+          resolve(false);
+        } else {
+          resolve(window.confirm(message));
+        }
         return;
       }
 
       titleEl.textContent = title;
-      bodyEl.textContent = message;
+      // Hỗ trợ xuống dòng (\n) trong message — escape HTML rồi thay \n → <br>
+      bodyEl.innerHTML = message
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\n/g, "<br>");
       okBtn.textContent = confirmText;
       cancelBtn.textContent = cancelText;
+      okBtn.style.display = alertOnly ? "none" : "";
 
       let settled = false;
       function finish(val) {
@@ -71,6 +89,7 @@
         settled = true;
         wrap.classList.remove("is-open");
         wrap.setAttribute("aria-hidden", "true");
+        okBtn.style.display = "";
         document.removeEventListener("keydown", onKey);
         okBtn.removeEventListener("click", onOk);
         cancelBtn.removeEventListener("click", onCancel);
@@ -96,7 +115,7 @@
 
       wrap.classList.add("is-open");
       wrap.setAttribute("aria-hidden", "false");
-      okBtn.focus();
+      (alertOnly ? cancelBtn : okBtn).focus();
     });
   }
 
@@ -272,16 +291,16 @@
     function renderFromSaved() {
       rtContainer.innerHTML = "";
       for (const ra of hotelData.roomAllocations || []) {
-        rtContainer.appendChild(
-          createRoomTypeRow(
-            ra.roomTypeId,
-            ra.roomTypeName,
-            ra.baseOccupancy,
-            ra.assignedRooms,
-            ra.assignedRooms,
-            segEl
-          )
+        const row = createRoomTypeRow(
+          ra.roomTypeId,
+          ra.roomTypeName,
+          ra.baseOccupancy,
+          null,           // không có dữ liệu tồn kho live
+          ra.assignedRooms,
+          segEl
         );
+        rtContainer.appendChild(row);
+        applyCardLockToRow(card, row);
       }
       renderHotelTotal(card);
     }
@@ -293,10 +312,11 @@
 
     if (loading) loading.style.display = "block";
     try {
+      const excludeSegId = existingData && existingData._id ? `&excludeTourSegmentId=${encodeURIComponent(String(existingData._id))}` : "";
       const res = await fetch(
         `/${pathAdmin}/tour-hotel/api/hotel-availability?hotelId=${encodeURIComponent(
           String(hotelData.hotelId)
-        )}&fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}`
+        )}&fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}${excludeSegId}`
       );
       const data = await res.json();
       if (loading) loading.style.display = "none";
@@ -313,31 +333,30 @@
       for (const rt of data.roomTypes) {
         const saved = savedByType.get(String(rt.roomTypeId));
         const assigned = saved ? saved.assignedRooms : 0;
-        const maxSlider = Math.max(rt.availableRooms || 0, assigned);
-        rtContainer.appendChild(
-          createRoomTypeRow(
-            rt.roomTypeId,
-            rt.roomTypeName,
-            rt.baseOccupancy,
-            maxSlider,
-            assigned,
-            segEl
-          )
+        const row = createRoomTypeRow(
+          rt.roomTypeId,
+          rt.roomTypeName,
+          rt.baseOccupancy,
+          rt.availableRooms || 0,
+          assigned,
+          segEl
         );
+        rtContainer.appendChild(row);
+        applyCardLockToRow(card, row);
       }
 
       for (const ra of hotelData.roomAllocations || []) {
         if (liveIds.has(String(ra.roomTypeId))) continue;
-        rtContainer.appendChild(
-          createRoomTypeRow(
-            ra.roomTypeId,
-            ra.roomTypeName,
-            ra.baseOccupancy,
-            ra.assignedRooms,
-            ra.assignedRooms,
-            segEl
-          )
+        const row = createRoomTypeRow(
+          ra.roomTypeId,
+          ra.roomTypeName,
+          ra.baseOccupancy,
+          null,           // loại phòng không còn trong API, dùng giá trị đã lưu
+          ra.assignedRooms,
+          segEl
         );
+        rtContainer.appendChild(row);
+        applyCardLockToRow(card, row);
       }
 
       renderHotelTotal(card);
@@ -349,6 +368,24 @@
     }
   }
 
+  // ── Badge trạng thái link request cho hotel card ────────────────────────────
+  const LINK_STATUS_LABEL = {
+    pending:   { text: "Chờ phản hồi", cls: "seg-link-badge--pending",  icon: "fa-clock" },
+    approved:  { text: "Đã duyệt",     cls: "seg-link-badge--approved", icon: "fa-circle-check" },
+    rejected:  { text: "Từ chối",      cls: "seg-link-badge--rejected", icon: "fa-circle-xmark" },
+    cancelled: { text: "Đã đóng",      cls: "seg-link-badge--cancelled", icon: "fa-ban" },
+  };
+
+  function buildLinkStatusBadge(hotelId) {
+    const status = hotelLinkStatusMap[String(hotelId)];
+    if (!status) return "";
+    const cfg = LINK_STATUS_LABEL[status];
+    if (!cfg) return "";
+    return `<span class="seg-link-badge ${cfg.cls}" title="Trạng thái yêu cầu liên kết">
+      <i class="fa-solid ${cfg.icon}"></i> ${cfg.text}
+    </span>`;
+  }
+
   // ── Tạo card khách sạn ──────────────────────────────────────────────────────
   function createHotelCard(hotelId, hotelName, isPrimary) {
     const card = document.createElement("div");
@@ -356,21 +393,36 @@
     card.dataset.hotelId  = hotelId;
     card.dataset.isPrimary = isPrimary ? "1" : "0";
 
+    const lrStatus = hotelLinkStatusMap[String(hotelId)];
+    // Lock input khi đã có yêu cầu liên kết ở trạng thái cần xác nhận lại trước khi sửa
+    const needsUnlock = lrStatus === "approved" || lrStatus === "pending" || lrStatus === "rejected";
+    if (needsUnlock) card.dataset.locked = "1";
+
     const hotelData = hotelsData.find((h) => h._id === hotelId);
     const isCross = hotelData && currentCompanyId && String(hotelData.companyId) !== currentCompanyId;
     const ownerLabel = (hotelData && (hotelData.companyName || "").trim()) || "Công ty khác";
     const crossBadge = isCross
       ? ` <span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px">${escapeHtml(ownerLabel)}</span>`
       : "";
+    const statusBadge = buildLinkStatusBadge(hotelId);
+    const editBtn = needsUnlock
+      ? `<button type="button" class="seg-hotel-unlock-btn" title="Chỉnh sửa số phòng giữ">
+           <i class="fa-solid fa-pen-to-square"></i> Chỉnh sửa
+         </button>`
+      : "";
 
     card.innerHTML = `
       <div class="seg-hotel-card__header">
         <div class="seg-hotel-card__title">
           <strong>${escapeHtml(hotelName)}</strong>${crossBadge}
+          ${statusBadge}
         </div>
-        <button type="button" class="seg-hotel-remove-btn">
-          <i class="fa-solid fa-xmark"></i> Xoá
-        </button>
+        <div class="seg-hotel-card__actions">
+          ${editBtn}
+          <button type="button" class="seg-hotel-remove-btn">
+            <i class="fa-solid fa-xmark"></i> Xoá
+          </button>
+        </div>
       </div>
       <div class="seg-room-types-loading" style="display:none">
         <i class="fa-solid fa-spinner fa-spin"></i> Đang tải tình trạng phòng...
@@ -386,6 +438,53 @@
       updateGrandTotal();
     });
 
+    // Nút Chỉnh sửa — hiển thị khi approved, pending hoặc rejected
+    const unlockBtn = card.querySelector(".seg-hotel-unlock-btn");
+    if (unlockBtn) {
+      unlockBtn.addEventListener("click", async () => {
+        let title, message;
+        if (lrStatus === "approved") {
+          title = "Chỉnh sửa phòng đã được duyệt";
+          message =
+            `Khách sạn "${escapeHtml(hotelName)}" đã được duyệt liên kết.\n\n` +
+            `Nếu bạn thay đổi số phòng giữ, hệ thống sẽ cần bấm "Xác nhận lại (Re-assign phòng)" để cập nhật — ` +
+            `quá trình này sẽ hủy hold hiện tại tại khách sạn này và gửi yêu cầu mới.\n\n` +
+            `Bạn có muốn mở chế độ chỉnh sửa không?`;
+        } else if (lrStatus === "pending") {
+          title = "Chỉnh sửa phòng đang chờ duyệt";
+          message =
+            `Yêu cầu liên kết tới "${escapeHtml(hotelName)}" đang chờ khách sạn phản hồi.\n\n` +
+            `Nếu bạn thay đổi số phòng và bấm "Xác nhận lại (Re-assign phòng)", yêu cầu đang chờ sẽ bị hủy và một yêu cầu mới sẽ được gửi đi.\n\n` +
+            `Bạn có muốn mở chế độ chỉnh sửa không?`;
+        } else {
+          title = "Chỉnh sửa phòng sau khi bị từ chối";
+          message =
+            `Yêu cầu liên kết tới "${escapeHtml(hotelName)}" đã bị từ chối.\n\n` +
+            `Nếu bạn thay đổi số phòng và bấm "Xác nhận lại (Re-assign phòng)", một yêu cầu mới sẽ được gửi đi tới khách sạn.\n\n` +
+            `Bạn có muốn mở chế độ chỉnh sửa không?`;
+        }
+        const confirmed = await showThConfirm({
+          title,
+          message,
+          confirmText: "Mở chỉnh sửa",
+          cancelText: "Không",
+        });
+        if (!confirmed) return;
+        card.dataset.locked = "0";
+        unlockBtn.remove();
+        // Unlock tất cả input số phòng trong card này
+        card.querySelectorAll(".seg-rt-rooms").forEach((inp) => {
+          inp.disabled = false;
+          inp.classList.remove("seg-rt-rooms--locked");
+        });
+        // Cập nhật lại capacity (có thể đang bị suppress khi locked)
+        const segEl = card.closest(".th-segment-item");
+        renderHotelTotal(card);
+        updateSegmentCapacity(segEl);
+        updateGrandTotal();
+      });
+    }
+
     return card;
   }
 
@@ -397,8 +496,9 @@
     rtContainer.innerHTML  = "";
 
     try {
+      const excludeSegId = existingData && existingData._id ? `&excludeTourSegmentId=${encodeURIComponent(String(existingData._id))}` : "";
       const res = await fetch(
-        `/${pathAdmin}/tour-hotel/api/hotel-availability?hotelId=${hotelId}&fromDate=${fromDate}&toDate=${toDate}`
+        `/${pathAdmin}/tour-hotel/api/hotel-availability?hotelId=${hotelId}&fromDate=${fromDate}&toDate=${toDate}${excludeSegId}`
       );
       const data = await res.json();
       loading.style.display = "none";
@@ -415,9 +515,9 @@
 
       const segEl = card.closest(".th-segment-item");
       for (const rt of data.roomTypes) {
-        rtContainer.appendChild(
-          createRoomTypeRow(rt.roomTypeId, rt.roomTypeName, rt.baseOccupancy, rt.availableRooms, 0, segEl)
-        );
+        const row = createRoomTypeRow(rt.roomTypeId, rt.roomTypeName, rt.baseOccupancy, rt.availableRooms, 0, segEl);
+        rtContainer.appendChild(row);
+        applyCardLockToRow(card, row);
       }
       renderHotelTotal(card);
     } catch (e) {
@@ -426,47 +526,95 @@
     }
   }
 
+  // ── Đồng bộ 1 dòng loại phòng: số giữ, còn trống, sức chứa ─────────────────
+  function syncRoomTypeRow(row) {
+    const hasLiveData = row.dataset.available !== undefined && row.dataset.available !== "";
+    const realAvail   = hasLiveData ? parseInt(row.dataset.available, 10) || 0 : null;
+    const baseOcc     = parseInt(row.dataset.baseOccupancy, 10) || 2;
+    const input       = row.querySelector(".seg-rt-rooms");
+    const capEl       = row.querySelector(".seg-rt-cap");
+    const availCountEl = row.querySelector(".seg-rt-avail-count");
+    if (!input) return;
+
+    let rooms = parseInt(input.value, 10) || 0;
+    if (hasLiveData && rooms > realAvail) {
+      rooms = realAvail;
+      input.value = rooms;
+    }
+    if (capEl) capEl.textContent = rooms * baseOcc;
+
+    if (hasLiveData && availCountEl && !availCountEl.classList.contains("seg-rt-avail-unknown")) {
+      const remaining = Math.max(0, realAvail - rooms);
+      availCountEl.textContent = remaining;
+      row.classList.toggle("seg-rt-low", remaining === 0 && rooms > 0);
+    }
+  }
+
+  function bubbleRowTotals(row, segEl) {
+    const card = row.closest(".seg-hotel-card");
+    if (card) renderHotelTotal(card);
+    const seg = segEl || row.closest(".th-segment-item");
+    if (seg) updateSegmentCapacity(seg);
+    updateGrandTotal();
+  }
+
   // ── Tạo 1 dòng room type ───────────────────────────────────────────────────
+  // availableRooms = số phòng trống thực từ API, hoặc null nếu không có dữ liệu live
   function createRoomTypeRow(roomTypeId, roomTypeName, baseOccupancy, availableRooms, defaultAssigned, segEl) {
+    const hasLiveData  = availableRooms !== null && availableRooms !== undefined;
+    const realAvail    = hasLiveData ? (availableRooms || 0) : null;
+    const initAssigned = parseInt(defaultAssigned, 10) || 0;
+    const initClamped  = hasLiveData ? Math.min(initAssigned, realAvail) : initAssigned;
+    const initRemaining = hasLiveData ? Math.max(0, realAvail - initClamped) : null;
+
     const row = document.createElement("div");
     row.className = "seg-rt-row";
     row.dataset.roomTypeId    = roomTypeId;
     row.dataset.baseOccupancy = baseOccupancy;
-    row.dataset.available     = availableRooms ?? 0;
+    if (hasLiveData) row.dataset.available = realAvail;
+
+    const availDisplay = hasLiveData
+      ? `Còn trống: <span class="seg-rt-avail-count">${initRemaining}</span> phòng`
+      : `<span class="seg-rt-avail-count seg-rt-avail-unknown">Không có dữ liệu tồn kho</span>`;
 
     row.innerHTML = `
       <div class="seg-rt-info">
         <span class="seg-rt-name">${roomTypeName}</span>
         <span class="seg-rt-occ">${baseOccupancy} người/phòng</span>
-        <span class="seg-rt-avail">Còn trống: ${availableRooms ?? "?"} phòng</span>
+        <span class="seg-rt-avail">${availDisplay}</span>
       </div>
       <div class="seg-rt-input-group">
         <label>Số phòng giữ:</label>
-        <input type="number" class="seg-rt-rooms" min="0" max="${availableRooms ?? 9999}"
-               value="${defaultAssigned}" placeholder="0">
+        <input type="number" class="seg-rt-rooms" min="0" ${hasLiveData ? `max="${realAvail}"` : ""}
+               value="${initClamped}" placeholder="0">
         <span class="seg-rt-capacity-label">= <strong class="seg-rt-cap">0</strong> người</span>
       </div>
     `;
 
     const input = row.querySelector(".seg-rt-rooms");
-    const capEl = row.querySelector(".seg-rt-cap");
 
-    function updateRowCap() {
-      const rooms = parseInt(input.value, 10) || 0;
-      const cap   = rooms * baseOccupancy;
-      capEl.textContent = cap;
-      // Bubble up
-      const card  = row.closest(".seg-hotel-card");
-      if (card) renderHotelTotal(card);
-      if (segEl) updateSegmentCapacity(segEl);
-      updateGrandTotal();
-    }
-    input.addEventListener("input", updateRowCap);
-    // Khởi tạo lần đầu
-    const initRooms = parseInt(defaultAssigned, 10) || 0;
-    capEl.textContent = initRooms * baseOccupancy;
+    input.addEventListener("input", () => {
+      syncRoomTypeRow(row);
+      bubbleRowTotals(row, segEl);
+    });
+    syncRoomTypeRow(row);
 
+    // Lock state được áp dụng sau khi row được append vào card bởi caller.
+    // Caller gọi applyCardLockToRow(card, row) sau khi appendChild.
     return row;
+  }
+
+  // Áp lock state cho 1 row vừa append vào card
+  function applyCardLockToRow(card, row) {
+    if (!card) return;
+    const locked = card.dataset.locked !== "0" && !!card.dataset.locked;
+    if (locked) {
+      const inp = row.querySelector(".seg-rt-rooms");
+      if (inp) {
+        inp.disabled = true;
+        inp.classList.add("seg-rt-rooms--locked");
+      }
+    }
   }
 
   // ── Tính tổng sức chứa của 1 hotel card ────────────────────────────────────
@@ -576,10 +724,10 @@
         if (!card) continue;
         for (const ra of suggestion.roomAllocations) {
           const rtRow = card.querySelector(`.seg-rt-row[data-room-type-id="${ra.roomTypeId}"]`);
-          if (rtRow) {
-            rtRow.querySelector(".seg-rt-rooms").value = ra.assignedRooms;
-            rtRow.querySelector(".seg-rt-cap").textContent = ra.totalPeople;
-          }
+          if (!rtRow) continue;
+          const input = rtRow.querySelector(".seg-rt-rooms");
+          if (input) input.value = ra.assignedRooms;
+          syncRoomTypeRow(rtRow);
         }
         renderHotelTotal(card);
       }
@@ -685,36 +833,45 @@
       .filter((s) => s.cap < pax);
     if (weakSegs.length > 0) {
       const desc = weakSegs.map((s) => `Khung ${s.idx} (${s.cap}/${pax})`).join(", ");
-      const okWeak = await showThConfirm({
+      await showThConfirm({
         title: "Khung chưa đủ chỗ",
-        message: `Một số khung chưa đủ chỗ: ${desc}.\n\nVẫn tiếp tục xác nhận?`,
-        confirmText: "Vẫn tiếp tục",
+        message:
+          `Một số khung chưa đủ chỗ: ${desc}.\n\n` +
+          "Vui lòng bổ sung phòng cho từng khung trước khi xác nhận.",
+        alertOnly: true,
         cancelText: "Quay lại chỉnh sửa",
       });
-      if (!okWeak) return;
+      return;
     }
 
-    // Thu thập các công ty chủ KS cần gửi yêu cầu duyệt.
-    // Với tour-only admin: tất cả KS (kể cả cùng công ty) đều cần duyệt.
-    // Với company admin / full: chỉ KS khác công ty mới cần duyệt.
+    const segStatus = existingData?.status;
+    if (segStatus === "confirmed" || segStatus === "pending_approval") {
+      const okPartial = await showThConfirm({
+        title: "Xác nhận lại cấu hình",
+        message:
+          "Chỉ khách sạn có thay đổi (số phòng, loại phòng hoặc khung thời gian) mới gửi lại yêu cầu liên kết.\n\n" +
+          "Các khách sạn không đổi giữ nguyên yêu cầu và phòng đã giữ (nếu đã được duyệt).\n\nTiếp tục?",
+        confirmText: "Tiếp tục",
+        cancelText: "Quay lại chỉnh sửa",
+      });
+      if (!okPartial) return;
+    }
+
+    // Mọi KS có phân bổ phòng đều đi qua HotelLinkRequest (kể cả cùng công ty).
     const partnerCompanyIds = new Set();
     const partnerCompanyNames = [];
-    let hasSameCompanyNeedingApproval = false;
+    let hasHotelWithRooms = false;
 
     for (const seg of segments) {
       for (const h of seg.hotels || []) {
+        const hasRooms = (h.roomAllocations || []).some(
+          (ra) => Number(ra.assignedRooms) > 0
+        );
+        if (!hasRooms) continue;
+        hasHotelWithRooms = true;
+
         const hotelData = hotelsData.find((hd) => String(hd._id) === String(h.hotelId));
         if (!hotelData || !currentCompanyId) continue;
-
-        const isSame = String(hotelData.companyId) === String(currentCompanyId);
-
-        if (isTourOnlyAdmin && isSame) {
-          // Tour-only admin + cùng công ty: cũng cần link request
-          hasSameCompanyNeedingApproval = true;
-          continue;
-        }
-
-        if (isSame) continue; // company admin + cùng công ty: auto-hold, không cần cảnh báo
 
         const cid = String(hotelData.companyId);
         if (partnerCompanyIds.has(cid)) continue;
@@ -724,46 +881,32 @@
       }
     }
 
-    const hasCrossCompany = partnerCompanyNames.length > 0;
-    const needsAnyApproval = hasCrossCompany || hasSameCompanyNeedingApproval;
-
-    if (needsAnyApproval) {
+    if (hasHotelWithRooms) {
       let title, message;
 
       if (isTourOnlyAdmin) {
-        // Tour-only admin: tất cả KS (kể cả cùng công ty) cần gửi yêu cầu duyệt
-        const allCompanyNames = [
-          ...(hasSameCompanyNeedingApproval ? ["(cùng công ty)"] : []),
-          ...partnerCompanyNames,
-        ];
-        const allCompaniesHaveExternalOnly = !hasSameCompanyNeedingApproval && hasCrossCompany;
-        if (!hasSameCompanyNeedingApproval && partnerCompanyNames.length === 1) {
+        if (partnerCompanyNames.length === 1) {
           const quoted = `«${partnerCompanyNames[0]}»`;
           title = `Yêu cầu liên kết khách sạn — công ty ${quoted}`;
-          message = `Tất cả khách sạn trong cấu hình đều cần được phê duyệt trước khi giữ phòng. Hệ thống sẽ gửi yêu cầu tới công ty ${quoted}.\n\nTiếp tục?`;
-        } else if (!hasSameCompanyNeedingApproval && partnerCompanyNames.length > 1) {
+          message = `Tất cả khách sạn trong cấu hình cần được phê duyệt trước khi giữ phòng. Hệ thống sẽ gửi yêu cầu tới công ty ${quoted}.\n\nTiếp tục?`;
+        } else if (partnerCompanyNames.length > 1) {
           const quoted = partnerCompanyNames.map((n) => `«${n}»`).join(", ");
           title = `Yêu cầu liên kết khách sạn — ${partnerCompanyNames.length} công ty`;
-          message = `Tất cả khách sạn trong cấu hình đều cần được phê duyệt trước khi giữ phòng. Hệ thống sẽ gửi yêu cầu tới từng công ty: ${quoted}.\n\nTiếp tục?`;
+          message = `Tất cả khách sạn trong cấu hình cần được phê duyệt trước khi giữ phòng. Hệ thống sẽ gửi yêu cầu tới từng công ty: ${quoted}.\n\nTiếp tục?`;
         } else {
-          // Có cả cùng công ty và/hoặc khác công ty
           title = "Yêu cầu liên kết khách sạn";
-          const details = partnerCompanyNames.length > 0
-            ? ` và công ty đối tác: ${partnerCompanyNames.map((n) => `«${n}»`).join(", ")}`
-            : "";
-          message = `Tài khoản của bạn (Tour Admin) cần gửi yêu cầu duyệt cho tất cả khách sạn${details} — kể cả khách sạn cùng công ty. Phòng sẽ chỉ được giữ sau khi được phê duyệt.\n\nTiếp tục?`;
+          message =
+            "Tài khoản Tour Admin cần gửi yêu cầu duyệt cho các khách sạn trong cấu hình. Phòng chỉ được giữ sau khi được phê duyệt.\n\nTiếp tục?";
         }
       } else {
-        // Company admin: chỉ KS khác công ty mới cần duyệt
-        const quoted = partnerCompanyNames.map((n) => `«${n}»`).join(", ");
-        title =
-          partnerCompanyNames.length === 1
-            ? `Liên kết khách sạn — công ty ${`«${partnerCompanyNames[0]}»`}`
-            : `Liên kết khách sạn — ${partnerCompanyNames.length} công ty đối tác`;
+        title = "Yêu cầu liên kết khách sạn";
         message =
-          partnerCompanyNames.length === 1
-            ? `Trong cấu hình có khách sạn thuộc công ty «${partnerCompanyNames[0]}» (không cùng công ty với tour của bạn). Hệ thống sẽ gửi yêu cầu duyệt tới công ty «${partnerCompanyNames[0]}». Phòng tại khách sạn cùng công ty với tour của bạn sẽ được giữ ngay.\n\nTiếp tục?`
-            : `Trong cấu hình có khách sạn thuộc các công ty đối tác: ${quoted} (không cùng công ty với tour của bạn). Hệ thống sẽ gửi yêu cầu duyệt tới từng công ty sở hữu khách sạn tương ứng. Phòng tại khách sạn cùng công ty với tour của bạn sẽ được giữ ngay.\n\nTiếp tục?`;
+          "Mọi khách sạn trong cấu hình (kể cả cùng công ty) sẽ được gửi yêu cầu liên kết. " +
+          'Phòng chỉ được giữ sau khi duyệt tại mục "Yêu cầu nhận được".\n\n' +
+          (partnerCompanyNames.length > 0
+            ? `Có khách sạn thuộc công ty đối tác: ${partnerCompanyNames.map((n) => `«${n}»`).join(", ")}.\n\n`
+            : "") +
+          "Tiếp tục?";
       }
 
       const okCross = await showThConfirm({
@@ -794,7 +937,23 @@
       });
       const data = await res.json();
       if (data.success) {
-        toastSuccess(data.message || "Thành công");
+        let toastMsg = data.message || "Thành công";
+        if (data.summary) {
+          const parts = [];
+          if (data.summary.unchanged?.length) {
+            parts.push("Giữ nguyên: " + data.summary.unchanged.join(", "));
+          }
+          if (data.summary.updated?.length) {
+            parts.push("Gửi mới/cập nhật: " + data.summary.updated.join(", "));
+          }
+          if (data.summary.removed?.length) {
+            parts.push("Đã gỡ: " + data.summary.removed.join(", "));
+          }
+          if (parts.length) {
+            toastMsg += " — " + parts.join(" | ");
+          }
+        }
+        toastSuccess(toastMsg);
         setTimeout(() => location.reload(), 700);
       } else {
         toastError(data.message || "Không thể xác nhận");
@@ -847,6 +1006,133 @@
   cancelBtn?.addEventListener("click", cancelSegments);
 
   // Nút đồng bộ paxRequired đã bị xóa — giá trị luôn được lấy trực tiếp từ seatsTotal của tour khi tải trang
+
+  // ── Modal yêu cầu bổ sung phòng ─────────────────────────────────────────────
+  (function initAdditionalRoomsModal() {
+    const pressureRaw = document.getElementById("quota-pressure-data");
+    if (!pressureRaw) return;
+    let pressure;
+    try { pressure = JSON.parse(pressureRaw.textContent); } catch { return; }
+    if (!pressure || !["low", "exhausted"].includes(pressure.pressureLevel)) return;
+
+    const modal = document.getElementById("additional-rooms-modal");
+    if (!modal) return;
+
+    const openBtn   = document.getElementById("open-additional-rooms-modal");
+    const closeBtn  = document.getElementById("close-additional-rooms-modal");
+    const cancelBtn2 = document.getElementById("cancel-additional-rooms-modal");
+    const submitBtn = document.getElementById("submit-additional-rooms-modal");
+    const tableWrap = document.getElementById("additional-rooms-table-wrap");
+
+    function buildTable() {
+      const rows = [];
+      for (const frame of pressure.frames || []) {
+        for (const hotel of frame.hotels || []) {
+          for (const rt of hotel.roomTypes || []) {
+            rows.push({ frame, hotel, rt });
+          }
+        }
+      }
+      if (rows.length === 0) {
+        tableWrap.innerHTML = "<p style='color:#64748b;font-size:13px'>Không có dữ liệu phòng.</p>";
+        return;
+      }
+
+      let html = `<table class="th-add-rooms-table">
+        <thead><tr>
+          <th>Khung</th><th>Khách sạn</th><th>Loại phòng</th>
+          <th>Đã giữ</th><th>Đã đặt</th><th>Còn trống</th>
+          <th>Thêm phòng</th><th>Ghi chú</th>
+        </tr></thead><tbody>`;
+      for (const { frame, hotel, rt } of rows) {
+        const rowKey = `${hotel.hotelId}|${rt.roomTypeId}|${frame.fromDate}|${frame.toDate}`;
+        html += `<tr data-row-key="${rowKey}"
+          data-hotel-id="${hotel.hotelId}" data-hotel-name="${hotel.hotelName}"
+          data-room-type-id="${rt.roomTypeId}" data-room-type-name="${rt.roomTypeName}"
+          data-base-occupancy="${rt.baseOccupancy}"
+          data-from-date="${frame.fromDate}" data-to-date="${frame.toDate}">
+          <td style="white-space:nowrap;font-size:12px;color:#64748b">${frame.fromDate} → ${frame.toDate}</td>
+          <td>${hotel.hotelName}</td>
+          <td>${rt.roomTypeName}<br><span style="font-size:11px;color:#94a3b8">${rt.baseOccupancy} người/phòng</span></td>
+          <td style="text-align:center">${rt.assignedRooms}</td>
+          <td style="text-align:center">${rt.bookedRooms}</td>
+          <td style="text-align:center;font-weight:600;color:${rt.availableRooms === 0 ? "#dc2626" : "#16a34a"}">${rt.availableRooms}</td>
+          <td style="text-align:center"><input class="th-add-rooms-input" type="number" min="0" value="0" data-row="${rowKey}"></td>
+          <td><input class="th-add-rooms-note-input" type="text" placeholder="Ghi chú..." data-note-row="${rowKey}"></td>
+        </tr>`;
+      }
+      html += "</tbody></table>";
+      tableWrap.innerHTML = html;
+    }
+
+    function openModal() {
+      buildTable();
+      modal.removeAttribute("aria-hidden");
+      modal.style.removeProperty("display");
+    }
+    function closeModal() {
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    openBtn?.addEventListener("click", openModal);
+    closeBtn?.addEventListener("click", closeModal);
+    cancelBtn2?.addEventListener("click", closeModal);
+    modal.querySelector(".th-add-rooms-modal__backdrop")
+      ?.addEventListener("click", closeModal);
+
+    submitBtn?.addEventListener("click", async () => {
+      const items = [];
+      const inputEls = tableWrap.querySelectorAll(".th-add-rooms-input");
+      for (const inp of inputEls) {
+        const val = Number(inp.value);
+        if (!val || val < 1) continue;
+        const row = tableWrap.querySelector(`tr[data-row-key="${inp.dataset.row}"]`);
+        if (!row) continue;
+        const noteEl = tableWrap.querySelector(`input[data-note-row="${inp.dataset.row}"]`);
+        items.push({
+          hotelId: row.dataset.hotelId,
+          hotelName: row.dataset.hotelName,
+          roomTypeId: row.dataset.roomTypeId,
+          roomTypeName: row.dataset.roomTypeName,
+          baseOccupancy: Number(row.dataset.baseOccupancy) || 2,
+          fromDate: row.dataset.fromDate,
+          toDate: row.dataset.toDate,
+          additionalRooms: val,
+          note: noteEl?.value || "",
+        });
+      }
+      if (items.length === 0) {
+        alert("Vui lòng nhập số phòng muốn bổ sung (>= 1) cho ít nhất một loại phòng.");
+        return;
+      }
+      submitBtn.disabled = true;
+      try {
+        const res = await fetch(`/${pathAdmin}/tour-hotel/api/request-additional-rooms`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tourSegmentId: pressure.tourSegmentId,
+            items,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeModal();
+          if (typeof toastSuccess === "function") toastSuccess(data.message || "Đã gửi yêu cầu!");
+          else alert(data.message || "Đã gửi yêu cầu bổ sung phòng!");
+          setTimeout(() => location.reload(), 800);
+        } else {
+          if (typeof toastError === "function") toastError(data.message || "Lỗi gửi yêu cầu");
+          else alert(data.message || "Lỗi gửi yêu cầu");
+        }
+      } catch {
+        if (typeof toastError === "function") toastError("Lỗi kết nối");
+        else alert("Lỗi kết nối");
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  })();
 
   // ── Khởi chạy ───────────────────────────────────────────────────────────────
   init();

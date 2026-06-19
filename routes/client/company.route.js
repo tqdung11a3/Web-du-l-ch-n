@@ -5,6 +5,10 @@ const tourController = require("../../controllers/client/tour.controller");
 router.get("/", companyController.listCompanies);
 
 // Đặt route dài hơn trước để tránh conflict
+router.post(
+  "/:slug/tour/check-shared-feasibility",
+  tourController.checkSharedFeasibility
+);
 router.get("/:slug/tour/detail/:tourSlug", tourController.detail);
 router.get("/:slug/tours", companyController.toursByCompany);
 router.get("/:slug/hotels", companyController.hotelsByCompany);

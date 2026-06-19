@@ -173,43 +173,165 @@ block main
           option(value=i selected=(i === pagination.currentPage)) Trang #{i}
   //- End Section 7
 
+  //- Delete order modal
+  .order-delete-modal-backdrop#order-delete-modal-backdrop(style="display:none")
+    .order-delete-modal
+      .order-delete-modal__header
+        span.order-delete-modal__title Xóa đơn hàng
+      .order-delete-modal__body
+        p Bạn có chắc chắn muốn xóa đơn hàng này? Hành động này không thể hoàn tác.
+      .order-delete-modal__footer
+        button.order-delete-modal__btn.order-delete-modal__btn-cancel(type="button") Hủy
+        button.order-delete-modal__btn.order-delete-modal__btn-confirm(type="button") Xóa đơn
+
   script.
-    // Xử lý xóa đơn hàng
+    // Xử lý xóa đơn hàng với modal confirm (không dùng window.confirm)
     document.addEventListener('DOMContentLoaded', function() {
-      const deleteButtons = document.querySelectorAll('.inner-delete:not([disabled])');
-      
-      deleteButtons.forEach(button => {
+      var deleteButtons = document.querySelectorAll('.inner-delete:not([disabled])');
+      var backdrop = document.getElementById('order-delete-modal-backdrop');
+      var btnCancel = backdrop ? backdrop.querySelector('.order-delete-modal__btn-cancel') : null;
+      var btnConfirm = backdrop ? backdrop.querySelector('.order-delete-modal__btn-confirm') : null;
+      var currentDeleteId = null;
+
+      function orderListNotyf() {
+        if (typeof Notyf === 'undefined') return null;
+        return new Notyf({ duration: 3000, position: { x: 'right', y: 'top' } });
+      }
+
+      function openDeleteModal(orderId) {
+        currentDeleteId = orderId || null;
+        if (!backdrop) return;
+        backdrop.style.display = 'flex';
+      }
+
+      function closeDeleteModal() {
+        currentDeleteId = null;
+        if (!backdrop) return;
+        backdrop.style.display = 'none';
+      }
+
+      deleteButtons.forEach(function(button) {
         button.addEventListener('click', function() {
-          const orderId = this.getAttribute('data-order-id');
-          
+          var orderId = this.getAttribute('data-order-id');
           if (!orderId) {
-            alert('Không tìm thấy ID đơn hàng!');
+            var nf0 = orderListNotyf();
+            if (nf0) nf0.error('Không tìm thấy ID đơn hàng!');
+            else alert('Không tìm thấy ID đơn hàng!');
             return;
           }
-          
-          if (!confirm('Bạn có chắc chắn muốn xóa đơn hàng này? Hành động này không thể hoàn tác!')) {
+          openDeleteModal(orderId);
+        });
+      });
+
+      if (btnCancel) {
+        btnCancel.addEventListener('click', function() {
+          closeDeleteModal();
+        });
+      }
+
+      if (btnConfirm) {
+        btnConfirm.addEventListener('click', function() {
+          if (!currentDeleteId) {
+            closeDeleteModal();
             return;
           }
-          
-          fetch(`/${pathAdmin}/order/delete/${orderId}`, {
+
+          fetch(`/${pathAdmin}/order/delete/${currentDeleteId}`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
             },
           })
-          .then(res => res.json())
-          .then(data => {
-            if (data.code === 'success') {
-              alert(data.message);
-              location.reload();
-            } else {
-              alert(data.message || 'Có lỗi xảy ra khi xóa đơn hàng!');
-            }
-          })
-          .catch(error => {
-            console.error('Error deleting order:', error);
-            alert('Có lỗi xảy ra khi xóa đơn hàng!');
-          });
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              if (data.code === 'success') {
+                var nf = orderListNotyf();
+                var msg = data.message || 'Đã xóa đơn hàng thành công!';
+                if (nf) {
+                  nf.success(msg);
+                  setTimeout(function() { window.location.reload(); }, 600);
+                } else {
+                  alert(msg);
+                  window.location.reload();
+                }
+              } else {
+                var nfErr = orderListNotyf();
+                if (nfErr) nfErr.error(data.message || 'Có lỗi xảy ra khi xóa đơn hàng!');
+                else alert(data.message || 'Có lỗi xảy ra khi xóa đơn hàng!');
+              }
+            })
+            .catch(function(error) {
+              console.error('Error deleting order:', error);
+              var nfCatch = orderListNotyf();
+              if (nfCatch) nfCatch.error('Có lỗi xảy ra khi xóa đơn hàng!');
+              else alert('Có lỗi xảy ra khi xóa đơn hàng!');
+            })
+            .finally(function() {
+              closeDeleteModal();
+            });
         });
-      });
+      }
     });
+
+  style.
+    .order-delete-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1500;
+    }
+    .order-delete-modal {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+      padding: 16px 18px 14px;
+      width: 360px;
+      max-width: calc(100% - 32px);
+      font-size: 13px;
+      color: #0f172a;
+    }
+    .order-delete-modal__header {
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+    }
+    .order-delete-modal__title {
+      font-size: 14px;
+    }
+    .order-delete-modal__body {
+      margin-bottom: 12px;
+      color: #4b5563;
+      line-height: 1.5;
+    }
+    .order-delete-modal__footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .order-delete-modal__btn {
+      border-radius: 999px;
+      padding: 5px 14px;
+      font-size: 12.5px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .order-delete-modal__btn-cancel {
+      background: #f3f4f6;
+      color: #374151;
+      border-color: #e5e7eb;
+    }
+    .order-delete-modal__btn-cancel:hover {
+      background: #e5e7eb;
+    }
+    .order-delete-modal__btn-confirm {
+      background: #dc2626;
+      color: #fff;
+      border-color: #b91c1c;
+    }
+    .order-delete-modal__btn-confirm:hover {
+      background: #b91c1c;
+    }

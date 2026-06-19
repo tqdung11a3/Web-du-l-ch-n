@@ -51,12 +51,19 @@ block main
                           i.fa-solid.fa-clock
                           |  Chờ duyệt KS khác
                       else if isConfigured.status === 'rejected'
-                        span.badge.badge--red(title=isConfigured.rejectedByCompanyName ? ('Bị ' + isConfigured.rejectedByCompanyName + ' từ chối liên kết') : 'Đã bị từ chối liên kết')
+                        - var _lrc = isConfigured.rejectedByCompanyNames && isConfigured.rejectedByCompanyNames.length ? isConfigured.rejectedByCompanyNames : (isConfigured.rejectedByCompanyName ? [isConfigured.rejectedByCompanyName] : [])
+                        span.badge.badge--red(title=_lrc.length ? ('Bị ' + _lrc.join(', ') + ' từ chối liên kết') : 'Đã bị từ chối liên kết')
                           i.fa-solid.fa-circle-xmark
-                          if isConfigured.rejectedByCompanyName
-                            |  Đã bị #{isConfigured.rejectedByCompanyName} từ chối
+                          if _lrc.length === 1
+                            |  Đã bị #{_lrc[0]} từ chối
+                          else if _lrc.length > 1
+                            |  Đã bị #{_lrc.length} công ty từ chối
                           else
                             |  Đã bị từ chối
+                      else if isConfigured.status === 'cancelled'
+                        span.badge.badge--red
+                          i.fa-solid.fa-ban
+                          |  Đã huỷ
                       else
                         span.badge.badge--yellow
                           i.fa-solid.fa-pencil

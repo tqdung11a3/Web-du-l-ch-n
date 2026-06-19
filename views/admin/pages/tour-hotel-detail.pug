@@ -49,16 +49,46 @@ block main
             span.badge.badge--green Đã xác nhận
           else if existingSegment.status === 'pending_approval'
             span.badge.badge--orange Chờ duyệt KS khác
+          else if existingSegment.status === 'cancelled'
+            span.badge.badge--red Đã huỷ
           else if existingSegment.status === 'rejected'
-            if existingSegment.rejectedByCompanyName
-              span.badge.badge--red(title=existingSegment.rejectedResponseNote || ('Bị ' + existingSegment.rejectedByCompanyName + ' từ chối liên kết'))
-                |  Đã bị #{existingSegment.rejectedByCompanyName} từ chối
+            - var _rejCompanies = existingSegment.rejectedByCompanyNames && existingSegment.rejectedByCompanyNames.length ? existingSegment.rejectedByCompanyNames : (existingSegment.rejectedByCompanyName ? [existingSegment.rejectedByCompanyName] : [])
+            if _rejCompanies.length > 0
+              span.badge.badge--red(title=existingSegment.rejectedResponseNote || ('Bị ' + _rejCompanies.join(', ') + ' từ chối liên kết'))
+                if _rejCompanies.length === 1
+                  |  Đã bị #{_rejCompanies[0]} từ chối
+                else
+                  |  Đã bị #{_rejCompanies.length} công ty từ chối (#{_rejCompanies.join(', ')})
             else
               span.badge.badge--red Đã bị từ chối
           else
             span.badge.badge--yellow Bản nháp
         else
           span.badge.badge--gray Chưa cấu hình
+
+    //- ── Banner cảnh báo quota phòng ─────────────────────────────────────
+    if quotaPressure && (quotaPressure.pressureLevel === 'low' || quotaPressure.pressureLevel === 'exhausted')
+      .th-quota-banner(class=quotaPressure.pressureLevel === 'exhausted' ? 'th-quota-banner--exhausted' : 'th-quota-banner--low')
+        .th-quota-banner__icon
+          if quotaPressure.pressureLevel === 'exhausted'
+            i.fa-solid.fa-circle-xmark
+          else
+            i.fa-solid.fa-triangle-exclamation
+        .th-quota-banner__body
+          strong
+            if quotaPressure.pressureLevel === 'exhausted'
+              | Hết phòng trong quota!
+            else
+              | Quota phòng sắp không đủ
+          p
+            | Tour còn&nbsp;
+            strong #{quotaPressure.seatsRemaining} ghế
+            |&nbsp;nhưng sức chứa phòng KS trong quota chỉ còn&nbsp;
+            strong ~#{quotaPressure.personCapacityAvailable} chỗ
+            |&nbsp;(#{quotaPressure.totalAvailableRooms} phòng trống).
+        button#open-additional-rooms-modal.th-quota-banner__cta(type="button")
+          i.fa-solid.fa-plus-circle
+          |  Yêu cầu bổ sung phòng
 
     //- ── Số người yêu cầu ────────────────────────────────────────────────
     //- Luôn lấy từ seatsTotal của lịch khởi hành (hoặc tour), không dùng giá trị cũ trong segment
@@ -102,11 +132,11 @@ block main
         |  Lưu bản nháp
       button#confirm-btn.btn-confirm(type="button")
         i.fa-solid.fa-circle-check
-        if existingSegment && (existingSegment.status === 'confirmed' || existingSegment.status === 'pending_approval')
+        if existingSegment && (existingSegment.status === 'confirmed' || existingSegment.status === 'pending_approval' || existingSegment.status === 'rejected')
           |  Xác nhận lại (Re-assign phòng)
         else
           |  Xác nhận & Giữ phòng
-      if existingSegment && (existingSegment.status === 'confirmed' || existingSegment.status === 'pending_approval')
+      if existingSegment && (existingSegment.status === 'confirmed' || existingSegment.status === 'pending_approval' || existingSegment.status === 'rejected')
         button#cancel-btn.btn-cancel-segment(type="button")
           i.fa-solid.fa-ban
           |  Huỷ & Giải phóng phòng
@@ -125,12 +155,34 @@ block main
           button#th-app-dialog-ok.th-app-dialog__btn.th-app-dialog__btn--primary(type="button") Tiếp tục
 
     //- ── Hidden data cho JS ───────────────────────────────────────────────
-    script#existing-data(type="application/json")!= JSON.stringify(existingSegment)
+    //- Khi segment đã bị huỷ, không nạp lại cấu hình cũ vào form → reset trắng.
+    script#existing-data(type="application/json")!= JSON.stringify(existingSegment && existingSegment.status === 'cancelled' ? null : existingSegment)
     script#hotels-data(type="application/json")!= JSON.stringify(hotels)
     script#departure-meta(type="application/json")!= JSON.stringify({ tourId: String(tour._id), departureDate: moment(selectedDeparture.departureDate).format('YYYY-MM-DD'), endDate: selectedDeparture.endDate ? moment(selectedDeparture.endDate).format('YYYY-MM-DD') : '' })
     script#path-admin(type="application/json")!= JSON.stringify(pathAdmin)
     script#current-company-id(type="application/json")!= JSON.stringify(currentCompanyId || '')
     script#is-tour-only-admin(type="application/json")!= JSON.stringify(!!isTourOnlyAdmin)
+    script#quota-pressure-data(type="application/json")!= JSON.stringify(quotaPressure || null)
+    script#hotel-link-status-map(type="application/json")!= JSON.stringify(hotelLinkStatusMap || {})
+
+    //- Modal yêu cầu bổ sung phòng
+    #additional-rooms-modal.th-add-rooms-modal(aria-hidden="true" style="display:none")
+      .th-add-rooms-modal__backdrop
+      .th-add-rooms-modal__panel(role="dialog" aria-modal="true" aria-labelledby="add-rooms-modal-title")
+        .th-add-rooms-modal__header
+          h3#add-rooms-modal-title Yêu cầu bổ sung phòng
+          button#close-additional-rooms-modal.th-add-rooms-modal__close(type="button" aria-label="Đóng")
+            i.fa-solid.fa-xmark
+        .th-add-rooms-modal__body
+          p.th-add-rooms-modal__desc
+            | Điền số phòng muốn bổ sung thêm cho từng loại phòng bên dưới. Sau khi gửi, yêu cầu sẽ chờ admin khách sạn duyệt.
+          #additional-rooms-table-wrap
+            //- Bảng được render bởi JS từ quota-pressure-data
+        .th-add-rooms-modal__footer
+          button#cancel-additional-rooms-modal.th-add-rooms-modal__btn.th-add-rooms-modal__btn--secondary(type="button") Huỷ
+          button#submit-additional-rooms-modal.th-add-rooms-modal__btn.th-add-rooms-modal__btn--primary(type="button")
+            i.fa-solid.fa-paper-plane
+            |  Gửi yêu cầu
 
     //- Template HTML cho 1 khung thời gian (dùng bởi JS)
     template#segment-template
