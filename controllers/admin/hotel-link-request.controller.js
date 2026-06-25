@@ -382,6 +382,8 @@ module.exports.approve = async (req, res) => {
     const companyId = req.account.companyId;
     const { requestId, approvedRooms, responseNote } = req.body;
 
+
+    // Tìm request theo công ty
     const linkReq = await HotelLinkRequest.findOne({
       _id: requestId,
       toCompanyId: companyId,
@@ -450,6 +452,8 @@ module.exports.approve = async (req, res) => {
       const checkIn = new Date(rr.fromDate);
       const checkOut = new Date(rr.toDate);
 
+      // Lấy ra các booking đang chiếm phòng trong khoảng đó, để ở dưới loại trừ
+      // => Biết phòng nào đã bị khách khác hoặc tour khác giữ
       const existingBookings = await HotelBooking.find({
         "hotel.hotelId": linkReq.hotelId,
         status: { $nin: ["cancelled", "checked_out"] },
@@ -459,6 +463,7 @@ module.exports.approve = async (req, res) => {
         .select("roomTypeId roomId rooms status checkIn checkOut")
         .lean();
 
+      // Tính số phòng trống theo loại phòng
       const availableRoomIds = getAvailableRoomsForType(
         hotel.rooms || [],
         rr.roomTypeId,
@@ -489,7 +494,7 @@ module.exports.approve = async (req, res) => {
           checkOut,
           rooms: 1,
           adults: rr.baseOccupancy || 2,
-          roomId,
+          roomId, // gán phòng vật lý cụ thể
           roomTypeId: rr.roomTypeId,
           hotel: {
             hotelId: linkReq.hotelId,
@@ -497,7 +502,7 @@ module.exports.approve = async (req, res) => {
           },
           status: "confirmed",
           isTemporaryHold: false,
-          tourSegmentId: linkReq.tourSegmentId,
+          tourSegmentId: linkReq.tourSegmentId, // tour segment cụ thể
           note: `[Tour Hold – Liên kết] ${tourName} | ${depDateFmt} – ${endDateFmt} | ${rr.roomTypeName}`,
           guest: { fullName: "[Tour Hold]", phone: "", email: "" },
         });
@@ -507,6 +512,7 @@ module.exports.approve = async (req, res) => {
     }
 
     // Cập nhật link request
+    // Cập nhật lại trạng thái liên kết khi admin duyệt hoặc từ chối
     linkReq.approvedRooms = parsedApprovedRooms;
     linkReq.holdBookingIds = newHoldIds;
     linkReq.responseNote = responseNote || "";

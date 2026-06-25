@@ -499,6 +499,8 @@ block main
                               span.booking-pax  ·  #{booking.adults} NL
                             if booking.children > 0
                               span.booking-pax= '  ·  ' + booking.childrenText
+                            if booking.babies > 0
+                              span.booking-pax= '  ·  ' + booking.babiesText
                           .booking-dates
                             span Check-in: #{booking.checkInDisplay} | Check-out: #{booking.checkOutDisplay}
                         button.btn-assign-room(

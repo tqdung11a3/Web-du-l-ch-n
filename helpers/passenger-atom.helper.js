@@ -38,6 +38,8 @@
  * }} Atom
  */
 
+// File này làm một việc chính: biến danh sách hành khách → atoms để xếp phòng ghép
+
 /** Tuổi tối thiểu để làm người lớn đi cùng (anchor atom) khi ở ghép. */
 const GUARDIAN_MIN_AGE = 18;
 
@@ -213,7 +215,23 @@ function buildAtomsFromPassengers(passengers, ageBands) {
 
   // Build atoms: mỗi NL từ 18 tuổi là anchor; TE/EB và NL < 18 gắn qua guardianIdx.
   /** @type {Atom[]} */
+
+  // Build atoms: Mỗi NL ≥ 18 → một atom
   const atoms = anchorAdults.map((a) => {
+
+    // Cấu trúc members:
+
+    // a — anchor (NL ≥ 18), luôn phần tử đầu.
+    // ...list.filter(...) — mọi người khác gắn với anchor a.
+    // Quy tắc filter:
+
+    // p	Điều kiện gắn vào atom của a
+    // Chính a
+    // p.idx === a.idx → false, bỏ qua (đã có ở đầu)
+    // Em bé
+    // _babyAtomAnchorIdx(p) === a.idx (phòng KS, fallback tour)
+    // TE / NL < 18
+    // p.guardianIdx === a.idx
     const members = [
       a,
       ...list.filter((p) => {
@@ -227,6 +245,8 @@ function buildAtomsFromPassengers(passengers, ageBands) {
         return p.guardianIdx === a.idx;
       }),
     ];
+
+    // Tính effectiveSize: tổng trọng số tuổi của các thành viên trong atom
     const effectiveSize = members.reduce(
       (sum, m) => sum + _weightForAge(m.age, m.type, ageBands),
       0
@@ -379,15 +399,23 @@ function _maxDependentSlotsInRoom(maxCap, ageBands) {
  * }}
  */
 function validateAtomsFitSharedRooms(atoms, roomBuckets, ageBands) {
+
+  // buckets: phòng còn trống thực tế của hotel
   const buckets = (roomBuckets || []).filter(
     (r) => Math.floor(Number(r.capacity) || 0) > 0
   );
+
+  // Không KS nào còn phòng
   if (buckets.length === 0) {
     return { ok: true };
   }
+
+  // maxCap: phòng lớn nhất còn trống
   const maxCap = Math.max(
     ...buckets.map((r) => Math.max(1, Math.floor(Number(r.capacity) || 2)))
   );
+
+  // maxDepSlots: số slot occupancy tối đa cho TE/EB trong 1 phòng (sau khi trừ 1 NL) theo baseOccupancy và ageBands
   const maxDepSlots = _maxDependentSlotsInRoom(maxCap, ageBands);
 
   for (const atom of atoms || []) {
@@ -405,8 +433,8 @@ function validateAtomsFitSharedRooms(atoms, roomBuckets, ageBands) {
           )
         : Math.max(0, Number(atom.effectiveSize) || 0);
 
-    const tooLargeByWeight = effectiveSize > maxCap;
-    const tooManyDependents = dependents.length > maxDepSlots;
+    const tooLargeByWeight = effectiveSize > maxCap; // Tổng chỗ quy đổi cả nhóm > sức chứa phòng lớn nhất.
+    const tooManyDependents = dependents.length > maxDepSlots; // Số TE/EB (đếm đầu) > slot còn lại sau 1 NL.
 
     if (!tooLargeByWeight && !tooManyDependents) continue;
 

@@ -106,16 +106,6 @@ block main
         h2 Đang có khuyến mại kỳ nghỉ ngắn
         p.promo-text= promotionShortText
 
-    // ================== LÊN KẾ HOẠCH ĐẾN KHÁCH SẠN ==================
-    if transportOptions && transportOptions.length
-      .transport-section
-        h2 Lên kế hoạch đến khách sạn
-        .transport-cards
-          each t in transportOptions
-            .transport-card
-              i.fa-solid.fa-car-side
-              span= t
-
     // ================== TIỆN NGHI ==================
     if amenities && amenities.length
       .amenities
@@ -293,7 +283,7 @@ block main
           .allocation-actions
             button#addSelectedRoomsToCart.btn-add-allocation(type="button" disabled)
               i.fa-solid.fa-cart-plus
-              |  Thêm tất cả vào giỏ hàng
+              |  Đặt ngay
 
     // ================== DANH SÁCH PHÒNG ==================
     .rooms#rooms
@@ -405,30 +395,8 @@ block main
               i.fa-solid.fa-door-open
               |  Số lượng phòng
             p Có khoảng #{rules.numberOfRooms} phòng tại chỗ nghỉ.
-        if rules && rules.children
-          .policy-card
-            .policy-card__title
-              i.fa-solid.fa-child-reaching
-              |  Trẻ em & giường phụ
-            p= rules.children
-        if rules && rules.pets
-          .policy-card
-            .policy-card__title
-              i.fa-solid.fa-dog
-              |  Thú cưng
-            p= rules.pets
-        if rules && rules.extraBed
-          .policy-card
-            .policy-card__title
-              i.fa-solid.fa-bed
-            p= rules.extraBed
-      if rules && rules.other
-        .policy-others
-          h3 Thông tin khác
-          p= rules.other
 
     // ================== CHÍNH SÁCH TRẺ EM VÀ GIƯỜNG PHỤ ==================
-    // Ưu tiên hiển thị Age Bands mới, nếu không có thì dùng childrenPolicy cũ
     if ageBands && ageBands.length > 0
       .children-policy-section
         h2 Chính sách trẻ em và giường phụ
@@ -468,111 +436,11 @@ block main
                   p
                     i.fa-solid.fa-user-plus
                     |  Phụ thu vượt base occupancy: #{extraPersonFee} VND/đêm/người
-    else if childrenPolicy && (childrenPolicy.infant0to1 || childrenPolicy.child2to5 || childrenPolicy.guest6Plus)
-      // Fallback: Hiển thị childrenPolicy cũ nếu không có ageBands
-      .children-policy-section
-        h2 Chính sách trẻ em và giường phụ
-        .children-policy-grid
-          if childrenPolicy.infant0to1
-            .policy-detail-card
-              h3 Trẻ sơ sinh (0-1 tuổi)
-              .policy-detail-content
-                if childrenPolicy.infant0to1.freeWithExistingBed !== undefined
-                  p
-                    i.fa-solid.fa-check
-                    |  #{childrenPolicy.infant0to1.freeWithExistingBed ? 'Miễn phí khi sử dụng giường có sẵn' : 'Có phí khi sử dụng giường có sẵn'}
-                if childrenPolicy.infant0to1.cribAvailable
-                  p
-                    i.fa-solid.fa-check
-                    |  Có cũi cho trẻ sơ sinh
-                if childrenPolicy.infant0to1.note
-                  p.note= childrenPolicy.infant0to1.note
-          
-          if childrenPolicy.child2to5
-            .policy-detail-card
-              h3 Trẻ em (2-5 tuổi)
-              .policy-detail-content
-                if childrenPolicy.child2to5.freeWithExistingBed !== undefined
-                  p
-                    i.fa-solid.fa-check
-                    |  #{childrenPolicy.child2to5.freeWithExistingBed ? 'Miễn phí khi sử dụng giường có sẵn' : 'Có phí khi sử dụng giường có sẵn'}
-                if childrenPolicy.child2to5.extraBedCharge > 0
-                  - const extraBedPrice = Number(childrenPolicy.child2to5.extraBedCharge).toLocaleString('vi-VN')
-                  p
-                    i.fa-solid.fa-money-bill
-                    |  Phí giường phụ: #{extraBedPrice} VND
-                if childrenPolicy.child2to5.note
-                  p.note= childrenPolicy.child2to5.note
-          
-          if childrenPolicy.guest6Plus
-            .policy-detail-card
-              h3 Khách từ 6 tuổi trở lên
-              .policy-detail-content
-                if childrenPolicy.guest6Plus.consideredAdult !== undefined
-                  p
-                    i.fa-solid.fa-check
-                    |  #{childrenPolicy.guest6Plus.consideredAdult ? 'Được tính như người lớn' : 'Không được tính như người lớn'}
-                if childrenPolicy.guest6Plus.extraBedRequired
-                  p
-                    i.fa-solid.fa-bed
-                    |  Bắt buộc giường phụ
-                if childrenPolicy.guest6Plus.extraBedCharge > 0
-                  - const extraBedPrice = Number(childrenPolicy.guest6Plus.extraBedCharge).toLocaleString('vi-VN')
-                  p
-                    i.fa-solid.fa-money-bill
-                    |  Phí giường phụ: #{extraBedPrice} VND
-                if childrenPolicy.guest6Plus.note
-                  p.note= childrenPolicy.guest6Plus.note
-
     // ================== THÔNG TIN HỮU ÍCH ==================
-    if usefulInfo && (usefulInfo.distanceFromCityCenter || usefulInfo.timeToAirport || usefulInfo.airportTransferFee || usefulInfo.wifiFee || usefulInfo.breakfastFee || usefulInfo.builtYear || usefulInfo.numberOfFloors || usefulInfo.inRoomVoltage || usefulInfo.nonSmokingRooms || usefulInfo.numberOfRestaurants || usefulInfo.numberOfBars || usefulInfo.licenseNumber)
+    if usefulInfo && (usefulInfo.builtYear || usefulInfo.numberOfFloors || usefulInfo.inRoomVoltage || usefulInfo.nonSmokingRooms || usefulInfo.numberOfRestaurants || usefulInfo.numberOfBars || usefulInfo.licenseNumber)
       .useful-info-section
         h2 Thông tin hữu ích
         .useful-info-grid
-          // Di chuyển
-          if usefulInfo.distanceFromCityCenter || usefulInfo.timeToAirport || usefulInfo.airportTransferFee
-            .useful-info-card
-              h3
-                i.fa-solid.fa-car
-                |  Di chuyển
-              .useful-info-content
-                if usefulInfo.distanceFromCityCenter
-                  p
-                    strong Khoảng cách từ trung tâm thành phố:
-                    |  #{usefulInfo.distanceFromCityCenter}
-                if usefulInfo.timeToAirport
-                  p
-                    strong Thời gian đến sân bay:
-                    |  #{usefulInfo.timeToAirport}
-                if usefulInfo.airportTransferFee > 0
-                  - const transferFee = Number(usefulInfo.airportTransferFee).toLocaleString('vi-VN')
-                  p
-                    strong Phí đưa đón sân bay:
-                    |  #{transferFee} VND
-          
-          // Thông tin khác
-          if usefulInfo.wifiFee || usefulInfo.breakfastFee
-            .useful-info-card
-              h3
-                i.fa-solid.fa-info-circle
-                |  Thông tin khác
-              .useful-info-content
-                if usefulInfo.wifiFee > 0
-                  - const wifiFee = Number(usefulInfo.wifiFee).toLocaleString('vi-VN')
-                  p
-                    strong Phí WiFi:
-                    |  #{wifiFee} VND/ngày
-                else if usefulInfo.wifiFee === 0
-                  p
-                    i.fa-solid.fa-check
-                    |  WiFi miễn phí
-                if usefulInfo.breakfastFee > 0
-                  - const breakfastFee = Number(usefulInfo.breakfastFee).toLocaleString('vi-VN')
-                  p
-                    strong Phí bữa sáng:
-                    |  #{breakfastFee} VND
-          
-          // Về khách sạn
           if usefulInfo.builtYear || usefulInfo.numberOfFloors || usefulInfo.inRoomVoltage || usefulInfo.nonSmokingRooms || usefulInfo.numberOfRestaurants || usefulInfo.numberOfBars || usefulInfo.licenseNumber
             .useful-info-card
               h3
@@ -1146,6 +1014,12 @@ block main
           if (warningElement) {
             warningElement.style.display = 'none';
           }
+        }
+      });
+
+      selectors.forEach((select) => {
+        if (typeof window.initCustomSelectPicker === "function") {
+          window.initCustomSelectPicker(select);
         }
       });
       

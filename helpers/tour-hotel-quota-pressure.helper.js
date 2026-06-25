@@ -219,9 +219,9 @@ async function evaluateTourHotelQuotaPressure({ tourSegmentId, tourId, departure
   let pressureLevel = "ok";
   if (frames.length > 0) {
     if (totalAvailableRooms === 0 && seatsRemaining > 0) {
-      pressureLevel = "exhausted";
+      pressureLevel = "exhausted"; // Hết phòng trong quota nhưng tour vẫn còn ghế — bán thêm khách thì không còn phòng KS trong quota
     } else if (personCapacityAvailable < seatsRemaining) {
-      pressureLevel = "low";
+      pressureLevel = "low"; // Sắp thiếu — vẫn bán tour được nhưng quota phòng có thể không đủ cho hết ghế còn lại
     }
   }
 

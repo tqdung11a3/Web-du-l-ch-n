@@ -1019,6 +1019,7 @@ block main
         return { ok: true };
       }
 
+      // Chọn phòng để gán cho khách hiện tại.
       function selectRoom(roomId) {
         // Lấy các đơn KHÁC đang gán phòng này
         var existingOthers = assignments.filter(function(a) {
@@ -1081,6 +1082,7 @@ block main
         updateActionBox();
       }
 
+      // Gán các phòng đã chọn cho khách hiện tại.
       function doAssign() {
         if (selectedRoomIds.length === 0) return;
         var cust = customer;

@@ -224,25 +224,9 @@ module.exports.index = async (req, res) => {
           });
         }
 
-        if (hotelInfo.usefulInfo && hotelInfo.usefulInfo.airportTransferFee && hotelInfo.usefulInfo.airportTransferFee > 0) {
-          hotelAdditionalServices.push({
-            id: 'airport_transfer',
-            name: 'Đưa đón sân bay (1 chiều)',
-            price: hotelInfo.usefulInfo.airportTransferFee,
-            unit: 'lần',
-            maxQuantity: 2,
-            isCheckbox: false, // Quantity-based vì maxQuantity = 2
-            isGlobal: true
-          });
-        }
-        
         // Quy định
-        const checkInTime = hotelInfo.checkinTimeFrom && hotelInfo.checkinTimeTo 
-          ? `${hotelInfo.checkinTimeFrom} - ${hotelInfo.checkinTimeTo}`
-          : (hotelInfo.checkinTimeFrom || '14:00');
-        const checkOutTime = hotelInfo.checkoutTimeFrom && hotelInfo.checkoutTimeTo
-          ? `${hotelInfo.checkoutTimeFrom} - ${hotelInfo.checkoutTimeTo}`
-          : (hotelInfo.checkoutTimeFrom || '12:00');
+        const checkInTime = hotelInfo.checkinTimeFrom || '14:00';
+        const checkOutTime = hotelInfo.checkoutTimeTo || '12:00';
         
         hotelPolicies = {
           checkInTime: checkInTime,

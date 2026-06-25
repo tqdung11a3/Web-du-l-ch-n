@@ -132,31 +132,46 @@ module.exports.list = async (req, res) => {
 // ── Trang cấu hình segment cho 1 tour + 1 departure ─────────────────────────
 module.exports.detail = async (req, res) => {
   try {
+
+    // 1. Lấy thông tin tour, departure từ params và query
     const companyId = req.account.companyId;
     const { tourId } = req.params;
     const departureDateParam = req.query.departure;
 
     const tour = await Tour.findOne({ _id: tourId, companyId, deleted: false }).lean();
     if (!tour) return res.redirect(`/${pathAdmin}/tour-hotel/list`);
+    // End 1. Lấy thông tin tour, departure từ params và query
 
+    // 2. Lấy danh sách khách sạn
+
+    // Model Hotel chỉ lưu ID công ty, không lưu tên => Đầu tiên, lấy tất cả KS active
     const hotels = await Hotel.find({ deleted: false, status: "active" })
       .select("name address companyId")
       .lean();
 
+    // Gom ID công ty (bỏ trùng)
     const hotelCompanyIds = [...new Set(hotels.map((h) => String(h.companyId)).filter(Boolean))];
+
+    // Query Company một lần
     const hotelCompanies = await Company.find({ _id: { $in: hotelCompanyIds } })
       .select("name")
       .lean();
+
+    // Map id → tên (tra cứu nhanh)
     const companyNameById = {};
     for (const c of hotelCompanies) companyNameById[String(c._id)] = c.name || "";
+
+    // Gắn tên công ty vào từng KS
     for (const h of hotels) {
       h.companyName = companyNameById[String(h.companyId)] || "";
     }
+    // End 2. Lấy danh sách khách sạn
 
     let selectedDeparture = null;
     let existingSegment   = null;
 
     if (departureDateParam) {
+      // 3. Tìm departure tương ứng trong tour.departures
       selectedDeparture = (tour.departures || []).find(
         (d) => moment(d.departureDate).format("YYYY-MM-DD") === departureDateParam
       );
@@ -197,6 +212,7 @@ module.exports.detail = async (req, res) => {
             .sort({ createdAt: -1 })
             .lean();
 
+          // Chỉ giữ request mới nhất mỗi KS (theo createdAt DESC) ở phía trên
           const seenHotels = new Set();
           const segRequests = [];
           for (const r of allRequests) {
@@ -216,16 +232,20 @@ module.exports.detail = async (req, res) => {
             const hasPending = segRequests.some((r) => r.status === "pending");
             // Chỉ xét rejected THẬT (do KS bấm Từ chối), bỏ qua auto-closed
             // bởi chính bên gửi (khi admin tour cấu hình lại).
+
+            // Reject do khách sạn từ chối
             const rejectedReqs = segRequests.filter(
               (r) => r.status === "rejected" && !isAutoClosed(r)
             );
+
+            // admin tour cấu hình lại
             const hasCancelled = segRequests.some(
               (r) => r.status === "cancelled" || isAutoClosed(r)
             );
             if (hasPending) {
-              existingSegment.status = "pending_approval";
+              existingSegment.status = "pending_approval"; // Chờ duyệt KS khác
             } else if (rejectedReqs.length > 0) {
-              existingSegment.status = "rejected";
+              existingSegment.status = "rejected"; // ít nhất 1 KS từ chối
               // Gom tên tất cả công ty đã từ chối (loại trùng)
               const uniqueCompanies = [
                 ...new Set(rejectedReqs.map((r) => r.toCompanyName).filter(Boolean)),
@@ -236,9 +256,9 @@ module.exports.detail = async (req, res) => {
               existingSegment.rejectedResponseNote =
                 rejectedReqs[0].responseNote || "";
             } else if (hasCancelled) {
-              existingSegment.status = "draft";
+              existingSegment.status = "draft"; // Request bị huỷ / auto-closed, cần cấu hình lại
             } else {
-              existingSegment.status = "confirmed";
+              existingSegment.status = "confirmed"; // Các KS liên quan đã duyệt 
             }
           }
         }
@@ -359,6 +379,9 @@ module.exports.hotelAvailability = async (req, res) => {
     if (excludeTourSegmentId) {
       bookingQuery.tourSegmentId = { $ne: excludeTourSegmentId };
     }
+
+    // Những booking đã tồn tại, tìm theo bookingQuery ở trên
+    // Để có gì, hệ thống sẽ trừ đi những booking đã tồn tại khỏi số phòng trống của hotel
     const existingBookings = await HotelBooking.find(bookingQuery)
       .select("roomTypeId roomId rooms status checkIn checkOut")
       .lean();

@@ -47,8 +47,9 @@ header.header
             // dùng button để dễ bắt focus/click trên mobile
             button.user-trigger(type="button" aria-haspopup="true" aria-expanded="false")
               // có thể thay bằng avatar nếu sau này có
+              i.fa-regular.fa-user.user-trigger-icon(aria-hidden="true")
               span.user-name #{account.fullName}
-              i.fa-solid.fa-chevron-down
+              i.fa-solid.fa-chevron-down.user-trigger-chevron(aria-hidden="true")
             ul.user-dropdown
               li
                 a(href="/notifications")

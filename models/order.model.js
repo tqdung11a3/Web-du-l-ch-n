@@ -90,7 +90,6 @@ const schema = new mongoose.Schema(
     fullName: String,
     phone: String,
     email: String,
-    cccdImages: [String],
     note: String,
     items: Array,
     subTotal: Number,

@@ -38,9 +38,15 @@ function _validateCurrentAtomsAcrossHotels(currentAtoms, hotelsResolved) {
     );
     if (!hasDependents) continue;
 
-    let fitsSomewhere = false;
+    let fitsSomewhere = false; // Ban đầu: atom chưa chứng minh vừa phòng ở KS nào.
     for (const h of hotelsResolved) {
-      const [sized] = reweightAtomsForAgeBands([atom], h.ageBands || []);
+      const [sized] = reweightAtomsForAgeBands([atom], h.ageBands || []); // Cùng atom, mỗi KS có ageBands khác → effectiveSize có thể khác.
+      // Kiểm tra một atom với phòng còn trống của KS h:
+
+      // effectiveSize <= maxCap (phòng lớn nhất còn trống)
+      // Số TE/EB (dependents.length) ≤ maxDepSlots
+      // Atom phải trọn một phòng — không tách trẻ sang phòng khác.
+      
       const check = validateAtomsFitSharedRooms(
         [sized],
         h.rooms,
@@ -786,6 +792,13 @@ async function aggregateSharedAtomsBySegment({
  *   detail?: any,
  * }>}
  */
+
+// Hàm này trả lời 1 câu hỏi duy nhất
+// Đoàn khách này, nếu chọn ở ghép trong khung ngày X→Y, có nhét được vào phòng còn trống của tour không?
+
+// Chưa đặt phòng thật, chưa tạo booking.
+// Chỉ kiểm tra + mô phỏng xếp → trả ok: true/false và lời giải thích.
+// Chỉ dùng khi khách chọn ở ghép, không dùng cho ở riêng.
 async function evaluateSharedFeasibilityV2Multi(request) {
   const incomingHotels = Array.isArray(request.hotels) ? request.hotels : [];
   if (incomingHotels.length === 0) {
@@ -801,7 +814,12 @@ async function evaluateSharedFeasibilityV2Multi(request) {
   // (BR-02..04). Hotel còn 0 phòng → loại khỏi danh sách (BR-05).
   const hotelsResolved = [];
   let anyHasRawQuota = false;
+
+  // Mỗi KS còn bao nhiêu phòng còn trống thực tế
   for (const h of incomingHotels) {
+
+    // raw - Admin cấp bao nhiêu phòng 
+    // available - Phòng còn trống thực tế
     const { raw, available } = await resolveAvailableRoomQuotaForSegmentHotel({
       tourSegmentId: request.tourSegmentId,
       hotelId: h.hotelId,
@@ -809,6 +827,7 @@ async function evaluateSharedFeasibilityV2Multi(request) {
       toDate: request.toDate,
       excludeOrderCode: request.excludeOrderCode || null,
     });
+
     if (raw.length > 0) anyHasRawQuota = true;
     if (available.length === 0) continue;
     const ageBands = await _getHotelAgeBands(h.hotelId);
@@ -820,6 +839,8 @@ async function evaluateSharedFeasibilityV2Multi(request) {
     });
   }
 
+
+  // Không KS nào còn phòng
   if (hotelsResolved.length === 0) {
     // Phân biệt: chưa từng cấu hình quota nào vs cấu hình có nhưng book hết.
     if (!anyHasRawQuota) {
@@ -841,6 +862,8 @@ async function evaluateSharedFeasibilityV2Multi(request) {
   // Build atoms cho đoàn hiện tại (ageBands rỗng → reweight per hotel).
   let currentAtoms = [];
   try {
+
+    // gom hành khách thành atoms
     currentAtoms = buildAtomsFromPassengers(request.passengers || [], []);
   } catch (e) {
     return {
@@ -854,6 +877,9 @@ async function evaluateSharedFeasibilityV2Multi(request) {
     return { ok: true, allocations: [] };
   }
 
+  // Kiểm tra xem các atom có khớp với các hotel không
+  // Ví dụ: Bố + 3 trẻ, phòng lớn nhất còn 2 chỗ → fail (dù còn nhiều phòng khác)
+  // Fail → message kiểu “trẻ em vượt quá khả năng phân bổ phòng”.
   const crossHotelAtomCheck = _validateCurrentAtomsAcrossHotels(
     currentAtoms,
     hotelsResolved
@@ -1074,6 +1100,8 @@ async function countActiveBookedRoomsByType({
  *   }>,
  * }>}
  */
+
+// Với đoàn ở ghép tại một KS, trong một khung ngày, các atom (nhóm NL + trẻ) được xếp vào loại phòng nào — mở phòng mới hay ghép phòng đang còn chỗ?
 async function assignSharedAtomsToRooms({
   tourSegmentId,
   hotelId,
@@ -1083,6 +1111,8 @@ async function assignSharedAtomsToRooms({
   toDate,
   atoms,
 }) {
+
+  // quota: danh sách phòng thực có (theo loại) mà admin đã cấu hình cho cặp (segment, hotel) trong khung thời gian.
   const quota = await resolveRoomQuotaForSegmentHotel({
     tourSegmentId,
     hotelId,
@@ -1277,6 +1307,16 @@ async function assignSharedAtomsToRooms({
  *   used: number,
  * }>>}
  */
+
+// Trên KS này, trong khung ngày này, phòng vật lý nào đang ở ghép và còn chỗ trống để nhận thêm khách cùng giới tính?
+
+// Phòng 301 (Standard, cap 2):
+
+// Đơn A: 1 nữ đã xếp vào → used = 1
+// Còn 1 chỗ cho nữ khác
+// Đơn B (nữ) có thể ghép vào 301 thay vì mở phòng 302
+// getPartialSharedRooms tìm các phòng kiểu đó và trả: [{ _thId: "301", roomTypeId: "301", roomTypeName: "Standard", capacity: 2, gender: "female", used: 1 }]
+
 async function getPartialSharedRooms({
   tourSegmentId,
   hotelId,
@@ -1457,9 +1497,9 @@ async function getPartialSharedRooms({
     const cap = capByRoomType[String(g.roomTypeId)] || 0;
     if (cap <= 0) continue;
     // Mixed-gender room (do dữ liệu lỗi) — KHÔNG được dùng để ghép thêm.
-    if (g.mixedGender) continue;
+    if (g.mixedGender) continue; // phòng ghép chứa atoms khác giới — không hợp lệ.
     if (!g.gender) continue; // không có gender → không thể ghép cùng giới
-    const remaining = cap - g.usedSum;
+    const remaining = cap - g.usedSum; // số chỗ trống còn lại trong phòng.
     if (remaining <= 0) continue;
     out.push({
       _thId: thId,

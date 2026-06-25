@@ -33,7 +33,6 @@ module.exports.createPost = async (req, res, next) => {
     // ===== Điểm nổi bật / khuyến mại / di chuyển =====
     highlights: Joi.string().allow(""), // textarea nhiều dòng
     promotionShortText: Joi.string().allow(""),
-    transportOptions: Joi.string().allow(""), // textarea nhiều dòng
 
     // ===== Điểm đánh giá =====
     ratingOverall: numberLike.allow(""),
@@ -46,14 +45,8 @@ module.exports.createPost = async (req, res, next) => {
 
     // ===== Quy định chỗ nghỉ & thông tin hữu ích =====
     checkinTimeFrom: Joi.string().allow(""),
-    checkinTimeTo: Joi.string().allow(""),
-    checkoutTimeFrom: Joi.string().allow(""),
     checkoutTimeTo: Joi.string().allow(""),
     numberOfRooms: numberLike.allow(""),
-    rulesChildren: Joi.string().allow(""),
-    rulesPets: Joi.string().allow(""),
-    rulesExtraBed: Joi.string().allow(""),
-    rulesOther: Joi.string().allow(""),
 
     // ===== FAQ =====
     faqQuestions: stringOrArray.optional(),

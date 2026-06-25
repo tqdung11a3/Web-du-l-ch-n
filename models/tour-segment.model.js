@@ -30,7 +30,7 @@ const hotelInSegmentSchema = new Schema(
     hotelId:      { type: Types.ObjectId, ref: "Hotel", required: true },
     hotelName:    { type: String, default: "" },
     isPrimary:    { type: Boolean, default: false }, // true = khách sạn chính
-    roomAllocations: { type: [roomAllocationSchema], default: [] },
+    roomAllocations: { type: [roomAllocationSchema], default: [] }, // phân bổ phòng theo loại mà admin tour cấu hình
     totalPeople:  { type: Number, default: 0 }, // tổng sức chứa hotel này trong khung
   },
   { _id: true }
@@ -43,11 +43,6 @@ const segmentSchema = new Schema(
     toDate:        { type: Date, required: true },
     hotels:        { type: [hotelInSegmentSchema], default: [] },
     totalCapacity: { type: Number, default: 0 }, // tổng sức chứa của tất cả hotels
-    status: {
-      type: String,
-      enum: ["draft", "confirmed", "pending_approval", "rejected"],
-      default: "draft",
-    },
   },
   { _id: true }
 );
@@ -97,7 +92,7 @@ const schema = new Schema(
 
     segments: { type: [segmentSchema], default: [] },
 
-    // Phân công phòng cho từng khách hàng (sau khi admin xếp thủ công)
+    // Phân công phòng cho từng khách hàng
     assignments: { type: [roomAssignmentSchema], default: [] },
 
     status: {

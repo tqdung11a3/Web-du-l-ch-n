@@ -243,9 +243,13 @@ button {
   position: fixed;
   top: 0;
   left: 0;
+  right: 0;
   width: 100%;
+  max-width: 100%;
   z-index: 9999;
   display: flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .header .inner-logo {
@@ -270,6 +274,7 @@ button {
 
 .header .inner-wrap {
   flex: 1;
+  min-width: 0;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -342,9 +347,17 @@ button {
 }
 
 @media (max-width: 991.98px) {
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
   .header .inner-logo {
     width: auto;
-    margin-left: 30px;
+    flex-shrink: 0;
+    margin-left: 12px;
+    min-width: 0;
   }
 
   .header .inner-button-menu {
@@ -355,17 +368,37 @@ button {
     background-color: transparent;
     border: 0;
     cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .header .inner-wrap {
+    margin-right: 12px;
+    gap: 12px;
   }
 }
 
 @media (max-width: 575.98px) {
   .header .inner-logo {
-    margin-left: 15px;
+    margin-left: 12px;
   }
 
   .header .inner-wrap {
-    margin-right: 15px;
-    gap: 20px;
+    margin-right: 12px;
+    gap: 10px;
+  }
+
+  .header .inner-account .inner-avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .admin-tab-switch .tab-btn {
+    font-size: 12px;
+    height: 46px;
+  }
+
+  .admin-tab-switch .tab-btn i {
+    font-size: 14px;
   }
 }
 /* End Header */
@@ -375,23 +408,27 @@ button {
   position: fixed;
   top: 70px;
   left: 0;
+  right: 0;
   width: 100%;
+  max-width: 100%;
   background-color: white;
   border-bottom: 1px solid #e0e0e0;
   z-index: 9998;
   display: flex;
   padding: 0;
+  box-sizing: border-box;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .admin-tab-switch .tab-btn {
-  flex: 1;
-  max-width: 240px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
   height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   background-color: transparent;
   border: none;
   border-bottom: 3px solid transparent;
@@ -400,6 +437,15 @@ button {
   font-size: 14px;
   color: #6b7280;
   transition: all 0.2s;
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.admin-tab-switch .tab-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .admin-tab-switch .tab-btn:hover {
@@ -415,6 +461,14 @@ button {
 
 .admin-tab-switch .tab-btn i {
   font-size: 16px;
+  flex-shrink: 0;
+}
+
+@media (min-width: 992px) {
+  .admin-tab-switch .tab-btn {
+    flex: 1;
+    max-width: 240px;
+  }
 }
 
 @media (max-width: 991.98px) {
@@ -593,15 +647,100 @@ body:has(.super-admin-sider) .main {
 
 @media (max-width: 991.98px) {
   .main {
-    left: 0;
-    width: 100%;
-    min-width: 100vw;
+    left: 0 !important;
+    right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 }
 
-@media (max-width: 575.98px) {
+@media (max-width: 767.98px) {
   .main {
-    padding: 30px 15px;
+    padding: 20px 12px;
+  }
+
+  .header .inner-account .inner-text {
+    display: none;
+  }
+
+  .header .inner-wrap {
+    gap: 12px;
+    margin-right: 12px;
+  }
+
+  .admin-tab-switch .tab-btn {
+    font-size: 12px;
+    gap: 4px;
+    padding: 0 6px;
+  }
+
+  .box-head {
+    flex-direction: column;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    gap: 8px;
+    max-width: 100%;
+  }
+
+  .box-title {
+    font-size: 24px;
+    margin-bottom: 0;
+    max-width: 100%;
+  }
+
+  .company-badge {
+    white-space: normal;
+    word-break: break-word;
+    max-width: 100%;
+    align-self: flex-start;
+    font-size: 13px;
+  }
+
+  .section-1 {
+    gap: 16px;
+  }
+
+  .section-1 .inner-item {
+    padding: 20px 14px;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .section-1 .inner-item .inner-icon img {
+    width: 48px;
+  }
+
+  .section-1 .inner-item .inner-content {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .section-1 .inner-item .inner-number {
+    font-size: 22px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+
+  .section-2 {
+    padding: 16px;
+    margin-top: 20px;
+  }
+
+  .section-2 .inner-head .inner-title {
+    font-size: 18px;
+  }
+
+  .section-2 .inner-head .inner-filter input {
+    width: 100%;
+    max-width: 160px;
+  }
+
+  .section-2 .inner-chart {
+    height: 220px;
   }
 }
 /* End Main */
@@ -663,6 +802,11 @@ body:has(.super-admin-sider) .main {
   justify-content: center;
   gap: 20px;
   padding: 28px 10px;
+  min-width: 0;
+}
+
+.section-1 .inner-item .inner-icon {
+  flex-shrink: 0;
 }
 
 .section-1 .inner-item .inner-icon img {
@@ -681,6 +825,12 @@ body:has(.super-admin-sider) .main {
   font-weight: 700;
   font-size: 28px;
   color: var(--color-text);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.section-1 .inner-item .inner-content {
+  min-width: 0;
 }
 
 @media (max-width: 1199.98px) {
@@ -4401,7 +4551,9 @@ a.btn-tour-hold-detail { text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px; /* tùy hệ thống spacing của bạn */
+  margin-bottom: 16px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* nhãn tên công ty bên phải */
@@ -4409,10 +4561,11 @@ a.btn-tour-hold-detail { text-decoration: none; }
   padding: 8px 12px;
   border-radius: 8px;
   background: #eef6ff;
-  color: #0b5ed7; /* tông xanh nhẹ */
+  color: #0b5ed7;
   font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.3;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* ============================
@@ -6477,6 +6630,10 @@ a.btn-tour-hold-detail { text-decoration: none; }
 /* Hotel Dashboard */
 .hotel-dashboard {
   padding: 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .dashboard-header {
@@ -6646,6 +6803,53 @@ a.btn-tour-hold-detail { text-decoration: none; }
 @media (max-width: 767.98px) {
   .summary-cards {
     grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    margin-bottom: 20px;
+    gap: 12px;
+  }
+
+  .dashboard-title {
+    font-size: 24px;
+  }
+
+  .dashboard-subtitle {
+    font-size: 14px;
+  }
+
+  .summary-card {
+    padding: 18px;
+    min-width: 0;
+  }
+
+  .hotel-dashboard .revenue-chart-section {
+    padding: 16px !important;
+    margin-bottom: 16px;
+  }
+
+  .hotel-dashboard .revenue-chart-section .section-header {
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    gap: 8px;
+  }
+
+  .hotel-dashboard .revenue-chart-section .section-title {
+    font-size: 14px !important;
+    line-height: 1.35;
+  }
+
+  .hotel-dashboard .revenue-chart-wrapper {
+    max-width: 100%;
+    height: 220px !important;
+  }
+
+  .hotel-dashboard .daily-month-picker {
+    margin-left: 0;
+    width: 100%;
+    flex-wrap: wrap;
   }
 }
 
@@ -10121,7 +10325,7 @@ a.btn-tour-hold-detail { text-decoration: none; }
   chồng lên đáy thanh; padding-top 11px của .sider trông như bị che.
 */
 :root {
-  --hotel-selector-band-height: 78px;
+  --hotel-selector-band-height: 72px;
 }
 
 /* Full width phía trên sidebar (giống hàng tab Tour/Khách sạn) */
@@ -10146,103 +10350,123 @@ a.btn-tour-hold-detail { text-decoration: none; }
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+/* Ẩn bản hotel-selector lồng trong main (layout đã có một bản cố định phía trên) */
+.main .hotel-selector-bar {
+  display: none !important;
+}
+
 /* Ẩn hotel selector */
 .hotel-selector-bar.hidden {
   display: none !important;
 }
 
 /* Sidebar bắt đầu dưới hết thanh chọn KS (không chồng; bỏ padding-top để mục đầu không lọt dưới thanh) */
-body:has(.hotel-selector-bar:not(.hidden)) .sider:not(.super-admin-sider) {
+body:has(> .hotel-selector-bar:not(.hidden)) .sider:not(.super-admin-sider) {
   top: calc(120px + var(--hotel-selector-band-height));
   height: calc(100vh - 120px - var(--hotel-selector-band-height));
   padding-top: 0;
   padding-bottom: 11px;
 }
 
-body:has(.hotel-selector-bar.hidden) .sider:not(.super-admin-sider) {
+body:has(> .hotel-selector-bar.hidden) .sider:not(.super-admin-sider) {
   top: 120px;
   height: calc(100vh - 120px);
   padding: 11px 0;
 }
 
-body.admin-hotel-only:has(.hotel-selector-bar:not(.hidden)) .sider:not(.super-admin-sider) {
+body.admin-hotel-only:has(> .hotel-selector-bar:not(.hidden)) .sider:not(.super-admin-sider) {
   top: calc(70px + var(--hotel-selector-band-height));
   height: calc(100vh - 70px - var(--hotel-selector-band-height));
   padding-top: 0;
   padding-bottom: 11px;
 }
 
-body.admin-hotel-only:has(.hotel-selector-bar.hidden) .sider:not(.super-admin-sider) {
+body.admin-hotel-only:has(> .hotel-selector-bar.hidden) .sider:not(.super-admin-sider) {
   top: 70px;
   height: calc(100vh - 70px);
   padding: 11px 0;
 }
 
 /* Điều chỉnh main content khi có hotel selector */
-body:has(.hotel-selector-bar:not(.hidden)) .main {
+body:has(> .hotel-selector-bar:not(.hidden)) .main {
   top: calc(120px + var(--hotel-selector-band-height));
   min-height: calc(100vh - 120px - var(--hotel-selector-band-height));
 }
 
 /* Khi hotel selector bị ẩn, main content trở về vị trí ban đầu */
-body:has(.hotel-selector-bar.hidden) .main {
+body:has(> .hotel-selector-bar.hidden) .main {
   top: 120px; /* 70px header + 50px tab switch */
   min-height: calc(100vh - 120px);
 }
 
 /* Admin chỉ tab KS: không có hàng chuyển tab → chỉ header + thanh chọn KS */
-body.admin-hotel-only .hotel-selector-bar:not(.hidden) {
+body.admin-hotel-only > .hotel-selector-bar:not(.hidden) {
   top: 70px;
 }
 
-body.admin-hotel-only:has(.hotel-selector-bar:not(.hidden)) .main {
+body.admin-hotel-only:has(> .hotel-selector-bar:not(.hidden)) .main {
   top: calc(70px + var(--hotel-selector-band-height));
   min-height: calc(100vh - 70px - var(--hotel-selector-band-height));
 }
 
-body.admin-hotel-only:has(.hotel-selector-bar.hidden) .main {
+body.admin-hotel-only:has(> .hotel-selector-bar.hidden) .main {
   top: 70px;
   min-height: calc(100vh - 70px);
 }
 
 @media (max-width: 991.98px) {
-  body:has(.hotel-selector-bar:not(.hidden)) .main {
+  body:has(> .hotel-selector-bar:not(.hidden)) .main {
     top: calc(120px + var(--hotel-selector-band-height));
     min-height: calc(100vh - 120px - var(--hotel-selector-band-height));
+    left: 0 !important;
+    right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100%;
   }
 
-  body:has(.hotel-selector-bar.hidden) .main {
+  body:has(> .hotel-selector-bar.hidden) .main {
     top: 120px;
+    left: 0 !important;
+    right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100%;
   }
 
-  body.admin-hotel-only:has(.hotel-selector-bar:not(.hidden)) .main {
+  body.admin-hotel-only:has(> .hotel-selector-bar:not(.hidden)) .main {
     top: calc(70px + var(--hotel-selector-band-height));
     min-height: calc(100vh - 70px - var(--hotel-selector-band-height));
+    left: 0 !important;
+    right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100%;
   }
 
-  body.admin-hotel-only:has(.hotel-selector-bar.hidden) .main {
+  body.admin-hotel-only:has(> .hotel-selector-bar.hidden) .main {
     top: 70px;
+    left: 0 !important;
+    right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100%;
   }
 
   /* Menu cạnh trên mobile: căn dưới thanh KS khi mở overlay */
-  body:has(.hotel-selector-bar:not(.hidden)) .sider.active {
+  body:has(> .hotel-selector-bar:not(.hidden)) .sider.active {
     top: calc(120px + var(--hotel-selector-band-height));
     height: calc(100vh - 120px - var(--hotel-selector-band-height));
   }
 
-  body.admin-hotel-only:has(.hotel-selector-bar:not(.hidden)) .sider.active {
+  body.admin-hotel-only:has(> .hotel-selector-bar:not(.hidden)) .sider.active {
     top: calc(70px + var(--hotel-selector-band-height));
     height: calc(100vh - 70px - var(--hotel-selector-band-height));
   }
 }
 
 .hotel-selector-bar .search-box {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 .hotel-selector-bar .search-box i {
@@ -10276,7 +10500,9 @@ body.admin-hotel-only:has(.hotel-selector-bar.hidden) .main {
 
 .hotel-dropdown-wrapper {
   position: relative;
-  min-width: 200px;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .hotel-selector-bar .hotel-dropdown {
@@ -10308,13 +10534,27 @@ body.admin-hotel-only:has(.hotel-selector-bar.hidden) .main {
 }
 
 @media (max-width: 767.98px) {
-  .hotel-selector-bar {
-    flex-direction: column;
-    gap: 12px;
+  :root {
+    --hotel-selector-band-height: 64px;
   }
-  
-  .hotel-dropdown-wrapper {
-    min-width: 100%;
+
+  .hotel-selector-bar {
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 12px;
+    gap: 0;
+  }
+
+  .hotel-selector-bar .hotel-dropdown-wrapper {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .hotel-selector-bar .hotel-dropdown {
+    max-width: 100%;
+    font-size: 13px;
+    padding: 8px 36px 8px 12px;
   }
 }
 /* End Hotel Selector */

@@ -13,6 +13,8 @@
 
 (function () {
   // ── Lấy dữ liệu từ thẻ script hidden ───────────────────────────────────────
+
+  // Trước khi gửi, trang đã biết tour nào, khách sạn nào, và trạng thái yêu cầu liên kết từng KS:
   const existingData  = JSON.parse(document.getElementById("existing-data")?.textContent || "null");
   const hotelsData    = JSON.parse(document.getElementById("hotels-data")?.textContent   || "[]");
   const departureMeta = JSON.parse(document.getElementById("departure-meta")?.textContent|| "{}");
@@ -140,6 +142,7 @@
   }
 
   // ── Khởi tạo dữ liệu từ existing segment ───────────────────────────────────
+  // Kiểu nó sẽ khôi phục lại những giá trị mà admin đã điền ở segment, sau đó render ra giao diện
   function init() {
     if (existingData && existingData.segments && existingData.segments.length > 0) {
       for (const seg of existingData.segments) {
@@ -199,7 +202,7 @@
       }
     });
 
-    // Nút Thêm khách sạn
+    // Admin bấm nút Thêm khách sạn → hiện modal chọn khách sạn
     el.querySelector(".seg-add-hotel-btn").addEventListener("click", () => {
       const hotelId = sel.value;
       if (!hotelId) { toastError("Vui lòng chọn khách sạn trước"); return; }
@@ -263,6 +266,7 @@
     const card = createHotelCard(hotelId, hotelName, isPrimary);
     segEl.querySelector(".seg-hotels-list").appendChild(card);
 
+    // gọi api lấy tình trạng phòng và render lên card
     await fetchAndRenderRoomTypes(card, hotelId, fromDate, toDate);
     updateSegmentCapacity(segEl);
     updateGrandTotal();
@@ -513,6 +517,7 @@
         return;
       }
 
+      // Dữ liệu trả về được dùng ở đây — duyệt data.roomTypes và render từng loại phòng:
       const segEl = card.closest(".th-segment-item");
       for (const rt of data.roomTypes) {
         const row = createRoomTypeRow(rt.roomTypeId, rt.roomTypeName, rt.baseOccupancy, rt.availableRooms, 0, segEl);
@@ -744,6 +749,8 @@
   }
 
   // ── Thu thập dữ liệu segments để gửi ───────────────────────────────────────
+
+  // Đây là bước thu thập toàn bộ cấu hình (khung ngày, KS, loại phòng, số phòng giữ) trước khi gửi API:
   function collectSegments() {
     const segments = [];
     segmentsWrapper.querySelectorAll(".th-segment-item").forEach((segEl) => {
@@ -781,7 +788,7 @@
       });
 
       const totalCapacity = hotels.reduce((s, h) => s + h.totalPeople, 0);
-      segments.push({ fromDate, toDate, hotels, totalCapacity, status: "draft" });
+      segments.push({ fromDate, toDate, hotels, totalCapacity });
     });
     return segments;
   }
@@ -818,6 +825,9 @@
   }
 
   // ── Xác nhận & Giữ phòng ───────────────────────────────────────────────────
+
+  // hàm trung tâm gửi yêu cầu liên kết
+  // hàm quan trọng nhất, gửi yêu cầu liên kết
   async function confirmSegments() {
     const segments = collectSegments();
     if (segments.length === 0) {
@@ -825,6 +835,7 @@
       return;
     }
 
+    // Validate từng khung phải đủ chỗ
     const pax = parseInt(paxInput?.value, 10) || 0;
     // Kiểm tra từng khung: mỗi khung phải đủ chỗ riêng lẻ
     const segEls = Array.from(segmentsWrapper.querySelectorAll(".th-segment-item"));
@@ -844,6 +855,7 @@
       return;
     }
 
+    // Xác nhận lại cấu hình nếu đã từng confirmed hoặc pending_approval
     const segStatus = existingData?.status;
     if (segStatus === "confirmed" || segStatus === "pending_approval") {
       const okPartial = await showThConfirm({
@@ -927,6 +939,8 @@
     }
 
     try {
+
+      // gọi api xác nhận cấu hình
       const res  = await fetch(`/${pathAdmin}/tour-hotel/api/confirm-segments`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -1002,6 +1016,8 @@
 
   paxInput?.addEventListener("input", updatePaxDisplay);
   saveDraftBtn?.addEventListener("click", saveDraft);
+
+  // Bấm “Xác nhận & Giữ phòng” — gửi yêu cầu liên kết
   confirmBtn?.addEventListener("click", confirmSegments);
   cancelBtn?.addEventListener("click", cancelSegments);
 

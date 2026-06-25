@@ -659,10 +659,24 @@ function canAllocateAtomicGroupsAcrossHotels({
  *   leftoverRooms: Array<{roomTypeId:string, roomTypeName:string, capacity:number}>,
  * }}
  */
+
+// Giải thích assignAtomsToPhysicalRooms (662–802)
+// Đây là thuật toán xếp phòng cho ở ghép: nhận danh sách atom (nhóm NL + trẻ) và danh sách phòng có thể dùng, rồi quyết định atom nào vào phòng nào.
+
+// Được gọi từ assignSharedAtomsToRooms — không đọc DB, chỉ tính toán thuần.
+
+// Câu hỏi hàm trả lời
+// Với các atom của đơn hiện tại, xếp sao cho:
+
+// Mỗi atom trọn một phòng (không tách nhóm)
+// Không trộn nam/nữ trong một phòng
+// Ưu tiên ghép phòng đang còn chỗ (partial) trước khi mở phòng mới
+// Tận dụng phòng nhỏ vừa đủ (best-fit) để giữ phòng lớn cho atom to sau
+
 function assignAtomsToPhysicalRooms({
-  atoms,
-  physicalRooms,
-  preExistingOpenRooms,
+  atoms, // danh sách atom (nhóm NL + trẻ)
+  physicalRooms, // Phòng vật lý chưa ai dùng
+  preExistingOpenRooms, // Phòng đang ghép, còn slot
 }) {
   const atomList = (atoms || [])
     .filter((a) => a && Number(a.effectiveSize) > 0)
@@ -711,6 +725,7 @@ function assignAtomsToPhysicalRooms({
   for (const gender of ["male", "female"]) {
     const groupAtoms = atomList
       .filter((a) => a.gender === gender)
+      // Sắp xếp giảm dần theo effectiveSize để ưu tiên ghép phòng lớn cho atom lớn
       .sort((a, b) => b.effectiveSize - a.effectiveSize); // FFD desc
 
     for (const atom of groupAtoms) {
@@ -794,10 +809,10 @@ function assignAtomsToPhysicalRooms({
   }
 
   return {
-    ok: leftoverAtoms.length === 0,
-    assignments: finalAssignments,
-    leftoverAtoms,
-    leftoverRooms: roomPool.map(({ _origIdx, ...rest }) => rest),
+    ok: leftoverAtoms.length === 0, // false nếu còn atom không xếp được
+    assignments: finalAssignments, // danh sách phòng được xếp
+    leftoverAtoms, // danh sách atom không xếp được
+    leftoverRooms: roomPool.map(({ _origIdx, ...rest }) => rest), // danh sách phòng vật lý không dùng
   };
 }
 

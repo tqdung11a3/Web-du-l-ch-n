@@ -3957,50 +3957,6 @@ if (hotelCreateForm) {
         });
       }
       
-      // Children Policy (GIỮ LẠI ĐỂ TƯƠNG THÍCH NGƯỢC)
-      const infant0to1FreeWithExistingBed = hotelCreateForm.querySelector('input[name="infant0to1FreeWithExistingBed"]');
-      const infant0to1CribAvailable = hotelCreateForm.querySelector('input[name="infant0to1CribAvailable"]');
-      const infant0to1Note = hotelCreateForm.querySelector('input[name="infant0to1Note"]');
-      if (infant0to1FreeWithExistingBed && infant0to1FreeWithExistingBed.checked) {
-        formData.append("infant0to1FreeWithExistingBed", "on");
-      }
-      if (infant0to1CribAvailable && infant0to1CribAvailable.checked) {
-        formData.append("infant0to1CribAvailable", "on");
-      }
-      if (infant0to1Note) {
-        formData.append("infant0to1Note", infant0to1Note.value || "");
-      }
-      
-      const child2to5FreeWithExistingBed = hotelCreateForm.querySelector('input[name="child2to5FreeWithExistingBed"]');
-      const child2to5ExtraBedCharge = hotelCreateForm.querySelector('input[name="child2to5ExtraBedCharge"]');
-      const child2to5Note = hotelCreateForm.querySelector('input[name="child2to5Note"]');
-      if (child2to5FreeWithExistingBed && child2to5FreeWithExistingBed.checked) {
-        formData.append("child2to5FreeWithExistingBed", "on");
-      }
-      if (child2to5ExtraBedCharge) {
-        formData.append("child2to5ExtraBedCharge", child2to5ExtraBedCharge.value || "0");
-      }
-      if (child2to5Note) {
-        formData.append("child2to5Note", child2to5Note.value || "");
-      }
-      
-      const guest6PlusConsideredAdult = hotelCreateForm.querySelector('input[name="guest6PlusConsideredAdult"]');
-      const guest6PlusExtraBedRequired = hotelCreateForm.querySelector('input[name="guest6PlusExtraBedRequired"]');
-      const guest6PlusExtraBedCharge = hotelCreateForm.querySelector('input[name="guest6PlusExtraBedCharge"]');
-      const guest6PlusNote = hotelCreateForm.querySelector('input[name="guest6PlusNote"]');
-      if (guest6PlusConsideredAdult && guest6PlusConsideredAdult.checked) {
-        formData.append("guest6PlusConsideredAdult", "on");
-      }
-      if (guest6PlusExtraBedRequired && guest6PlusExtraBedRequired.checked) {
-        formData.append("guest6PlusExtraBedRequired", "on");
-      }
-      if (guest6PlusExtraBedCharge) {
-        formData.append("guest6PlusExtraBedCharge", guest6PlusExtraBedCharge.value || "0");
-      }
-      if (guest6PlusNote) {
-        formData.append("guest6PlusNote", guest6PlusNote.value || "");
-      }
-      
       // Useful Info
       const builtYear = hotelCreateForm.querySelector('input[name="builtYear"]');
       const numberOfFloors = hotelCreateForm.querySelector('input[name="numberOfFloors"]');
@@ -4321,50 +4277,6 @@ if (hotelEditForm && hotelEditForm.dataset.readOnly === "1") {
             formData.append('ageBandExtraPersonFeePerNights', extraPersonFee);
           }
         });
-      }
-      
-      // Children Policy (GIỮ LẠI ĐỂ TƯƠNG THÍCH NGƯỢC)
-      const infant0to1FreeWithExistingBed = hotelEditForm.querySelector('input[name="infant0to1FreeWithExistingBed"]');
-      const infant0to1CribAvailable = hotelEditForm.querySelector('input[name="infant0to1CribAvailable"]');
-      const infant0to1Note = hotelEditForm.querySelector('input[name="infant0to1Note"]');
-      if (infant0to1FreeWithExistingBed && infant0to1FreeWithExistingBed.checked) {
-        formData.append("infant0to1FreeWithExistingBed", "on");
-      }
-      if (infant0to1CribAvailable && infant0to1CribAvailable.checked) {
-        formData.append("infant0to1CribAvailable", "on");
-      }
-      if (infant0to1Note) {
-        formData.append("infant0to1Note", infant0to1Note.value || "");
-      }
-      
-      const child2to5FreeWithExistingBed = hotelEditForm.querySelector('input[name="child2to5FreeWithExistingBed"]');
-      const child2to5ExtraBedCharge = hotelEditForm.querySelector('input[name="child2to5ExtraBedCharge"]');
-      const child2to5Note = hotelEditForm.querySelector('input[name="child2to5Note"]');
-      if (child2to5FreeWithExistingBed && child2to5FreeWithExistingBed.checked) {
-        formData.append("child2to5FreeWithExistingBed", "on");
-      }
-      if (child2to5ExtraBedCharge) {
-        formData.append("child2to5ExtraBedCharge", child2to5ExtraBedCharge.value || "0");
-      }
-      if (child2to5Note) {
-        formData.append("child2to5Note", child2to5Note.value || "");
-      }
-      
-      const guest6PlusConsideredAdult = hotelEditForm.querySelector('input[name="guest6PlusConsideredAdult"]');
-      const guest6PlusExtraBedRequired = hotelEditForm.querySelector('input[name="guest6PlusExtraBedRequired"]');
-      const guest6PlusExtraBedCharge = hotelEditForm.querySelector('input[name="guest6PlusExtraBedCharge"]');
-      const guest6PlusNote = hotelEditForm.querySelector('input[name="guest6PlusNote"]');
-      if (guest6PlusConsideredAdult && guest6PlusConsideredAdult.checked) {
-        formData.append("guest6PlusConsideredAdult", "on");
-      }
-      if (guest6PlusExtraBedRequired && guest6PlusExtraBedRequired.checked) {
-        formData.append("guest6PlusExtraBedRequired", "on");
-      }
-      if (guest6PlusExtraBedCharge) {
-        formData.append("guest6PlusExtraBedCharge", guest6PlusExtraBedCharge.value || "0");
-      }
-      if (guest6PlusNote) {
-        formData.append("guest6PlusNote", guest6PlusNote.value || "");
       }
       
       // Useful Info
@@ -4858,14 +4770,7 @@ if (hotelRoomDetailForm) {
     });
     
     // Xử lý checkbox values
-    data.isRecommended = hotelRoomDetailForm.querySelector('input[name="isRecommended"]')?.checked || false;
-    data.soloTravelerFavorite = hotelRoomDetailForm.querySelector('input[name="soloTravelerFavorite"]')?.checked || false;
     data.breakfastIncluded = hotelRoomDetailForm.querySelector('input[name="breakfastIncluded"]')?.checked || false;
-    
-    // Xử lý số (rating)
-    if (data.rating) {
-      data.rating = parseFloat(data.rating) || 0;
-    }
     
     // Gửi amenities dưới dạng array thay vì string với \n
     // Controller sẽ xử lý array này

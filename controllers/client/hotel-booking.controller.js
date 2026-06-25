@@ -299,16 +299,6 @@ module.exports.createPost = async (req, res) => {
             additionalServicesTotal += hotel.earlyCheckinFee || 0;
           } else if (serviceId === 'late_checkout' && value === 'true') {
             additionalServicesTotal += hotel.lateCheckoutFee || 0;
-          } else if (serviceId === 'airport_transfer' && value === 'true') {
-            additionalServicesTotal += hotel.usefulInfo?.airportTransferFee || 0;
-          } else if (serviceId.startsWith('service_')) {
-            // Quantity-based global services
-            const qty = parseInt(value) || 0;
-            const key = serviceId.replace('service_', '');
-            
-            if (key === 'airport_transfer' && qty > 0) {
-              additionalServicesTotal += qty * (hotel.usefulInfo?.airportTransferFee || 0);
-            }
           }
         }
       }
@@ -829,7 +819,13 @@ async function _cancelHotelBookingGroup(code, phone) {
     // Lấy base code (loại bỏ suffix -1, -2, ...): HB123-1 → HB123
     const baseCode = String(code).replace(/-\d+$/, "");
 
-    // Hủy cả booking gốc và toàn bộ booking con cùng nhóm
+    // Hủy cả booking gốc và toàn bộ booking con cùng nhóm.
+    // CHỈ áp dụng cho đặt phòng KS lẻ (tourSegmentId = null). Không được đụng
+    // tới các HotelBooking thuộc tour (placeholder "[Tour Booking]" hoặc Tour
+    // Hold) — nếu set chúng thành "cancelled" + isTemporaryHold=false thì record
+    // sẽ thoát khỏi TTL index và kẹt lại vĩnh viễn dưới dạng zombie
+    // (cancelled + unpaid) dù đơn tour vẫn còn hiệu lực. Vòng đời booking tour
+    // do luồng order/cron tour quản lý riêng.
     await HotelBooking.updateMany(
       {
         $or: [
@@ -838,6 +834,7 @@ async function _cancelHotelBookingGroup(code, phone) {
         ],
         "guest.phone": phone,
         paymentStatus: { $ne: "paid" },
+        tourSegmentId: null,
       },
       { status: "cancelled", isTemporaryHold: false, holdExpiresAt: null }
     );
@@ -1026,22 +1023,6 @@ function _buildHotelBookingDisplayDetail(bookings, bookingCode, phone) {
         name: `Trả phòng muộn (đến ${hotelDoc.lateCheckoutTime || ""})`,
         price: hotelDoc.lateCheckoutFee,
       });
-    } else if (key === "airport_transfer" && (value === "true" || value === true)) {
-      const price = hotelDoc?.usefulInfo?.airportTransferFee || 0;
-      if (price > 0) {
-        globalServices.push({ name: "Đưa đón sân bay (1 chiều)", price });
-      }
-    } else if (key === "service_airport_transfer" || key.startsWith("service_")) {
-      const qty = parseInt(value) || 0;
-      if (qty > 0) {
-        const price = hotelDoc?.usefulInfo?.airportTransferFee || 0;
-        if (price > 0) {
-          globalServices.push({
-            name: `Đưa đón sân bay (${qty} chiều)`,
-            price: price * qty,
-          });
-        }
-      }
     }
   });
 

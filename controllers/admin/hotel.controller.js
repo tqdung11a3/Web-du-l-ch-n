@@ -25,6 +25,8 @@ const {
 } = require("../../helpers/tour-display-id.helper");
 const {
   buildAdminRoomsDetailsDisplay,
+  countGuests,
+  normalizeRoomsData,
 } = require("../../helpers/hotel-guest-rooms.helper");
 
 /**
@@ -56,6 +58,33 @@ async function _filterBookingsByLiveOrder(bookings) {
 }
 
 /**
+ * Lấy Set<orderId-string> các đơn còn hiệu lực trong danh sách TourSegment.
+ * Đơn "còn hiệu lực" = không bị xóa (deleted != true) VÀ chưa hủy
+ * (status != "cancel").
+ *
+ * Dùng để filter `TourSegment.assignments[]` ở các trang admin trước khi render,
+ * tránh hiện assignment của đơn khách đã bấm "Hủy đơn và trả lại ghế".
+ */
+async function _getActiveOrderIdsFromSegments(segments) {
+  const ids = new Set();
+  for (const seg of segments || []) {
+    for (const a of seg.assignments || []) {
+      if (a && a.orderId) ids.add(String(a.orderId));
+    }
+  }
+  if (ids.size === 0) return new Set();
+  const Order = require("../../models/order.model");
+  const aliveOrders = await Order.find({
+    _id: { $in: [...ids] },
+    deleted: { $ne: true },
+    status: { $ne: "cancel" },
+  })
+    .select("_id")
+    .lean();
+  return new Set(aliveOrders.map((o) => String(o._id)));
+}
+
+/**
  * Self-heal cho các HotelBooking còn dính tour đã bị xoá mềm từ TRƯỚC khi
  * cascade release (deletePatch của tour.controller) được thêm vào hệ thống.
  *
@@ -69,6 +98,70 @@ async function _filterBookingsByLiveOrder(bookings) {
  * Được gọi ở đầu các trang chịu ảnh hưởng (calendar, room-management,
  * tour-holds…) để admin chỉ cần refresh là dữ liệu tự đúng.
  */
+/**
+ * Self-heal: reset các Tour Hold (HotelBooking có `tourSegmentId`) còn bị
+ * "dính" `orderCode` của đơn đã hủy (status: cancel) hoặc đã xóa, đồng thời
+ * pull bỏ entry tương ứng khỏi `TourSegment.assignments`.
+ *
+ * Trước đây flow hủy đơn (_cancelHoldAndRestoreSeats) không dọn 2 chỗ này,
+ * nên trên các trang quản lý phòng/calendar/tour-holds vẫn hiện tên khách của
+ * đơn đã hủy. Hàm này chạy ở đầu các trang đó để tự sửa dữ liệu cũ.
+ *
+ * Idempotent: chỉ chạm vào TH có orderCode rơi vào tập đơn cancel/deleted.
+ */
+async function _autoReleaseStaleCancelledTourHolds() {
+  try {
+    const Order = require("../../models/order.model");
+    const TourSegment = require("../../models/tour-segment.model");
+
+    // Lấy tập orderCode đang dính ở Tour Hold.
+    const codesInUse = await HotelBooking.distinct("orderCode", {
+      tourSegmentId: { $ne: null },
+      orderCode: { $nin: [null, ""] },
+    });
+    if (!codesInUse.length) return;
+
+    const deadOrders = await Order.find({
+      code: { $in: codesInUse },
+      $or: [{ status: "cancel" }, { deleted: true }],
+    })
+      .select("_id code")
+      .lean();
+    if (!deadOrders.length) return;
+
+    const deadCodes = deadOrders.map((o) => o.code);
+    const deadIds = deadOrders.map((o) => o._id);
+
+    // Pull khỏi TourSegment.assignments.
+    await TourSegment.updateMany(
+      { "assignments.orderId": { $in: deadIds } },
+      { $pull: { assignments: { orderId: { $in: deadIds } } } }
+    );
+
+    // Tìm các Tour Hold cần reset: chỉ những TH không còn assignment nào (đã
+    // pull xong) → safely revert. Đơn giản hoá: với mỗi TH dính dead order
+    // còn lại, reset.
+    await HotelBooking.updateMany(
+      {
+        tourSegmentId: { $ne: null },
+        orderCode: { $in: deadCodes },
+      },
+      {
+        $set: {
+          "guest.fullName": "[Tour Hold]",
+          "guest.phone": "",
+          "guest.email": "",
+          status: "confirmed",
+          isTemporaryHold: false,
+        },
+        $unset: { orderCode: "", holdExpiresAt: "", userId: "" },
+      }
+    );
+  } catch (err) {
+    console.error("[_autoReleaseStaleCancelledTourHolds] error:", err);
+  }
+}
+
 async function _autoReleaseStaleDeletedTourHolds(_companyId) {
   try {
     const Tour = require("../../models/tour.model");
@@ -219,11 +312,14 @@ async function _resolveBookingPassengers(bookings) {
         .select("assignments")
         .lean()
     : [];
+  const activeOrderIdsSet = await _getActiveOrderIdsFromSegments(segmentDocs);
   const allOrderIdsSet = new Set();
   const assignsByThId = {}; // thId → [assignmentEntry]
   for (const seg of segmentDocs) {
     for (const a of seg.assignments || []) {
       if (!a.holdBookingId) continue;
+      // Bỏ qua assignment thuộc đơn đã hủy / xóa.
+      if (a.orderId && !activeOrderIdsSet.has(String(a.orderId))) continue;
       const thId = String(a.holdBookingId);
       if (!assignsByThId[thId]) assignsByThId[thId] = [];
       assignsByThId[thId].push(a);
@@ -1571,39 +1667,14 @@ module.exports.createPost = async (req, res) => {
       }
     }
     
-    req.body.transportOptions = parseLines(req.body.transportOptions);
     req.body.faqs = parseFaqs(req.body);
     
     // Parse Age Bands (Mức tuổi)
     req.body.ageBands = parseAgeBands(req.body);
     
-    // Parse childrenPolicy (GIỮ LẠI ĐỂ TƯƠNG THÍCH NGƯỢC - nhưng ưu tiên dùng ageBands)
-    req.body.childrenPolicy = {
-      infant0to1: {
-        freeWithExistingBed: req.body.infant0to1FreeWithExistingBed === "on",
-        cribAvailable: req.body.infant0to1CribAvailable === "on",
-        note: (req.body.infant0to1Note || "").trim()
-      },
-      child2to5: {
-        freeWithExistingBed: req.body.child2to5FreeWithExistingBed === "on",
-        extraBedCharge: parseInt(req.body.child2to5ExtraBedCharge) || 0,
-        note: (req.body.child2to5Note || "").trim()
-      },
-      guest6Plus: {
-        consideredAdult: req.body.guest6PlusConsideredAdult === "on",
-        extraBedRequired: req.body.guest6PlusExtraBedRequired === "on",
-        extraBedCharge: parseInt(req.body.guest6PlusExtraBedCharge) || 0,
-        note: (req.body.guest6PlusNote || "").trim()
-      }
-    };
     
     // Parse usefulInfo
     req.body.usefulInfo = {
-      distanceFromCityCenter: (req.body.distanceFromCityCenter || "").trim(),
-      timeToAirport: (req.body.timeToAirport || "").trim(),
-      airportTransferFee: parseInt(req.body.airportTransferFee) || 0,
-      wifiFee: parseInt(req.body.wifiFee) || 0,
-      breakfastFee: parseInt(req.body.breakfastFee) || 0,
       builtYear: parseInt(req.body.builtYear) || 0,
       numberOfFloors: parseInt(req.body.numberOfFloors) || 0,
       inRoomVoltage: (req.body.inRoomVoltage || "").trim(),
@@ -1854,39 +1925,14 @@ module.exports.editPatch = async (req, res) => {
       }
     }
     
-    req.body.transportOptions = parseLines(req.body.transportOptions);
     req.body.faqs = parseFaqs(req.body);
     
     // Parse Age Bands (Mức tuổi)
     req.body.ageBands = parseAgeBands(req.body);
     
-    // Parse childrenPolicy (GIỮ LẠI ĐỂ TƯƠNG THÍCH NGƯỢC - nhưng ưu tiên dùng ageBands)
-    req.body.childrenPolicy = {
-      infant0to1: {
-        freeWithExistingBed: req.body.infant0to1FreeWithExistingBed === "on",
-        cribAvailable: req.body.infant0to1CribAvailable === "on",
-        note: (req.body.infant0to1Note || "").trim()
-      },
-      child2to5: {
-        freeWithExistingBed: req.body.child2to5FreeWithExistingBed === "on",
-        extraBedCharge: parseInt(req.body.child2to5ExtraBedCharge) || 0,
-        note: (req.body.child2to5Note || "").trim()
-      },
-      guest6Plus: {
-        consideredAdult: req.body.guest6PlusConsideredAdult === "on",
-        extraBedRequired: req.body.guest6PlusExtraBedRequired === "on",
-        extraBedCharge: parseInt(req.body.guest6PlusExtraBedCharge) || 0,
-        note: (req.body.guest6PlusNote || "").trim()
-      }
-    };
     
     // Parse usefulInfo
     req.body.usefulInfo = {
-      distanceFromCityCenter: (req.body.distanceFromCityCenter || "").trim(),
-      timeToAirport: (req.body.timeToAirport || "").trim(),
-      airportTransferFee: parseInt(req.body.airportTransferFee) || 0,
-      wifiFee: parseInt(req.body.wifiFee) || 0,
-      breakfastFee: parseInt(req.body.breakfastFee) || 0,
       builtYear: parseInt(req.body.builtYear) || 0,
       numberOfFloors: parseInt(req.body.numberOfFloors) || 0,
       inRoomVoltage: (req.body.inRoomVoltage || "").trim(),
@@ -2243,16 +2289,6 @@ module.exports.roomTypeEditPost = async (req, res) => {
         roomType.otherAmenities = parseLines(req.body.otherAmenities);
       }
     }
-
-    // Đánh giá và đề xuất
-    if (req.body.rating !== undefined) roomType.rating = req.body.rating || 0;
-    if (req.body.ratingCategory !== undefined)
-      roomType.ratingCategory = req.body.ratingCategory || "";
-    if (req.body.isRecommended !== undefined)
-      roomType.isRecommended = req.body.isRecommended === "true" || req.body.isRecommended === true;
-    if (req.body.soloTravelerFavorite !== undefined)
-      roomType.soloTravelerFavorite = req.body.soloTravelerFavorite === "true" || req.body.soloTravelerFavorite === true;
-
 
     // Upload ảnh phòng
     // Xử lý ảnh mới upload (từ req.files)
@@ -2928,21 +2964,6 @@ module.exports.bookingDetail = async (req, res) => {
             type: 'global'
           });
         }
-        
-        // Airport transfer (quantity-based)
-        Object.keys(services.global).forEach(key => {
-          if (key.startsWith('service_')) {
-            const qty = parseInt(services.global[key]);
-            if (qty > 0 && key === 'service_airport_transfer') {
-              additionalServices.push({
-                name: 'Đưa đón sân bay (1 chiều)',
-                price: hotel && hotel.usefulInfo?.airportTransferFee ? hotel.usefulInfo.airportTransferFee.toLocaleString('vi-VN') : '0',
-                quantity: qty,
-                type: 'global'
-              });
-            }
-          }
-        });
       }
       
       // ===== XỬ LÝ DỊCH VỤ THEO TỪNG ITEM (PER ITEM) =====
@@ -3251,6 +3272,7 @@ module.exports.tourHolds = async (req, res) => {
     // Self-heal: giải phóng các tour hold còn dính tour đã xoá mềm trước đây
     // (cascade chỉ chạy từ thời điểm tính năng được bổ sung; dữ liệu cũ tự xử lý ở đây).
     await _autoReleaseStaleDeletedTourHolds(companyId);
+    await _autoReleaseStaleCancelledTourHolds();
 
     // Dọn dẹp booking tour hold bị lỗi (code: null) còn sót lại từ lần confirm thất bại
     await HotelBooking.updateMany(
@@ -3668,9 +3690,34 @@ module.exports.tourHoldDetail = async (req, res) => {
 
     // Multi-occupant: 1 TH có thể được nhiều đơn share. Lấy
     //   tourSeg.assignments để biết tất cả đơn tham chiếu mỗi TH.
+    // Loại bỏ assignment của đơn đã hủy/xóa trước khi gom.
+    const _activeOrdersInSeg = await _getActiveOrderIdsFromSegments([segment]);
+    // Cũng cần biết những orderCode còn hiệu lực để khoá phần fallback
+    // primary lấy từ `booking.guest` bên dưới (tránh hiện tên khách của đơn
+    // hủy còn sót trên TH chưa được dọn).
+    const _bookingOrderCodes = [
+      ...new Set(
+        (filteredHoldBookings || [])
+          .map((b) => b && b.orderCode)
+          .filter(Boolean)
+      ),
+    ];
+    let _activeOrderCodeSet = new Set();
+    if (_bookingOrderCodes.length > 0) {
+      const Order = require("../../models/order.model");
+      const aliveByCode = await Order.find({
+        code: { $in: _bookingOrderCodes },
+        deleted: { $ne: true },
+        status: { $ne: "cancel" },
+      })
+        .select("code")
+        .lean();
+      _activeOrderCodeSet = new Set(aliveByCode.map((o) => o.code));
+    }
     const assignsByThId = {};
     for (const a of segment.assignments || []) {
       if (!a.holdBookingId) continue;
+      if (a.orderId && !_activeOrdersInSeg.has(String(a.orderId))) continue;
       const k = String(a.holdBookingId);
       if (!assignsByThId[k]) assignsByThId[k] = [];
       assignsByThId[k].push({
@@ -3707,7 +3754,10 @@ module.exports.tourHoldDetail = async (req, res) => {
         if (!combinedMap[k]) combinedMap[k] = a;
       }
       // Fallback: nếu TH.guest là primary và chưa có trong combinedMap
-      if (guestName && guestName !== "[Tour Hold]") {
+      // Bỏ qua khi orderCode tham chiếu đến đơn đã hủy/xóa.
+      const _bookingOrderActive =
+        !booking.orderCode || _activeOrderCodeSet.has(booking.orderCode);
+      if (guestName && guestName !== "[Tour Hold]" && _bookingOrderActive) {
         const k = booking.orderCode || guestName;
         if (!combinedMap[k]) {
           combinedMap[k] = {
@@ -3873,6 +3923,7 @@ module.exports.roomManagement = async (req, res) => {
 
     // Self-heal: giải phóng các tour hold còn dính tour đã xoá mềm trước đây.
     await _autoReleaseStaleDeletedTourHolds(companyId);
+    await _autoReleaseStaleCancelledTourHolds();
 
     // 1. Lấy bookings cần xếp phòng (roomId = null hoặc không tồn tại, status != cancelled)
     let pendingBookings = await HotelBooking.find({
@@ -3900,14 +3951,48 @@ module.exports.roomManagement = async (req, res) => {
         if (rt && rt.name) roomTypeName = rt.name;
       }
 
+      // Parse roomsData để lấy số liệu chính xác (adults/children/babies riêng)
+      let parsedRooms = null;
+      if (b.roomsData) {
+        try {
+          parsedRooms = normalizeRoomsData(JSON.parse(decodeURIComponent(b.roomsData)));
+        } catch (_) { /* bỏ qua */ }
+      }
+      const guestCounts = parsedRooms ? countGuests(parsedRooms) : null;
+
+      // Số NL, TE, EB ưu tiên từ roomsData (chính xác hơn), fallback sang trường flat
+      const adultsCount    = guestCounts ? guestCounts.adults   : (b.adults   || 1);
+      const childrenCount  = guestCounts ? guestCounts.children : (b.children || 0);
+      const babiesCount    = guestCounts ? guestCounts.babies   : 0;
+
       // Tạo text trẻ em kèm độ tuổi
       let childrenText = "";
-      if (b.children > 0) {
-        if (b.childrenDetails && Array.isArray(b.childrenDetails) && b.childrenDetails.length > 0) {
+      if (childrenCount > 0) {
+        if (parsedRooms) {
+          const ages = parsedRooms
+            .flatMap(r => r.children)
+            .map(c => `${c.age} tuổi`)
+            .join(", ");
+          childrenText = ages ? `${childrenCount} TE (${ages})` : `${childrenCount} TE`;
+        } else if (b.childrenDetails && Array.isArray(b.childrenDetails) && b.childrenDetails.length > 0) {
           const ages = b.childrenDetails.map(c => `${c.age} tuổi`).join(", ");
-          childrenText = `${b.children} TE (${ages})`;
+          childrenText = `${childrenCount} TE (${ages})`;
         } else {
-          childrenText = `${b.children} TE`;
+          childrenText = `${childrenCount} TE`;
+        }
+      }
+
+      // Tạo text em bé kèm độ tuổi
+      let babiesText = "";
+      if (babiesCount > 0) {
+        if (parsedRooms) {
+          const ages = parsedRooms
+            .flatMap(r => r.babies)
+            .map(c => `${c.age} tuổi`)
+            .join(", ");
+          babiesText = ages ? `${babiesCount} EB (${ages})` : `${babiesCount} EB`;
+        } else {
+          babiesText = `${babiesCount} EB`;
         }
       }
 
@@ -3918,9 +4003,11 @@ module.exports.roomManagement = async (req, res) => {
         roomType: roomTypeName,
         roomTypeId: b.roomTypeId,
         roomCount: b.rooms || 1,
-        adults: b.adults || 1,
-        children: b.children || 0,
+        adults: adultsCount,
+        children: childrenCount,
+        babies: babiesCount,
         childrenText,
+        babiesText,
         checkIn: b.checkIn ? moment(b.checkIn).format("YYYY-MM-DD") : "",
         checkInDisplay: b.checkIn ? moment(b.checkIn).format("DD/MM/YYYY") : "",
         checkOut: b.checkOut ? moment(b.checkOut).format("YYYY-MM-DD") : "",
@@ -4106,9 +4193,11 @@ module.exports.roomManagement = async (req, res) => {
       const rmSegs = await TourSegment.find({ _id: { $in: rmSegIds } })
         .select("assignments")
         .lean();
+      const rmActiveOrderIdsSet = await _getActiveOrderIdsFromSegments(rmSegs);
       for (const seg of rmSegs) {
         for (const a of seg.assignments || []) {
           if (!a.holdBookingId) continue;
+          if (a.orderId && !rmActiveOrderIdsSet.has(String(a.orderId))) continue;
           const k = String(a.holdBookingId);
           if (!rmAssignsByThId[k]) rmAssignsByThId[k] = [];
           rmAssignsByThId[k].push({
@@ -5563,6 +5652,7 @@ module.exports.bookingCalendar = async (req, res) => {
     // Self-heal: cascade-cancel các tour hold còn dính tour đã bị xoá mềm
     // nhưng chưa được giải phóng (do xoá trước khi tính năng cascade ra đời).
     await _autoReleaseStaleDeletedTourHolds(companyId);
+    await _autoReleaseStaleCancelledTourHolds();
 
     // Lấy TẤT CẢ bookings trong tháng đã được assign phòng cụ thể (gồm cả tour holds và checked_out)
     let bookings = await HotelBooking.find({
@@ -5651,9 +5741,11 @@ module.exports.bookingCalendar = async (req, res) => {
       const calSegs = await TourSegment.find({ _id: { $in: calSegIds } })
         .select("assignments")
         .lean();
+      const calActiveOrderIdsSet = await _getActiveOrderIdsFromSegments(calSegs);
       for (const seg of calSegs) {
         for (const a of seg.assignments || []) {
           if (!a.holdBookingId) continue;
+          if (a.orderId && !calActiveOrderIdsSet.has(String(a.orderId))) continue;
           const k = String(a.holdBookingId);
           if (!calAssignsByThId[k]) calAssignsByThId[k] = [];
           calAssignsByThId[k].push({

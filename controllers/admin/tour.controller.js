@@ -974,6 +974,7 @@ module.exports.trash = async (req, res) => {
 module.exports.createPost = async (req, res) => {
   try {
     // --- scope theo công ty ---
+    // verifyToken đã gán req.account, nên companyId lấy từ admin đang đăng nhập
     const companyId = req.account.companyId;
     if (!companyId) {
       return res.json({
@@ -1111,10 +1112,10 @@ module.exports.createPost = async (req, res) => {
       }
     }
 
-    // --- Khách sạn trong tour đã bỏ; luôn lưu rỗng ---
+    // Tour mới chưa gán KS
     req.body.accommodations = [];
 
-    // --- cấu hình giá em bé ---
+    // --- cấu hình giá em bé ---: fixed: mặc định, tiered: theo bậc
     const babyPricingMode = (req.body.babyPricingMode || "fixed").trim();
     req.body.babyPricingMode =
       babyPricingMode === "tiered" ? "tiered" : "fixed";
@@ -1152,10 +1153,14 @@ module.exports.createPost = async (req, res) => {
 
     // --- Cấu hình chỗ ngồi em bé ---
     const parsedMaxBabies = parseInt(req.body.maxBabiesPerAdult, 10);
+
+    // Mỗi Người lớn tối đa bao nhiêu em bé ngồi cùng
     req.body.maxBabiesPerAdult = Number.isFinite(parsedMaxBabies)
       ? Math.max(0, parsedMaxBabies)
       : 1;
     const parsedBabySeatFee = parseInt(req.body.babySeatFee, 10);
+
+    // Phí ghế riêng em bé
     req.body.babySeatFee =
       req.body.maxBabiesPerAdult === 0
         ? 0
@@ -1212,7 +1217,7 @@ module.exports.createPost = async (req, res) => {
       req.body.images = [];
     }
 
-    // Lưu
+    // Lưu DB
     const newRecord = new Tour(req.body);
     await newRecord.save();
 

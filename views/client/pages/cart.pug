@@ -55,22 +55,6 @@ block main
                   type="email"
                   value=(account && account.email ? account.email : "")
                   )
-              //- Tạm ẩn: ảnh CCCD / Hộ chiếu (giỏ tour) — xóa `if false` để bật lại
-              if false
-                .inner-group.inner-two-col
-                  label.cccd-label
-                    i.fa-solid.fa-id-card
-                    |  Ảnh CCCD / Hộ chiếu
-                  .cccd-upload-area#cccd-upload-area
-                    input#cccd-file-input(
-                      type="file"
-                      multiple
-                      accept="image/*"
-                    )
-                    .cccd-upload-placeholder
-                      i.fa-solid.fa-cloud-arrow-up
-                      span Chọn hoặc kéo thả ảnh vào đây
-                  .cccd-preview#cccd-preview
               .inner-group.inner-two-col
                 textarea(
                   placeholder="Ghi chú" 

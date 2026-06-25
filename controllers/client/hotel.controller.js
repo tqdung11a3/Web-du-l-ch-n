@@ -730,11 +730,9 @@ module.exports.detail = async (req, res) => {
       ratingStats,
       highlights: hotel.highlights || [],
       promotionShortText: hotel.promotionShortText || "",
-      transportOptions: hotel.transportOptions || [],
       amenities: hotel.amenities || [],
       facilities: hotel.facilities || [],
-      childrenPolicy: hotel.childrenPolicy || {}, // Giữ lại để tương thích ngược
-      ageBands: hotel.ageBands || [], // Dữ liệu mới từ Age Bands
+      ageBands: hotel.ageBands || [],
       usefulInfo: hotel.usefulInfo || {},
       rules: {
         checkinTimeFrom: hotel.checkinTimeFrom || "",
@@ -744,10 +742,6 @@ module.exports.detail = async (req, res) => {
         lateCheckoutTime: hotel.lateCheckoutTime || "",
         lateCheckoutFee: hotel.lateCheckoutFee || 0,
         numberOfRooms: hotel.numberOfRooms || "",
-        children: hotel.rulesChildren || "",
-        pets: hotel.rulesPets || "",
-        extraBed: hotel.rulesExtraBed || "",
-        other: hotel.rulesOther || "",
       },
       faqs: hotel.faqs || [],
       roomOptions,
@@ -873,25 +867,12 @@ module.exports.roomSelect = async (req, res) => {
       });
     }
 
-    // Đưa đón sân bay (nếu có cấu hình)
-    if (hotel.airportTransferFee && hotel.airportTransferFee > 0) {
-      additionalServices.push({
-        id: 'airport_transfer',
-        name: 'Đưa đón sân bay (1 chiều)',
-        price: hotel.airportTransferFee,
-        unit: 'lần',
-        maxQuantity: 2,
-        isCheckbox: true
-      });
-    }
-
     // Quy định của chỗ nghỉ
     const policies = {
       checkInTime: hotel.checkInTime || '14:00',
       checkOutTime: hotel.checkOutTime || '12:00',
       cancellationPolicy: hotel.cancellationPolicy || 'Hủy miễn phí trước 24 giờ trước check-in. Sau đó thu phí 50% giá trị booking.',
       paymentRequirement: hotel.paymentRequirement || 'Vui lòng xuất trình CMND/CCCD khi check-in',
-      childrenPolicy: hotel.childrenPolicy || '',
       smokingPolicy: roomType.smokingPolicy || 'Không hút thuốc',
     };
 

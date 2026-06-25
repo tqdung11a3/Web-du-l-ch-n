@@ -205,11 +205,14 @@ async function _cancelHoldAndRestoreSeats(order) {
     // `availableRooms` được tính dựa trên các HotelBooking đang giữ.
     if (order.code) {
       try {
+        // Xóa hẳn mọi placeholder "[Tour Booking]" (roomId = null) của đơn này,
+        // bất kể status (kể cả nếu lỡ bị set "cancelled" trước đó) — tránh để
+        // lại record zombie. Lọc roomId = null để TUYỆT ĐỐI không xóa nhầm Tour
+        // Hold đã gán phòng vật lý (roomId != null).
         const delResult = await HotelBooking.deleteMany({
           orderCode: order.code,
-          isTemporaryHold: true,
-          paymentStatus: "unpaid",
-          status: { $ne: "cancelled" },
+          tourSegmentId: { $ne: null },
+          roomId: null,
         });
         if (delResult?.deletedCount) {
           console.log(
@@ -224,6 +227,71 @@ async function _cancelHoldAndRestoreSeats(order) {
       }
     }
 
+    // ── Dọn dẹp các bản ghi phân phòng tour (TourSegment.assignments) +
+    //   trả lại Tour Hold đã bị bind sang đơn này về trạng thái trống. Nếu
+    //   không, admin vẫn thấy đơn cancel trong khối "Khách đã được gán" trên
+    //   trang /admin/hotel/tour-assignments/... và TH cũng không thể được
+    //   bind lại cho đơn ở ghép khác (vì query backfill yêu cầu
+    //   guest.fullName = "[Tour Hold]" và orderCode rỗng).
+    try {
+      const segMatches = await TourSegment.find({
+        "assignments.orderId": order._id,
+      })
+        .select("_id assignments")
+        .lean();
+      const orderIdStr = String(order._id);
+      const releasedHoldIds = new Set();
+      for (const seg of segMatches) {
+        for (const a of seg.assignments || []) {
+          if (String(a.orderId) !== orderIdStr) continue;
+          if (a.holdBookingId) releasedHoldIds.add(String(a.holdBookingId));
+        }
+      }
+      if (segMatches.length > 0) {
+        await TourSegment.updateMany(
+          { _id: { $in: segMatches.map((s) => s._id) } },
+          { $pull: { assignments: { orderId: order._id } } }
+        );
+      }
+
+      // Reset các Tour Hold đã bị bind sang đơn này về placeholder
+      // "[Tour Hold]" để có thể tái sử dụng cho đơn khác.
+      if (releasedHoldIds.size > 0) {
+        // Lọc tiếp những hold vẫn còn được đơn KHÁC tham chiếu (shared
+        // cross-order). Những cái còn dùng thì không reset, chỉ rút tên
+        // đơn này khỏi note bằng cách cập nhật lại theo entries còn lại.
+        const stillInUse = await TourSegment.distinct("assignments.holdBookingId", {
+          "assignments.holdBookingId": { $in: [...releasedHoldIds] },
+        });
+        const stillInUseSet = new Set(
+          (stillInUse || []).map((id) => String(id))
+        );
+        const idsToReset = [...releasedHoldIds].filter(
+          (id) => !stillInUseSet.has(id)
+        );
+        if (idsToReset.length > 0) {
+          await HotelBooking.updateMany(
+            { _id: { $in: idsToReset } },
+            {
+              $set: {
+                "guest.fullName": "[Tour Hold]",
+                "guest.phone": "",
+                "guest.email": "",
+                status: "confirmed",
+                isTemporaryHold: false,
+              },
+              $unset: { orderCode: "", holdExpiresAt: "", userId: "" },
+            }
+          );
+        }
+      }
+    } catch (segErr) {
+      console.error(
+        "[_cancelHoldAndRestoreSeats] Cleanup tour assignments error:",
+        segErr
+      );
+    }
+
     await Order.updateOne(
       { _id: order._id },
       { status: "cancel", isTemporaryHold: false, holdExpiresAt: null }
@@ -234,6 +302,7 @@ async function _cancelHoldAndRestoreSeats(order) {
 }
 
 module.exports.createPost = async (req, res) => {
+  // groups = gom item theo companyId (một công ty → một đơn).
   // Khai báo ngoài try để catch có thể truy cập và hoàn lại ghế nếu cần.
   const groups = Object.create(null);
   try {
@@ -297,6 +366,8 @@ module.exports.createPost = async (req, res) => {
           ? babySeats.filter((b) => b.seatType === "private").length
           : (!!raw.babySeat ? quantityBaby : 0);
         babySeat = privateSeatBabyCount > 0;
+
+        // Tính tổng phí ghế riêng em bé
         babySeatFeeTotal = babySeats.filter((b) => b.seatType === "private").length * tourBabySeatFee;
       }
 
@@ -751,8 +822,11 @@ module.exports.createPost = async (req, res) => {
 
       // === LỚP TRUNG GIAN: Greedy phân bổ đoàn vào các khách sạn của tour ===
       // Số người cần chỗ ở = người lớn + trẻ em (em bé thường không tính phòng riêng)
+
+      // Tính số người cần chỗ ở
       const totalPeopleForHotel = quantityAdult + quantityChildren;
 
+      // Khởi tạo
       let hotelAllocation = {
         status: "no_hotels",
         totalPeople: totalPeopleForHotel,
@@ -763,6 +837,7 @@ module.exports.createPost = async (req, res) => {
         allocations: [],
       };
 
+      // Lấy các khách sạn của tour
       const tourAccommodations = Array.isArray(tourInfo.accommodations)
         ? tourInfo.accommodations
         : [];
@@ -1325,7 +1400,6 @@ module.exports.createPost = async (req, res) => {
         fullName: (body.fullName || "").trim(),
         phone: (body.phone || "").trim(),
         email: (body.email || "").trim(),
-        cccdImages: Array.isArray(body.cccdImages) ? body.cccdImages : [],
         note: body.note || "",
         items,
         subTotal,
@@ -1581,7 +1655,7 @@ module.exports.createPost = async (req, res) => {
                     2,
                   hotelId: new mongoose.Types.ObjectId(alloc.hotelId),
                   hotelName: alloc.hotelName || hotelDoc?.name || "",
-                  roomId: pickedTh.roomId,
+                  roomId: pickedTh.roomId, // phòng vật lý đã được xếp cho đơn này
                   roomNumber,
                   roomTypeName: ra.roomTypeName || "",
                   holdBookingId: pickedTh._id,
@@ -2183,6 +2257,25 @@ module.exports.paymentVNPayResult = async (req, res) => {
             holdExpiresAt:   null,
           }
         );
+
+        // Dọn các placeholder "[Tour Booking]" (roomId = null) của đơn này.
+        // Chúng chỉ giữ tồn kho tạm trong lúc chờ thanh toán; sau khi đã paid,
+        // tồn kho được tính qua Order (xem tour.controller) và phòng vật lý do
+        // admin gán qua Tour Hold (roomId != null). Xóa hẳn để tránh để lại
+        // record kẹt (nếu không sẽ bị TTL xóa muộn hoặc thành zombie). Chỉ xóa
+        // placeholder roomId = null — KHÔNG đụng Tour Hold đã gán (roomId != null).
+        try {
+          await HotelBooking.deleteMany({
+            orderCode: orderCode,
+            tourSegmentId: { $ne: null },
+            roomId: null,
+          });
+        } catch (cleanupErr) {
+          console.error(
+            "[paymentVNPayResult] cleanup tour placeholders:",
+            cleanupErr
+          );
+        }
 
         // Notify phân phòng cho đơn VNPay (xếp phòng đã xong ở createPost,
         // nhưng thông báo chỉ gửi sau khi thanh toán được xác nhận).

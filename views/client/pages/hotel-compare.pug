@@ -143,19 +143,6 @@ block main
 
               tr
                 td.compare-label
-                  i.fa-solid.fa-wifi
-                  | WiFi
-                each hotel in hotels
-                  td.compare-value
-                    if hotel.usefulInfo && hotel.usefulInfo.wifiFee === 0
-                      span(style="color: #16a34a;") ✓ Miễn phí
-                    else if hotel.usefulInfo && hotel.usefulInfo.wifiFee > 0
-                      | #{hotel.usefulInfo.wifiFee.toLocaleString('vi-VN')} VND/ngày
-                    else
-                      | N/A
-
-              tr
-                td.compare-label
                   i.fa-solid.fa-clock
                   | Giờ nhận/trả phòng
                 each hotel in hotels

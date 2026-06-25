@@ -252,6 +252,70 @@ if (formSearch) {
   const FIELDS = ["q", "departureDate", "price", "minSeats"];
   const NUM_FIELDS = new Set(["minSeats"]);
 
+  const priceBox = formSearch.querySelector(".inner-price");
+  if (priceBox) {
+    const priceTrigger = priceBox.querySelector("[inner-price-trigger]");
+    const priceInput = priceBox.querySelector('[name="price"]');
+    const priceLabel = priceBox.querySelector(".inner-price-label");
+    const priceOptions = priceBox.querySelectorAll(".inner-price-option");
+
+    const setPriceValue = (value, label) => {
+      priceInput.value = value;
+      priceLabel.textContent = label;
+      priceBox.classList.toggle("has-value", Boolean(value));
+      priceOptions.forEach((opt) => {
+        opt.classList.toggle("selected", opt.dataset.value === value);
+      });
+    };
+
+    const closePriceDropdown = () => {
+      priceBox.classList.remove("active");
+      if (priceTrigger) priceTrigger.setAttribute("aria-expanded", "false");
+    };
+
+    const openPriceDropdown = () => {
+      priceBox.classList.add("active");
+      if (priceTrigger) priceTrigger.setAttribute("aria-expanded", "true");
+    };
+
+    if (priceTrigger) {
+      priceTrigger.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (priceBox.classList.contains("active")) {
+          closePriceDropdown();
+        } else {
+          openPriceDropdown();
+        }
+      });
+
+      priceTrigger.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          priceTrigger.click();
+        } else if (event.key === "Escape") {
+          closePriceDropdown();
+        }
+      });
+    }
+
+    priceOptions.forEach((option) => {
+      option.addEventListener("click", (event) => {
+        event.preventDefault();
+        setPriceValue(option.dataset.value || "", option.textContent.trim());
+        closePriceDropdown();
+      });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!priceBox.contains(event.target)) {
+        closePriceDropdown();
+      }
+    });
+
+    setPriceValue("", "-- Chọn khoảng giá --");
+  }
+
   formSearch.addEventListener("submit", (event) => {
     event.preventDefault(); // không reload ngay
 
@@ -936,6 +1000,7 @@ if (boxTourDetail) {
   }
 
   /** Trả về mode hiện tại: "private" | "shared". Mặc định "private". */
+  // đọc mode đang chọn
   function getAccommodationMode() {
     if (!modePicker) return "private";
     const checked = modePicker.querySelector(
@@ -1592,6 +1657,8 @@ if (boxTourDetail) {
       );
       if (rowEl) rowEl.classList.remove("is-invalid");
       const label = "#" + (p.idx + 1);
+
+      // Validate họ tên và tuổi
       if (!p.name || !p.name.trim()) {
         errors.push(label + ": chưa khai họ tên.");
         rowEl?.classList.add("is-invalid");
@@ -1601,6 +1668,8 @@ if (boxTourDetail) {
         rowEl?.classList.add("is-invalid");
       }
       if (p.type === "adult") {
+
+        // Validate tuổi người lớn
         const adultMin = ageChildMax + 1;
         const ageNum = p.age === "" || p.age === null || p.age === undefined
           ? NaN : parseInt(p.age, 10);
@@ -1608,12 +1677,16 @@ if (boxTourDetail) {
           errors.push(label + `: tuổi người lớn phải từ ${adultMin} trở lên (đang nhập ${ageNum}).`);
           rowEl?.classList.add("is-invalid");
         }
+
+        // Chỉ người lớn mới bắt buộc chọn giới tính
         if (p.gender === "male") derivedMales++;
         else if (p.gender === "female") derivedFemales++;
         else {
           errors.push(label + ": chưa chọn giới tính.");
           rowEl?.classList.add("is-invalid");
         }
+
+        // Validate người đi cùng
         if (_passengerNeedsGuardian(p)) {
           if (p.guardianIdx === null || p.guardianIdx === undefined) {
             errors.push(
@@ -1988,6 +2061,12 @@ if (boxTourDetail) {
     return atoms;
   }
 
+  // _validateAtomsOfflineForHotel(atoms, hotels) trả lời:
+
+  // Với mỗi atom (1 NL ≥18 + TE/EB gắn qua guardianIdx), có ít nhất một khách sạn trong danh sách mà atom đó nhét vừa một phòng theo baseOccupancy và quy tắc trọng số tuổi (ageBands) không?
+  // atoms: từ _buildAtomsClient() — mỗi phần tử có members (danh sách hành khách trong nhóm).
+  // hotels: khách sạn ứng viên trong một khung thời gian tour.
+  // Trả về { ok: true } hoặc { ok: false, message: "..." }.
   function _validateAtomsOfflineForHotel(atoms, hotels) {
     if (!hotels || hotels.length === 0) return { ok: true };
     for (const atom of atoms) {
@@ -1997,24 +2076,33 @@ if (boxTourDetail) {
       if (dependents.length === 0) continue;
       let fits = false;
       for (const hotel of hotels) {
+        // lấy baseOccupancy của từng phòng
+        // sau đó lấy max của các baseOccupancy
         const caps = (hotel.roomTypes || [])
           .map((rt) => Math.max(1, parseInt(rt.baseOccupancy, 10) || 2))
           .filter((c) => c > 0);
         if (!caps.length) continue;
         const maxCap = Math.max(...caps);
         const ageBands = hotel.ageBands || [];
+        // tính tổng trọng số tuổi của các thành viên trong atom
         const size = (atom.members || []).reduce(
           (sum, m) => sum + _clientWeightForAge(m.age, m.type, ageBands),
           0
         );
-        const remaining = Math.max(0, maxCap - 1);
-        let minChildW = 0.5;
+        const remaining = Math.max(0, maxCap - 1); // số slot occupancy tối đa cho TE/EB trong 1 phòng (sau khi trừ 1 NL) theo baseOccupancy và ageBands
+        let minChildW = 0.5;  // mặc định nếu KS chưa cấu hình ageBands
         const weights = (ageBands || [])
           .filter((b) => b && b.countInOccupancy !== false)
           .map((b) => Number(b.occupancyWeight))
           .filter((w) => !isNaN(w) && w > 0);
         if (weights.length) minChildW = Math.min(...weights);
         const maxDepSlots = Math.floor(remaining / minChildW);
+
+        // size <= maxCap: tổng trọng số tuổi của các thành viên trong atom không vượt quá sức chứa phòng
+        // dependents.length <= maxDepSlots: số lượng TE/EB trong atom không vượt quá số slot occupancy tối đa cho TE/EB trong 1 phòng
+
+        // “Cả nhóm (NL + mọi TE/EB) chiếm bao nhiêu chỗ quy đổi — có vượt sức chứa phòng không?”
+        //“Số TE/EB (đếm người) có vượt quá số slot còn lại sau khi trừ 1 NL không?”
         if (size <= maxCap && dependents.length <= maxDepSlots) {
           fits = true;
           break;
@@ -2065,6 +2153,8 @@ if (boxTourDetail) {
     sharedFeasibilityWarning.style.display = "";
   }
 
+  // Kiểm tra xem đoàn hiện tại có xếp được vào phòng ghép không
+  // Dựa trên danh sách hành khách, cách gom atom, sức chứa phòng
   function offlineCheckSharedFeasibility() {
     const segments = parseTourRoomSegmentsFromDom();
     if (!segments.length) {
@@ -2339,6 +2429,7 @@ if (boxTourDetail) {
         lbl.classList.add("is-disabled");
         lbl.title = "Đã gán cho phòng khác trong khung này.";
       }
+      
       cb.addEventListener("change", () => {
         if (cb.checked) set.add(p.idx);
         else set.delete(p.idx);
@@ -2583,7 +2674,8 @@ if (boxTourDetail) {
           usedCapacity: Math.round(usedCapacity * 100) / 100,
         });
       }
-      return { ...s, roomAssignments };
+
+      return { ...s, roomAssignments };// gộp khách hàng và phòng
     });
   }
 
@@ -2604,7 +2696,7 @@ if (boxTourDetail) {
     const baseSelections = collectRoomSelections();
     return {
       accommodationMode: "private",
-      roomSelections: decorateRoomSelectionsWithAssignments(baseSelections),
+      roomSelections: decorateRoomSelectionsWithAssignments(baseSelections), // Nối 2 bước khách và phòng vào nhau
       sharedRoomRequest: [],
       passengers: collectPassengers(),
     };
@@ -2681,6 +2773,7 @@ if (boxTourDetail) {
     const mode = getAccommodationMode();
 
     // Toggle hiển thị các vùng theo mode hiện tại.
+    // Đoạn code hiển thị chọn mode ở riêng và ở ghép
     if (roomSelectionWrap) {
       roomSelectionWrap.style.display = mode === "private" ? "" : "none";
     }
@@ -2731,6 +2824,8 @@ if (boxTourDetail) {
 
     // Tính tổng tiền phòng theo mode.
     let privateLines = [];
+
+    // Ở riêng - tính tiền phòng cộng vào tour
     if (mode === "private") {
       const cost = computePrivateRoomCost();
       currentExtraRoomCost = cost.total;
@@ -3300,24 +3395,6 @@ if (orderForm) {
       const note = event.target.note.value;
       const paymentMethod = event.target.method.value;
 
-      // Upload CCCD images nếu có
-      let cccdImages = [];
-      const cccdInput = document.getElementById("cccd-file-input");
-      if (cccdInput && cccdInput.files && cccdInput.files.length > 0) {
-        const formData = new FormData();
-        for (let i = 0; i < cccdInput.files.length; i++) {
-          formData.append("files", cccdInput.files[i]);
-        }
-        try {
-          const uploadRes = await fetch("/upload/images", { method: "POST", body: formData });
-          const uploadData = await uploadRes.json();
-          if (uploadData.success) cccdImages = uploadData.urls;
-        } catch (e) {
-          notify.error("Lỗi upload ảnh CCCD!");
-          return;
-        }
-      }
-
       // Lấy giỏ hiện tại (ưu tiên session nếu đang ĐẶT NGAY)
       let cart = getCart();
       cart = cart.filter((item) => {
@@ -3342,7 +3419,6 @@ if (orderForm) {
           fullName: fullName,
           phone: phone,
           email: email,
-          cccdImages: cccdImages,
           note: note,
           paymentMethod: paymentMethod,
           items: cart,
@@ -3477,7 +3553,6 @@ if (orderForm) {
     }
   }
 
-  initCccdPreview("cccd-file-input", "cccd-preview");
   initCccdPreview("hotel-cccd-file-input", "hotel-cccd-preview");
 })();
 
@@ -4299,12 +4374,12 @@ if (pageCart) {
       dropdown.style.opacity = "1";
       dropdown.style.visibility = "visible";
       dropdown.style.transform = "translateY(0)";
-      trigger.querySelector("i")?.style &&
-        (trigger.querySelector("i").style.transform = "rotate(180deg)");
+      trigger.querySelector(".user-trigger-chevron")?.style &&
+        (trigger.querySelector(".user-trigger-chevron").style.transform = "rotate(180deg)");
     } else {
       dropdown.removeAttribute("style");
-      trigger.querySelector("i")?.style &&
-        (trigger.querySelector("i").style.transform = "");
+      trigger.querySelector(".user-trigger-chevron")?.style &&
+        (trigger.querySelector(".user-trigger-chevron").style.transform = "");
     }
   });
 
@@ -4314,8 +4389,8 @@ if (pageCart) {
       menu.classList.remove("open");
       trigger.setAttribute("aria-expanded", "false");
       dropdown.removeAttribute("style");
-      trigger.querySelector("i")?.style &&
-        (trigger.querySelector("i").style.transform = "");
+      trigger.querySelector(".user-trigger-chevron")?.style &&
+        (trigger.querySelector(".user-trigger-chevron").style.transform = "");
     }
   });
 })();
@@ -4637,27 +4712,263 @@ if (profileEditForm) {
   fetchReviews(1).catch(() => {});
 })();
 
-// Box Pagination
-const boxPagination = document.querySelector("[box-pagination]");
-if (boxPagination) {
-  const url = new URL(window.location.href);
+// Custom select picker (tránh native select tràn trên mobile)
+window.initCustomSelectPicker = function initCustomSelectPicker(select) {
+  if (!select || select.dataset.pickerReady === "true") return null;
+  if (select.style.display === "none") return null;
 
-  boxPagination.addEventListener("change", () => {
-    const value = boxPagination.value;
-    if (value) {
-      url.searchParams.set("page", value);
-    } else {
-      url.searchParams.delete("page");
+  select.dataset.pickerReady = "true";
+
+  const wrap = document.createElement("div");
+  wrap.className = "custom-select-picker";
+  select.parentNode.insertBefore(wrap, select);
+  wrap.appendChild(select);
+
+  select.classList.add("custom-select-native");
+  select.tabIndex = -1;
+  select.setAttribute("aria-hidden", "true");
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "custom-select-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "custom-select-label";
+
+  const chevron = document.createElement("i");
+  chevron.className = "fa-solid fa-angle-down";
+  chevron.setAttribute("aria-hidden", "true");
+
+  trigger.append(labelSpan, chevron);
+
+  const optionsEl = document.createElement("div");
+  optionsEl.className = "custom-select-options";
+  optionsEl.setAttribute("role", "listbox");
+
+  const MOBILE_BP = 768;
+
+  const resetOptionsPosition = () => {
+    optionsEl.classList.remove("is-fixed");
+    optionsEl.style.position = "";
+    optionsEl.style.top = "";
+    optionsEl.style.left = "";
+    optionsEl.style.width = "";
+    optionsEl.style.right = "";
+    optionsEl.style.bottom = "";
+    optionsEl.style.maxHeight = "";
+    optionsEl.style.zIndex = "";
+  };
+
+  const positionOptionsMenu = () => {
+    if (window.innerWidth > MOBILE_BP) {
+      resetOptionsPosition();
+      return;
     }
-    window.location.href = url.href;
+
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+    const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+
+    optionsEl.classList.add("is-fixed");
+    optionsEl.style.position = "fixed";
+    optionsEl.style.left = `${Math.max(8, rect.left)}px`;
+    optionsEl.style.width = `${Math.min(rect.width, window.innerWidth - 16)}px`;
+    optionsEl.style.right = "auto";
+    optionsEl.style.zIndex = "1000";
+
+    if (openUp) {
+      optionsEl.style.top = "auto";
+      optionsEl.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+      optionsEl.style.maxHeight = `${Math.min(280, spaceAbove)}px`;
+    } else {
+      optionsEl.style.bottom = "auto";
+      optionsEl.style.top = `${rect.bottom + 4}px`;
+      optionsEl.style.maxHeight = `${Math.min(280, spaceBelow)}px`;
+    }
+  };
+
+  const closePicker = () => {
+    wrap.classList.remove("active");
+    trigger.setAttribute("aria-expanded", "false");
+    resetOptionsPosition();
+  };
+
+  const onViewportChange = () => {
+    if (wrap.classList.contains("active")) positionOptionsMenu();
+  };
+
+  window.addEventListener("resize", onViewportChange);
+  window.addEventListener("scroll", onViewportChange, true);
+
+  const rebuildOptions = () => {
+    optionsEl.innerHTML = "";
+    Array.from(select.options).forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "custom-select-option";
+      btn.dataset.value = opt.value;
+      btn.textContent = opt.textContent.trim();
+      btn.setAttribute("role", "option");
+
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        select.value = opt.value;
+        syncPicker();
+        closePicker();
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      optionsEl.appendChild(btn);
+    });
+    syncPicker();
+  };
+
+  const syncPicker = () => {
+    const selectedOpt = select.options[select.selectedIndex];
+    labelSpan.textContent = selectedOpt
+      ? selectedOpt.textContent.trim()
+      : "";
+
+    optionsEl.querySelectorAll(".custom-select-option").forEach((btn) => {
+      btn.classList.toggle("selected", btn.dataset.value === select.value);
+    });
+  };
+
+  trigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const willOpen = !wrap.classList.contains("active");
+    if (willOpen) {
+      wrap.classList.add("active");
+      trigger.setAttribute("aria-expanded", "true");
+      positionOptionsMenu();
+    } else {
+      closePicker();
+    }
   });
 
-  // Hiển thị giá trị mặc định
-  const valueCurrent = url.searchParams.get("page");
-  if (valueCurrent) {
-    boxPagination.value = valueCurrent;
-  }
-}
+  document.addEventListener("click", (event) => {
+    if (!wrap.contains(event.target)) closePicker();
+  });
+
+  wrap.append(trigger, optionsEl);
+  rebuildOptions();
+
+  return { syncPicker, rebuildOptions, wrap };
+};
+
+// Box Pagination (custom dropdown — tránh native select tràn trên mobile)
+(() => {
+  const initPaginationPicker = (select) => {
+    if (select.dataset.pickerReady === "true") return null;
+    select.dataset.pickerReady = "true";
+
+    const wrap = document.createElement("div");
+    wrap.className = "inner-pagination-picker";
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+
+    select.classList.add("inner-pagination-native");
+    select.tabIndex = -1;
+    select.setAttribute("aria-hidden", "true");
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "inner-pagination-trigger";
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "inner-pagination-label";
+
+    const chevron = document.createElement("i");
+    chevron.className = "fa-solid fa-angle-down";
+    chevron.setAttribute("aria-hidden", "true");
+
+    trigger.append(labelSpan, chevron);
+
+    const optionsEl = document.createElement("div");
+    optionsEl.className = "inner-pagination-options";
+    optionsEl.setAttribute("role", "listbox");
+
+    const syncPicker = () => {
+      const selectedOpt = select.options[select.selectedIndex];
+      labelSpan.textContent = selectedOpt
+        ? selectedOpt.textContent.trim()
+        : "Trang 1";
+
+      optionsEl.querySelectorAll(".inner-pagination-option").forEach((btn) => {
+        btn.classList.toggle("selected", btn.dataset.value === select.value);
+      });
+    };
+
+    Array.from(select.options).forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "inner-pagination-option";
+      btn.dataset.value = opt.value;
+      btn.textContent = opt.textContent.trim();
+      btn.setAttribute("role", "option");
+
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        select.value = opt.value;
+        syncPicker();
+        wrap.classList.remove("active");
+        trigger.setAttribute("aria-expanded", "false");
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      optionsEl.appendChild(btn);
+    });
+
+    const closePicker = () => {
+      wrap.classList.remove("active");
+      trigger.setAttribute("aria-expanded", "false");
+    };
+
+    trigger.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const willOpen = !wrap.classList.contains("active");
+      wrap.classList.toggle("active", willOpen);
+      trigger.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!wrap.contains(event.target)) closePicker();
+    });
+
+    wrap.append(trigger, optionsEl);
+    syncPicker();
+
+    return { syncPicker };
+  };
+
+  document.querySelectorAll("[box-pagination]").forEach((select) => {
+    const picker = initPaginationPicker(select);
+    const url = new URL(window.location.href);
+
+    select.addEventListener("change", () => {
+      const value = select.value;
+      if (value) {
+        url.searchParams.set("page", value);
+      } else {
+        url.searchParams.delete("page");
+      }
+      window.location.href = url.href;
+    });
+
+    const valueCurrent = url.searchParams.get("page");
+    if (valueCurrent) {
+      select.value = valueCurrent;
+    }
+    picker?.syncPicker();
+  });
+})();
 // End Box Pagination
 
 // Guest picker: xem public/assets/js/hotel-guest-picker.js

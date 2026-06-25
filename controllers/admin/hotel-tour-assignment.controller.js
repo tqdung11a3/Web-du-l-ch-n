@@ -253,8 +253,15 @@ module.exports.list = async (req, res) => {
         const holdBookings = holdsBySeg[key] || [];
         const myHoldIds = new Set(holdBookings.map((b) => String(b._id)));
 
-        const myAssignments = (ts.assignments || []).filter((a) =>
-          scopeHotelIds.includes(String(a.hotelId))
+        // Lọc bỏ assignments của các đơn đã hủy / bị xóa (entry còn sót
+        // trong tourSeg.assignments của đơn cancelled).
+        const activeOrderIdSet = new Set(
+          (rawOrders || []).map((o) => String(o._id))
+        );
+        const myAssignments = (ts.assignments || []).filter(
+          (a) =>
+            scopeHotelIds.includes(String(a.hotelId)) &&
+            activeOrderIdSet.has(String(a.orderId))
         );
         const assignedBookingIds = new Set(
           myAssignments
@@ -879,8 +886,14 @@ module.exports.detail = async (req, res) => {
       return null;
     }
 
+    // Chỉ giữ assignments của các đơn còn hiệu lực (đã được liệt kê ở
+    // `customers` — đã filter `status != cancel`). Đơn đã hủy mà entry
+    // assignments còn sót thì bỏ qua để không hiện trong "Khách đã được gán".
+    const activeOrderIdsSet = new Set(customers.map((c) => String(c.orderId)));
+
     const existingAssignments = (tourSeg.assignments || [])
       .filter((a) => hotelIds.includes(String(a.hotelId)))
+      .filter((a) => activeOrderIdsSet.has(String(a.orderId)))
       .map((a) => {
         const bid = a.holdBookingId ? String(a.holdBookingId) : "";
         const fromHold = bid ? holdOccByBookingId[bid] : undefined;

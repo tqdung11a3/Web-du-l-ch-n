@@ -87,15 +87,6 @@ const RoomTypeSchema = new Schema(
     // Ảnh riêng cho từng loại phòng (carousel)
     images: { type: [String], default: [] },
 
-    // Đánh giá phòng (VD: 9.7)
-    rating: { type: Number, default: 0 },
-    // Loại đánh giá (VD: "Tiêu chuẩn/chất lượng phòng")
-    ratingCategory: { type: String, default: "" },
-
-    // Nút đề xuất
-    isRecommended: { type: Boolean, default: false }, // "Được đề xuất"
-    soloTravelerFavorite: { type: Boolean, default: false }, // "Khách đi một mình yêu thích"
-
     // ===== KHỐI B & C: Age Bands (Mức tuổi) =====
     // LƯU Ý: Age bands được quản lý ở cấp Hotel, áp dụng cho tất cả room types
     // Không còn override ở room type level nữa để đơn giản hóa hệ thống
@@ -183,7 +174,6 @@ const HotelSchema = new Schema(
       default: [] 
     },
     promotionShortText: { type: String, default: "" },
-    transportOptions: { type: [String], default: [] },
 
     // ===== Điểm đánh giá (để demo giống Booking) =====
     ratingOverall: { type: Number, default: 0 }, // VD 8.2
@@ -197,8 +187,6 @@ const HotelSchema = new Schema(
 
     // ===== Quy định chỗ nghỉ & thông tin hữu ích =====
     checkinTimeFrom: { type: String, default: "" },
-    checkinTimeTo: { type: String, default: "" },
-    checkoutTimeFrom: { type: String, default: "" },
     checkoutTimeTo: { type: String, default: "" },
     // Nhận phòng sớm và Trả phòng muộn
     earlyCheckinTime: { type: String, default: "" }, // Giờ nhận phòng sớm (VD: 10:00)
@@ -208,42 +196,11 @@ const HotelSchema = new Schema(
 
     numberOfRooms: { type: Number, default: 0 },
 
-    // ===== KHỐI B: Mức tuổi (Age Bands) - Phiên bản mới thay thế childrenPolicy =====
+    // ===== KHỐI B: Mức tuổi (Age Bands) =====
     ageBands: { type: [AgeBandSchema], default: [] },
-
-    // Chính sách trẻ em và giường phụ (chi tiết) - GIỮ LẠI ĐỂ TƯƠNG THÍCH NGƯỢC
-    // Sẽ không sử dụng nữa, thay thế bằng ageBands
-    childrenPolicy: {
-      infant0to1: {
-        freeWithExistingBed: { type: Boolean, default: true },
-        cribAvailable: { type: Boolean, default: false },
-        note: { type: String, default: "" }
-      },
-      child2to5: {
-        freeWithExistingBed: { type: Boolean, default: true },
-        extraBedCharge: { type: Number, default: 0 },
-        note: { type: String, default: "" }
-      },
-      guest6Plus: {
-        consideredAdult: { type: Boolean, default: true },
-        extraBedRequired: { type: Boolean, default: false },
-        extraBedCharge: { type: Number, default: 0 },
-        note: { type: String, default: "" }
-      }
-    },
 
     // Thông tin hữu ích
     usefulInfo: {
-      // Di chuyển
-      distanceFromCityCenter: { type: String, default: "" }, // VD: "2 km"
-      timeToAirport: { type: String, default: "" }, // VD: "20 minutes"
-      airportTransferFee: { type: Number, default: 0 }, // VND
-      
-      // Thông tin khác
-      wifiFee: { type: Number, default: 0 }, // VND per day
-      breakfastFee: { type: Number, default: 0 }, // VND (khi không bao gồm trong giá phòng)
-      
-      // Về khách sạn
       builtYear: { type: Number, default: 0 },
       numberOfFloors: { type: Number, default: 0 },
       inRoomVoltage: { type: String, default: "" }, // VD: "220"
@@ -253,11 +210,6 @@ const HotelSchema = new Schema(
       licenseNumber: { type: String, default: "" }
     },
 
-    rulesChildren: { type: String, default: "" },
-    rulesPets: { type: String, default: "" },
-    rulesExtraBed: { type: String, default: "" },
-    rulesOther: { type: String, default: "" },
-
     // ===== Câu hỏi thường gặp (FAQ) =====
     faqs: { type: [FaqSchema], default: [] },
 
@@ -265,7 +217,7 @@ const HotelSchema = new Schema(
     roomTypes: { type: [RoomTypeSchema], default: [] },
 
     // ===== Phòng cụ thể (individual rooms) =====
-    rooms: { type: [IndividualRoomSchema], default: [] },
+    rooms: { type: [IndividualRoomSchema], default: [] }, // phòng cụ thể
 
     // Soft–delete
     deleted: { type: Boolean, default: false },
