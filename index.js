@@ -17,7 +17,7 @@ const { startExpiredHotelBookingsCleanup } = require("./scripts/cleanup-expired-
 const clientAuth = require("./middlewares/client/auth.middleware");
 
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 5000;
 
 databaseConfig.connect();
 
@@ -47,11 +47,13 @@ app.use(`/${variableConfig.pathAdmin}`, adminRoutes);
 app.use(clientAuth.attachUser); // chỉ gắn trước clientRoutes
 app.use("/", clientRoutes);
 
-// ONLY FOR DEV / TEST: chạy thử job bằng tay
-app.get("/dev/test-remind", async (req, res) => {
-  await runReminderJobOnce();
-  res.send("Đã chạy job remind 1 lần, xem log console + hộp thư.");
-});
+// ONLY FOR DEV / TEST: chạy thử job bằng tay (chỉ bật khi NODE_ENV !== production)
+if (process.env.NODE_ENV !== "production") {
+  app.get("/dev/test-remind", async (req, res) => {
+    await runReminderJobOnce();
+    res.send("Đã chạy job remind 1 lần, xem log console + hộp thư.");
+  });
+}
 
 // Global error logger để bắt mọi lỗi rơi xuống Express default handler
 app.use((err, req, res, next) => {
