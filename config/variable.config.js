@@ -33,16 +33,8 @@ module.exports.paymentMethodList = [
     value: "bank",
   },
   {
-    label: "Ví Momo",
-    value: "momo",
-  },
-  {
     label: "VNPay",
     value: "vnpay",
-  },
-  {
-    label: "ZaloPay",
-    value: "zalopay",
   },
 ];
 
