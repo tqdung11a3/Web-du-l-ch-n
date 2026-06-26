@@ -94,7 +94,7 @@ mixin adminRoomGuardianCell(p, adultByIdx)
   else if needsRoom
     - var guardian = adultByIdx[p.guardianIdx];
     if guardian
-      | Ở cùng: 
+      | Ở phòng cùng: 
       strong= guardian.name || ('Người lớn #' + (p.guardianIdx + 1))
     else
       | —

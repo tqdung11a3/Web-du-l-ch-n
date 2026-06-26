@@ -3131,6 +3131,21 @@ if (boxTourDetail) {
         return;
       }
 
+      // Chặn đặt khi ngày khởi hành đã hết chỗ (maxSeats được cập nhật theo
+      // ngày khởi hành đang chọn; tour 1 ngày tự set khi load).
+      if (maxSeats <= 0) {
+        notify?.error?.("Tour đã hết chỗ cho ngày khởi hành này.");
+        return;
+      }
+      // Ước tính nhanh số ghế cần (NL + TE); EB ghế riêng kiểm tra chính xác
+      // bên dưới sau khi tính privateSeatCount.
+      if (quantityAdult + quantityChild > maxSeats) {
+        notify?.error?.(
+          `Tour chỉ còn ${maxSeats} chỗ cho ngày khởi hành này.`
+        );
+        return;
+      }
+
       if (quantityAdult > 0 || quantityChild > 0 || quantityBaby > 0) {
         const childrenAges = collectAges(childrenAgesList);
         const babyAges     = collectAges(babiesAgesList);
@@ -3256,6 +3271,16 @@ if (boxTourDetail) {
             }));
           privateSeatCount = babySeats.filter((b) => b.seatType === "private").length;
           babySeatFeeTotal = privateSeatCount * babySeatFee;
+        }
+
+        // Kiểm tra chính xác số ghế thật sự dùng (khớp server: NL + TE + EB ghế
+        // riêng). Chặn nếu vượt quá số chỗ còn lại của ngày khởi hành.
+        const seatsUsed = quantityAdult + quantityChild + privateSeatCount;
+        if (seatsUsed > maxSeats) {
+          notify?.error?.(
+            `Tour chỉ còn ${maxSeats} chỗ cho ngày khởi hành này.`
+          );
+          return;
         }
 
         const item = {

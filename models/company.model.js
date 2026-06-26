@@ -10,13 +10,11 @@ const companySchema = new mongoose.Schema(
 
     // Hiển thị thương hiệu
     logo: { type: String, default: "" }, // URL ảnh logo
-    coverImage: { type: String, default: "" }, // URL ảnh bìa/cover
     banner: { type: String, default: "" },
     description: { type: String, default: "" }, // HTML/markdown mô tả công ty
     overview: { type: String, default: "" }, // Thông tin tổng quan để hiển thị ở client
     tradeName: { type: String, default: "" }, // Tên giao dịch nếu có
     foundedAt: { type: Date }, // Năm/thời điểm thành lập
-    size: { type: String, default: "" }, // Quy mô: "1-10", "11-50", ...
 
     // Pháp lý
     taxCode: { type: String, default: "" }, // Mã số thuế
@@ -28,15 +26,6 @@ const companySchema = new mongoose.Schema(
     hotline: { type: String, default: "" },
     email: { type: String, default: "" },
     website: { type: String, default: "" },
-
-    // Mạng xã hội
-    facebook: { type: String, default: "" },
-    instagram: { type: String, default: "" },
-    tiktok: { type: String, default: "" },
-
-    // Người phụ trách (nếu muốn hiện)
-    contactPerson: { type: String, default: "" },
-    contactPhone: { type: String, default: "" },
 
     // Cấu hình mức tuổi hành khách cho tour (áp dụng cho toàn bộ tour của công ty)
     tourAgeBands: {

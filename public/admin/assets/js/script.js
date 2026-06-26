@@ -463,6 +463,11 @@ if (tourCreateForm) {
     return rules;
   }
 
+  // Lưu giá trị khi chuyển sang tiered để khôi phục khi quay lại fixed
+  let savedPriceBaby = "";
+  let savedPriceNewBaby = "";
+  let prevBabyModeTiered = false;
+
   // Hiển thị/ẩn khối quy tắc + bật/tắt ô giá Em bé
   function syncBabyModeUI() {
     const mode = babyModeSelect?.value || "fixed";
@@ -472,23 +477,33 @@ if (tourCreateForm) {
       babyRulesWrapper.style.display = isTiered ? "block" : "none";
     }
 
-    // Khi theo bậc: xóa và khóa 2 ô giá Em bé
+    // Khi theo bậc: lưu rồi xóa và khóa 2 ô giá Em bé
+    // Khi quay lại cố định: chỉ khôi phục nếu trước đó đang ở tiered
     if (priceBabyInput) {
       if (isTiered) {
+        savedPriceBaby = priceBabyInput.value;
         priceBabyInput.value = "";
         priceBabyInput.disabled = true;
       } else {
         priceBabyInput.disabled = false;
+        if (prevBabyModeTiered) {
+          priceBabyInput.value = savedPriceBaby;
+        }
       }
     }
     if (priceNewBabyInput) {
       if (isTiered) {
+        savedPriceNewBaby = priceNewBabyInput.value;
         priceNewBabyInput.value = "";
         priceNewBabyInput.disabled = true;
       } else {
         priceNewBabyInput.disabled = false;
+        if (prevBabyModeTiered) {
+          priceNewBabyInput.value = savedPriceNewBaby;
+        }
       }
     }
+    prevBabyModeTiered = isTiered;
   }
 
   // Sự kiện thêm / xóa dòng quy tắc
@@ -2785,6 +2800,11 @@ if (tourEditForm) {
     return rules;
   }
 
+  // Lưu giá trị khi chuyển sang tiered để khôi phục khi quay lại fixed
+  let savedPriceBaby = "";
+  let savedPriceNewBaby = "";
+  let prevBabyModeTiered = false;
+
   function syncBabyModeUI() {
     const mode = modeSel?.value || "fixed";
     const isTiered = mode === "tiered";
@@ -2793,22 +2813,32 @@ if (tourEditForm) {
       rulesWrapper.style.display = isTiered ? "block" : "none";
     }
 
+    // Khi quay lại cố định: chỉ khôi phục nếu trước đó đang ở tiered
     if (priceBabyInput) {
       if (isTiered) {
+        savedPriceBaby = priceBabyInput.value;
         priceBabyInput.value = "";
         priceBabyInput.disabled = true;
       } else {
         priceBabyInput.disabled = false;
+        if (prevBabyModeTiered) {
+          priceBabyInput.value = savedPriceBaby;
+        }
       }
     }
     if (priceNewBabyInput) {
       if (isTiered) {
+        savedPriceNewBaby = priceNewBabyInput.value;
         priceNewBabyInput.value = "";
         priceNewBabyInput.disabled = true;
       } else {
         priceNewBabyInput.disabled = false;
+        if (prevBabyModeTiered) {
+          priceNewBabyInput.value = savedPriceNewBaby;
+        }
       }
     }
+    prevBabyModeTiered = isTiered;
   }
 
   const addRuleBtn = document.querySelector("#baby-rule-add");

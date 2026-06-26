@@ -240,23 +240,31 @@ function _passengersForRoomFromAnchorIdxs(passengers, anchorIdxs) {
   list.forEach((p) => {
     if (p.type === "adult" && anchorSet[p.idx]) adultIdxInRoom[p.idx] = true;
   });
+  // Em bé gắn theo NL Ở CÙNG PHÒNG (roomGuardianIdx) — khác với NL ngồi cùng
+  // trên tour (guardianIdx). Khi admin đổi phòng vật lý, roomGuardianIdx mới
+  // quyết định em bé thuộc phòng nào. Fallback guardianIdx cho đơn cũ chưa có.
+  // TE và NL<18 vẫn theo guardianIdx (người giám hộ trên tour).
+  const _depAnchorIdx = (p) => {
+    if (
+      p.type === "baby" &&
+      p.roomGuardianIdx !== null &&
+      p.roomGuardianIdx !== undefined
+    ) {
+      return Math.floor(Number(p.roomGuardianIdx));
+    }
+    return p.guardianIdx;
+  };
   return list.filter((p) => {
     if (p.type === "adult") {
       if (anchorSet[p.idx]) return true;
       if (passengerNeedsGuardian(p)) {
-        return (
-          p.guardianIdx !== null &&
-          p.guardianIdx !== undefined &&
-          !!adultIdxInRoom[p.guardianIdx]
-        );
+        const g = _depAnchorIdx(p);
+        return g !== null && g !== undefined && !!adultIdxInRoom[g];
       }
       return false;
     }
-    return (
-      p.guardianIdx !== null &&
-      p.guardianIdx !== undefined &&
-      !!adultIdxInRoom[p.guardianIdx]
-    );
+    const g = _depAnchorIdx(p);
+    return g !== null && g !== undefined && !!adultIdxInRoom[g];
   });
 }
 
@@ -603,13 +611,18 @@ async function _resolveBookingPassengers(bookings) {
         );
         if (adult) {
           const dependents = (sharedItem.passengers || []).filter((p) => {
-            if (p.guardianIdx !== adult.idx) return false;
+            // Em bé gom theo NL ở cùng phòng (roomGuardianIdx), fallback
+            // guardianIdx. TE/NL<18 theo guardianIdx (người giám hộ tour).
+            const depAnchor =
+              p.type === "baby" &&
+              p.roomGuardianIdx !== null &&
+              p.roomGuardianIdx !== undefined
+                ? Math.floor(Number(p.roomGuardianIdx))
+                : p.guardianIdx;
+            if (depAnchor !== adult.idx) return false;
             if (p.type === "child" || p.type === "baby") return true;
             if (p.type === "adult") {
-              const age = Math.max(0, Number(p.age) || 0);
-              return passengerNeedsGuardian(
-                _normalizePaxForGuardian(p)
-              );
+              return passengerNeedsGuardian(_normalizePaxForGuardian(p));
             }
             return false;
           });
@@ -4531,6 +4544,8 @@ module.exports.assignRoom = async (req, res) => {
         adults: originalBooking.adults,
         children: originalBooking.children,
         childrenDetails: originalBooking.childrenDetails,
+        babies: originalBooking.babies,
+        babiesDetails: originalBooking.babiesDetails,
         rooms: 1, // Mỗi booking mới chỉ 1 phòng
         roomsData: originalBooking.roomsData,
         roomId: roomId,
@@ -5513,12 +5528,36 @@ module.exports.releaseHolds = async (req, res) => {
 
     // Chỉ cancel những booking thuộc hotel của công ty hiện tại
     let released = 0;
+    // Gom id đã giải phóng theo tourSegmentId để gỡ khỏi holdBookingIds.
+    const releasedIdsBySegment = {};
     for (const booking of bookings) {
       if (companyHotelIds.has(String(booking.hotel?.hotelId))) {
         booking.status = "cancelled";
         await booking.save();
         released++;
+        const segId = booking.tourSegmentId
+          ? String(booking.tourSegmentId)
+          : null;
+        if (segId) {
+          if (!releasedIdsBySegment[segId]) releasedIdsBySegment[segId] = [];
+          releasedIdsBySegment[segId].push(booking._id);
+        }
       }
+    }
+
+    // Đồng bộ TourSegment.holdBookingIds: gỡ các hold vừa giải phóng để số
+    // lượng phản ánh đúng số phòng giữ còn hiệu lực (đồng bộ với UI).
+    const segIds = Object.keys(releasedIdsBySegment);
+    if (segIds.length > 0) {
+      const TourSegment = require("../../models/tour-segment.model");
+      await Promise.all(
+        segIds.map((segId) =>
+          TourSegment.updateOne(
+            { _id: segId },
+            { $pull: { holdBookingIds: { $in: releasedIdsBySegment[segId] } } }
+          )
+        )
+      );
     }
 
     return res.json({

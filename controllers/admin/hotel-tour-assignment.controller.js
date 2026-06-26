@@ -18,6 +18,12 @@ const {
   notifyCustomerOrderUpdate,
   buildTourOrderProfileLink,
 } = require("../../helpers/customer-order-notify.helper");
+const {
+  countPax,
+  passengersForAtoms,
+  mergePax,
+  paxToHotelBookingSet,
+} = require("../../helpers/hotel-booking-pax.helper");
 
 // ── Helper: lấy danh sách hotelId của company đang đăng nhập ───────────────
 async function getMyHotelIds(companyId) {
@@ -1685,6 +1691,61 @@ module.exports.save = async (req, res) => {
       );
     }
 
+    // Full order items (passengers + roomSelections) để recompute NL/TE/EB
+    // thật cho từng phòng vật lý (TH). Private khớp roomAssignments theo
+    // numPeople; shared resolve theo atomAnchorIdxs.
+    const fullOrders =
+      assignOrderIds.length > 0
+        ? await Order.find({ _id: { $in: assignOrderIds } })
+            .select("items")
+            .lean()
+        : [];
+    const fullOrderById = Object.fromEntries(
+      fullOrders.map((o) => [String(o._id), o])
+    );
+    // Hàng đợi passenger-set theo từng phòng private của mỗi đơn (pop dần).
+    const privateRoomQueueByOrder = {};
+    const _getPrivateRoomQueue = (orderId) => {
+      const k = String(orderId);
+      if (privateRoomQueueByOrder[k]) return privateRoomQueueByOrder[k];
+      const order = fullOrderById[k];
+      const queue = [];
+      if (order) {
+        const item = findOrderItemForSegment(order, tourSeg);
+        const paxByIdx = new Map();
+        for (const p of item?.passengers || []) {
+          if (typeof p.idx === "number") paxByIdx.set(p.idx, p);
+        }
+        for (const sel of item?.roomSelections || []) {
+          for (const ra of sel.roomAssignments || []) {
+            const subset = (ra.passengerIdxs || [])
+              .map((idx) => paxByIdx.get(idx))
+              .filter(Boolean);
+            if (subset.length) queue.push(subset);
+          }
+        }
+      }
+      privateRoomQueueByOrder[k] = queue;
+      return queue;
+    };
+    // Lấy passenger-set của 1 phòng private khớp numPeople (else phần tử đầu).
+    const _popPrivateRoom = (orderId, numPeople) => {
+      const queue = _getPrivateRoomQueue(orderId);
+      if (!queue.length) return [];
+      let idx = queue.findIndex((s) => s.length === Number(numPeople));
+      if (idx < 0) idx = 0;
+      return queue.splice(idx, 1)[0] || [];
+    };
+    // Resolve passenger-set của 1 assignment (private hoặc shared).
+    const _resolveAssignmentPassengers = (a) => {
+      if (a.accommodationMode === "shared") {
+        const order = fullOrderById[String(a.orderId)];
+        const item = order ? findOrderItemForSegment(order, tourSeg) : null;
+        return passengersForAtoms(item?.passengers, a.atomAnchorIdxs);
+      }
+      return _popPrivateRoom(a.orderId, a.numPeople);
+    };
+
     // Gom theo holdBookingId để xử lý multi-share (shared cross-order).
     const assignsByHold = {};
     for (const a of cleanAssignments) {
@@ -1692,6 +1753,53 @@ module.exports.save = async (req, res) => {
       if (!assignsByHold[k]) assignsByHold[k] = [];
       assignsByHold[k].push(a);
     }
+
+    // Dựng nhãn chi tiết NL/TE/EB cho 1 phòng từ danh sách passengers thực tế
+    // (fallback khi không resolve được atomLabels). Mô phỏng format atom gốc:
+    //   "Tên NL (+ TE Tên, EB Tên, NL khác (tuổi))".
+    const _fmtRoomDetailLabel = (passengers) => {
+      const list = (passengers || []).map((p) => ({
+        name: String(p.name || "?").trim() || "?",
+        type: p.type === "child" || p.type === "baby" ? p.type : "adult",
+        age: Math.max(0, Math.floor(Number(p.age) || 0)),
+      }));
+      if (!list.length) return "";
+      const anchor = list.find((p) => p.type === "adult") || list[0];
+      const deps = list
+        .filter((p) => p !== anchor)
+        .map((m) =>
+          m.type === "child"
+            ? `TE ${m.name}`
+            : m.type === "baby"
+            ? `EB ${m.name}`
+            : `${m.name} (${m.age}t)`
+        );
+      return deps.length ? `${anchor.name} (+ ${deps.join(", ")})` : anchor.name;
+    };
+
+    // Lấy nhãn chi tiết cho 1 assignment: ưu tiên atoms resolve (chuẩn theo
+    // passengers + ageBands hotel), rồi atomLabels client gửi, cuối cùng dựng
+    // từ passengers thực tế của assignment. Đảm bảo note luôn có NL/TE/EB.
+    const _detailLabelsForAssignment = async (a) => {
+      if (a.accommodationMode === "shared") {
+        try {
+          const resolved = await _resolveAssignmentAtoms(a);
+          const lbls =
+            resolved && Array.isArray(resolved.labels)
+              ? resolved.labels.filter(Boolean)
+              : [];
+          if (lbls.length) return lbls;
+        } catch {
+          /* fallback bên dưới */
+        }
+        const fromClient = Array.isArray(a.atomLabels)
+          ? a.atomLabels.filter(Boolean)
+          : [];
+        if (fromClient.length) return fromClient;
+      }
+      const lbl = _fmtRoomDetailLabel(_resolveAssignmentPassengers(a));
+      return lbl ? [lbl] : [];
+    };
 
     for (const hbId of Object.keys(assignsByHold)) {
       const list = assignsByHold[hbId];
@@ -1711,15 +1819,33 @@ module.exports.save = async (req, res) => {
 
       let note;
       if (list.length === 1) {
-        note = `[TOUR] Đơn #${primary.orderCode} – ${primary.guestName || ""} – ${primary.numPeople} người/phòng (loại phòng)`;
+        const detailStr = (await _detailLabelsForAssignment(primary)).join(
+          " || "
+        );
+        note = `[TOUR] Đơn #${primary.orderCode} – ${primary.guestName || ""} – ${primary.numPeople} người/phòng (loại phòng)${
+          detailStr ? ` | ${detailStr}` : ""
+        }`;
       } else {
-        const parts = list.map((x) => {
-          const lbls = (x.atomLabels || []).filter(Boolean).join(" || ");
+        const parts = [];
+        for (const x of list) {
+          const lbls = (await _detailLabelsForAssignment(x)).join(" || ");
           const tail = lbls ? ` – ${lbls}` : "";
-          return `Đơn #${x.orderCode} (${x.guestName || ""}, ${x.numPeople} chỗ)${tail}`;
-        });
+          parts.push(
+            `Đơn #${x.orderCode} (${x.guestName || ""}, ${x.numPeople} chỗ)${tail}`
+          );
+        }
         note = `[TOUR][Ở GHÉP] Phòng ghép ${list.length} đơn || ${parts.join(" || ")}`;
       }
+
+      // Tính tổng NL/TE/EB thật trong phòng (cộng dồn mọi đơn ghép).
+      let holdPax = { adults: 0, children: 0, babies: 0, childrenDetails: [], babiesDetails: [] };
+      for (const a of list) {
+        holdPax = mergePax(holdPax, countPax(_resolveAssignmentPassengers(a)));
+      }
+      const paxSet =
+        holdPax.adults + holdPax.children + holdPax.babies > 0
+          ? paxToHotelBookingSet(holdPax)
+          : null;
 
       await HotelBooking.findByIdAndUpdate(hb._id, {
         orderCode: primary.orderCode || "",
@@ -1727,6 +1853,7 @@ module.exports.save = async (req, res) => {
         "guest.phone": primary.phone || "",
         "guest.email": guestEmail,
         note,
+        ...(paxSet || {}),
       });
     }
 
@@ -1758,14 +1885,35 @@ module.exports.save = async (req, res) => {
             note: resetNote,
             status: "confirmed",
             isTemporaryHold: false,
+            // Phòng trống trở lại → xoá NL/TE/EB của khách cũ.
+            children: 0,
+            babies: 0,
           },
           $unset: {
             orderCode: "",
             holdExpiresAt: "",
             userId: "",
+            childrenDetails: "",
+            babiesDetails: "",
           },
         }
       );
+      // Đưa adults về sức chứa cơ bản của loại phòng (nếu tra được).
+      for (const hbId of idsToReset) {
+        const hb = holdMap[hbId];
+        if (!hb) continue;
+        const hot = hotelMap[String(hb.hotel?.hotelId)] || null;
+        const rt = hot
+          ? (hot.roomTypes || []).find(
+              (x) => String(x._id) === String(hb.roomTypeId)
+            )
+          : null;
+        const base =
+          rt && Number.isFinite(Number(rt.baseOccupancy))
+            ? Math.max(1, Math.round(Number(rt.baseOccupancy)))
+            : 1;
+        await HotelBooking.updateOne({ _id: hbId }, { $set: { adults: base } });
+      }
     }
 
     tourSeg.assignments = narrowScoped

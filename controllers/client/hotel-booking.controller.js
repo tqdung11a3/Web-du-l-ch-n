@@ -457,8 +457,9 @@ module.exports.createPost = async (req, res) => {
       // Item đầu tiên: HB123, Item thứ 2: HB123-1, Item thứ 3: HB123-2, ...
       const code = itemIndex === 0 ? baseCode : `${baseCode}-${itemIndex}`;
       
-      // Extract độ tuổi trẻ em từ roomsData (nếu có)
+      // Extract độ tuổi trẻ em + em bé từ roomsData (nếu có)
       const childrenDetails = [];
+      const babiesDetails = [];
       if (item.roomsData) {
         try {
           const parsedRoomsData = JSON.parse(decodeURIComponent(item.roomsData));
@@ -467,6 +468,11 @@ module.exports.createPost = async (req, res) => {
               if (roomData.children && Array.isArray(roomData.children)) {
                 roomData.children.forEach(child => {
                   childrenDetails.push({ age: child.age || 0 });
+                });
+              }
+              if (roomData.babies && Array.isArray(roomData.babies)) {
+                roomData.babies.forEach(baby => {
+                  babiesDetails.push({ age: baby.age || 0 });
                 });
               }
             });
@@ -506,6 +512,8 @@ module.exports.createPost = async (req, res) => {
         adults: item.adults || 1,
         children: item.children || 0,
         childrenDetails: childrenDetails.length > 0 ? childrenDetails : undefined, // Lưu chi tiết độ tuổi trẻ em
+        babies: item.babies || babiesDetails.length || 0,
+        babiesDetails: babiesDetails.length > 0 ? babiesDetails : undefined, // Lưu chi tiết độ tuổi em bé
         rooms: item.quantity, // Số phòng đặt
         roomsData: item.roomsData || undefined, // Lưu chi tiết từng phòng (JSON string)
         roomId: null, // Không assign phòng cụ thể, để admin tự chọn sau

@@ -992,8 +992,11 @@ module.exports.createPost = async (req, res) => {
     }
 
     // --- chuẩn hoá giá ---
-    const toInt = (v, d = 0) =>
-      v !== undefined && v !== null && v !== "" ? parseInt(v, 10) || d : d;
+    const toInt = (v, d = 0) => {
+      if (v === undefined || v === null || v === "") return d;
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? n : d;
+    };
 
     req.body.priceAdult = toInt(req.body.priceAdult);
     req.body.priceChildren = toInt(req.body.priceChildren);
@@ -1522,8 +1525,11 @@ module.exports.editPatch = async (req, res) => {
     }
 
     // --- Chuẩn hoá giá ---
-    const toInt = (v, d = 0) =>
-      v !== undefined && v !== null && v !== "" ? parseInt(v, 10) || d : d;
+    const toInt = (v, d = 0) => {
+      if (v === undefined || v === null || v === "") return d;
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? n : d;
+    };
 
     req.body.priceAdult = toInt(req.body.priceAdult);
     req.body.priceChildren = toInt(req.body.priceChildren);

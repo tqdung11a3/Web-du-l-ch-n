@@ -43,6 +43,11 @@ const {
   evaluateTourHotelQuotaPressure,
   maybeNotifyTourQuotaPressure,
 } = require("../../helpers/tour-hotel-quota-pressure.helper");
+const {
+  countPax,
+  passengersForAtoms,
+  paxToHotelBookingSet,
+} = require("../../helpers/hotel-booking-pax.helper");
 
 // Gom tourSegmentId duy nhất từ tất cả items trong groups (fire-and-forget notify).
 async function _firePressureNotifyForGroups(groups) {
@@ -1454,10 +1459,12 @@ module.exports.createPost = async (req, res) => {
               (a) => a.roomIndex === i
             );
             const paxLabels = [];
+            const roomPassengers = [];
             if (assignment && Array.isArray(assignment.passengerIdxs)) {
               for (const idx of assignment.passengerIdxs) {
                 const p = itemPaxByIdx.get(idx);
                 if (!p) continue;
+                roomPassengers.push(p);
                 const typeShort =
                   p.type === "child" ? "TE" : p.type === "baby" ? "EB" : "NL";
                 paxLabels.push(
@@ -1468,6 +1475,11 @@ module.exports.createPost = async (req, res) => {
             const noteSuffix = paxLabels.length
               ? " | " + paxLabels.join(", ")
               : "";
+            // NL/TE/EB thật của phòng này (nếu có roomAssignments). Đơn cũ
+            // không có passengerIdxs → fallback giữ sức chứa cơ bản.
+            const roomPax = roomPassengers.length
+              ? paxToHotelBookingSet(countPax(roomPassengers))
+              : { adults: sel.baseOccupancy || 2, children: 0, babies: 0, childrenDetails: [], babiesDetails: [] };
             await new HotelBooking({
               code: "HB" + generateRandomNumber(10),
               guest: {
@@ -1477,8 +1489,11 @@ module.exports.createPost = async (req, res) => {
               },
               checkIn: new Date(sel.fromDate),
               checkOut: new Date(sel.toDate),
-              adults: sel.baseOccupancy || 2,
-              children: 0,
+              adults: roomPax.adults,
+              children: roomPax.children,
+              childrenDetails: roomPax.childrenDetails,
+              babies: roomPax.babies,
+              babiesDetails: roomPax.babiesDetails,
               rooms: 1,
               roomTypeId: sel.roomTypeId,
               hotel: {
@@ -1549,6 +1564,26 @@ module.exports.createPost = async (req, res) => {
               const guestFullName =
                 (body.fullName || "").trim() || "Khách tour";
 
+              // NL/TE/EB thật mà đơn này đóng góp vào phòng (theo atom neo).
+              const roomPaxPassengers = passengersForAtoms(
+                item.passengers,
+                ra.atomAnchorIdxs
+              );
+              let roomPax = paxToHotelBookingSet(countPax(roomPaxPassengers));
+              if (
+                roomPax.adults + roomPax.children + roomPax.babies === 0
+              ) {
+                // Không resolve được atom → fallback dùng sức chứa.
+                roomPax = {
+                  adults:
+                    Number(ra.usedCapacity) || Number(ra.baseOccupancy) || 2,
+                  children: 0,
+                  babies: 0,
+                  childrenDetails: [],
+                  babiesDetails: [],
+                };
+              }
+
               // ── Trường hợp ghép cross-order: ra._reuseThId trỏ vào TH đã có
               //   khách đơn khác đang ở ghép. KHÔNG đổi guest của TH; chỉ
               //   append note + push entry tourSeg.assignments với cùng
@@ -1568,8 +1603,18 @@ module.exports.createPost = async (req, res) => {
                       : guestFullName
                   }`;
                   const newNote = (reuse.note || "") + " " + appendStr;
+                  // Cộng dồn NL/TE/EB của đơn này vào phòng đang ghép.
                   await HotelBooking.findByIdAndUpdate(reuse._id, {
                     $set: { note: newNote },
+                    $inc: {
+                      adults: roomPax.adults,
+                      children: roomPax.children,
+                      babies: roomPax.babies,
+                    },
+                    $push: {
+                      childrenDetails: { $each: roomPax.childrenDetails },
+                      babiesDetails: { $each: roomPax.babiesDetails },
+                    },
                   });
                 }
               }
@@ -1622,6 +1667,12 @@ module.exports.createPost = async (req, res) => {
                         note: noteTxt,
                         paymentStatus: "unpaid",
                         paymentMethod: body.paymentMethod || "money",
+                        // Đặt NL/TE/EB thật (ghi đè sức chứa cơ bản của TH).
+                        adults: roomPax.adults,
+                        children: roomPax.children,
+                        childrenDetails: roomPax.childrenDetails,
+                        babies: roomPax.babies,
+                        babiesDetails: roomPax.babiesDetails,
                         ...(userId ? { userId } : {}),
                       },
                     },
@@ -1682,8 +1733,11 @@ module.exports.createPost = async (req, res) => {
                   },
                   checkIn: new Date(r.fromDate),
                   checkOut: new Date(r.toDate),
-                  adults: ra.baseOccupancy || 2,
-                  children: 0,
+                  adults: roomPax.adults,
+                  children: roomPax.children,
+                  childrenDetails: roomPax.childrenDetails,
+                  babies: roomPax.babies,
+                  babiesDetails: roomPax.babiesDetails,
                   rooms: 1,
                   roomTypeId: ra.roomTypeId,
                   hotel: {

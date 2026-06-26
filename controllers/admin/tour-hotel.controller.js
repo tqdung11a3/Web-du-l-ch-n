@@ -23,6 +23,12 @@ const {
 const { diffHotelsForConfirm, pickLatestRequestPerHotelMap } = require("../../helpers/tour-hotel-segment-diff.helper");
 const auditLogHelper = require("../../helpers/audit-log.helper");
 const { evaluateTourHotelQuotaPressure } = require("../../helpers/tour-hotel-quota-pressure.helper");
+const {
+  countPax,
+  passengersForAtoms,
+  mergePax,
+  paxToHotelBookingSet,
+} = require("../../helpers/hotel-booking-pax.helper");
 
 // ── Danh sách tour của company ───────────────────────────────────────────────
 module.exports.list = async (req, res) => {
@@ -1262,6 +1268,78 @@ module.exports.saveAssignments = async (req, res) => {
       );
     }
 
+    // Full order items để recompute NL/TE/EB thật cho từng phòng (private:
+    // khớp roomAssignments theo numPeople; shared: theo atomAnchorIdxs nếu có).
+    const _depDisplay = moment(tourSeg.departureDate).format("DD/MM/YYYY");
+    const _findItem = (order) =>
+      (order?.items || []).find((it) => {
+        if (String(it.tourId) !== String(tourSeg.tourId)) return false;
+        if (it.departureDateDisplay) return it.departureDateDisplay === _depDisplay;
+        if (it.departureDate)
+          return moment(it.departureDate).format("DD/MM/YYYY") === _depDisplay;
+        return false;
+      });
+    const fullOrders =
+      assignOrderIds.length > 0
+        ? await Order.find({ _id: { $in: assignOrderIds } }).select("items").lean()
+        : [];
+    const fullOrderById = Object.fromEntries(
+      fullOrders.map((o) => [String(o._id), o])
+    );
+    const privateRoomQueueByOrder = {};
+    const _getPrivateRoomQueue = (orderId) => {
+      const k = String(orderId);
+      if (privateRoomQueueByOrder[k]) return privateRoomQueueByOrder[k];
+      const order = fullOrderById[k];
+      const queue = [];
+      if (order) {
+        const item = _findItem(order);
+        const paxByIdx = new Map();
+        for (const p of item?.passengers || []) {
+          if (typeof p.idx === "number") paxByIdx.set(p.idx, p);
+        }
+        for (const sel of item?.roomSelections || []) {
+          for (const ra of sel.roomAssignments || []) {
+            const subset = (ra.passengerIdxs || [])
+              .map((idx) => paxByIdx.get(idx))
+              .filter(Boolean);
+            if (subset.length) queue.push(subset);
+          }
+        }
+      }
+      privateRoomQueueByOrder[k] = queue;
+      return queue;
+    };
+    const _popPrivateRoom = (orderId, numPeople) => {
+      const queue = _getPrivateRoomQueue(orderId);
+      if (!queue.length) return [];
+      let idx = queue.findIndex((s) => s.length === Number(numPeople));
+      if (idx < 0) idx = 0;
+      return queue.splice(idx, 1)[0] || [];
+    };
+
+    // Dựng nhãn chi tiết NL/TE/EB cho note từ passengers thực tế của phòng:
+    //   "Tên NL (+ TE Tên, EB Tên, NL khác (tuổi))".
+    const _fmtRoomDetailLabel = (passengers) => {
+      const list = (passengers || []).map((p) => ({
+        name: String(p.name || "?").trim() || "?",
+        type: p.type === "child" || p.type === "baby" ? p.type : "adult",
+        age: Math.max(0, Math.floor(Number(p.age) || 0)),
+      }));
+      if (!list.length) return "";
+      const anchor = list.find((p) => p.type === "adult") || list[0];
+      const deps = list
+        .filter((p) => p !== anchor)
+        .map((m) =>
+          m.type === "child"
+            ? `TE ${m.name}`
+            : m.type === "baby"
+            ? `EB ${m.name}`
+            : `${m.name} (${m.age}t)`
+        );
+      return deps.length ? `${anchor.name} (+ ${deps.join(", ")})` : anchor.name;
+    };
+
     const newAssignedBookingIds = new Set();
     for (const a of cleanAssignments) {
       const hb = holdMap[String(a.holdBookingId)] || null;
@@ -1272,12 +1350,38 @@ module.exports.saveAssignments = async (req, res) => {
       if (!guestEmail && oa?.userId) {
         guestEmail = assignUserEmailById[String(oa.userId)] || "";
       }
+
+      // NL/TE/EB thật của phòng (best-effort theo roomAssignments của đơn).
+      let roomPassengers = _popPrivateRoom(a.orderId, a.numPeople);
+      if (!roomPassengers.length && Array.isArray(a.atomAnchorIdxs) && a.atomAnchorIdxs.length) {
+        const order = fullOrderById[String(a.orderId)];
+        roomPassengers = passengersForAtoms(
+          _findItem(order)?.passengers,
+          a.atomAnchorIdxs
+        );
+      }
+      const pax = countPax(roomPassengers);
+      const paxSet =
+        pax.adults + pax.children + pax.babies > 0
+          ? paxToHotelBookingSet(pax)
+          : null;
+
+      // Giữ chi tiết NL/TE/EB trong note (ưu tiên passengers thực tế, fallback
+      // atomLabels client gửi) — không để mất khi admin đổi phòng.
+      let detailStr = _fmtRoomDetailLabel(roomPassengers);
+      if (!detailStr && Array.isArray(a.atomLabels) && a.atomLabels.length) {
+        detailStr = a.atomLabels.filter(Boolean).join(" || ");
+      }
+
       await HotelBooking.findByIdAndUpdate(hb._id, {
         orderCode: a.orderCode || "",
         "guest.fullName": a.guestName || "Khách tour",
         "guest.phone": a.phone || "",
         "guest.email": guestEmail,
-        note: `[TOUR] Đơn #${a.orderCode} – ${a.guestName || ""} – ${a.numPeople} người/phòng (loại phòng)`,
+        note: `[TOUR] Đơn #${a.orderCode} – ${a.guestName || ""} – ${a.numPeople} người/phòng (loại phòng)${
+          detailStr ? ` | ${detailStr}` : ""
+        }`,
+        ...(paxSet || {}),
       });
     }
 
@@ -1309,14 +1413,35 @@ module.exports.saveAssignments = async (req, res) => {
             note:             resetNote,
             status:           "confirmed",
             isTemporaryHold:  false,
+            // Phòng trống trở lại → xoá NL/TE/EB của khách cũ.
+            children:         0,
+            babies:           0,
           },
           $unset: {
             orderCode:     "",
             holdExpiresAt: "",
             userId:        "",
+            childrenDetails: "",
+            babiesDetails:   "",
           },
         }
       );
+      // Đưa adults về sức chứa cơ bản của loại phòng (nếu tra được).
+      for (const hbId of idsToReset) {
+        const hb = holdMap[hbId];
+        if (!hb) continue;
+        const hot = hotelMap[String(hb.hotel?.hotelId)] || null;
+        const rt = hot
+          ? (hot.roomTypes || []).find(
+              (x) => String(x._id) === String(hb.roomTypeId)
+            )
+          : null;
+        const base =
+          rt && Number.isFinite(Number(rt.baseOccupancy))
+            ? Math.max(1, Math.round(Number(rt.baseOccupancy)))
+            : 1;
+        await HotelBooking.updateOne({ _id: hbId }, { $set: { adults: base } });
+      }
     }
 
     tourSeg.assignments = cleanAssignments;

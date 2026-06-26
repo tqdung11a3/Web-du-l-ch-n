@@ -36,6 +36,8 @@ const schema = new Schema(
     adults: { type: Number, default: 1 },
     children: { type: Number, default: 0 },
     childrenDetails: [{ age: Number }], // Lưu độ tuổi cụ thể của từng trẻ em: [{ age: 2 }, { age: 8 }]
+    babies: { type: Number, default: 0 },
+    babiesDetails: [{ age: Number }], // Lưu độ tuổi cụ thể của từng em bé: [{ age: 1 }, { age: 2 }]
     rooms: { type: Number, default: 1 },
     roomsData: String, // JSON string của thông tin chi tiết từng phòng: [{adults: 2, children: [{age: 3}]}, ...]
 
