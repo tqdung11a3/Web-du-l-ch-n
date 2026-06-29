@@ -74,6 +74,8 @@ module.exports.detail = async (req, res) => {
 
     // Tìm tour với slug (không cần kiểm tra companyId chặt chẽ vì URL đã có company slug)
     // Nếu tour có companyId khác, vẫn hiển thị (có thể là dữ liệu cũ hoặc tour đã chuyển công ty)
+
+    // 1. Tìm tour
     tourDetailDoc = await Tour.findOne({
       slug: tourSlug,
       deleted: false,
@@ -146,6 +148,8 @@ module.exports.detail = async (req, res) => {
     if (company) {
       // Đã có company từ slug trong URL (company đã được fetch đầy đủ ở trên)
       // Cần fetch lại với tourAgeBands nếu company chỉ có một số field
+
+      // 2. Gắn công ty tổ chức tour
       const companyFull = await Company.findById(company._id)
         .select("name slug logo hotline address tourAgeBands")
         .lean();
@@ -157,6 +161,8 @@ module.exports.detail = async (req, res) => {
         hotline: company.hotline || "",
         address: company.address || "",
       };
+
+      // 3. Gán mốc tuổi NL/TE/EB cho tour
       tourDetail.tourAgeBands = companyFull?.tourAgeBands || { babyMaxAge: 3, childrenMaxAge: 11 };
     } else if (tourDetail.companyId) {
       // Fallback: lấy theo companyId của tour (phòng trường hợp dùng route cũ)
@@ -203,6 +209,7 @@ module.exports.detail = async (req, res) => {
   });
 
   // Ngày khởi hành format
+  // 4. Format ngày khởi hành cho tour
   if (tourDetail.departureDate) {
     tourDetail.departureDateFormat = moment(tourDetail.departureDate).format(
       "DD/MM/YYYY"
@@ -218,6 +225,9 @@ module.exports.detail = async (req, res) => {
     );
 
     // Map date string -> { seatsTotal, seatsRemaining } để hiển thị số chỗ khi chọn ngày
+
+    // 5. Gán số chỗ còn lại cho từng ngày khởi hành
+    
     tourDetail.departureSeatsByDate = {};
     for (const d of validDeps) {
       const key = moment(d.departureDate).format("DD/MM/YYYY");
@@ -238,6 +248,8 @@ module.exports.detail = async (req, res) => {
   }
 
   // ====== ĐIỂM KHỞI HÀNH (departureCity) ======
+
+  // 6. Gán tên điểm khởi hành cho tour
   if (tourDetail.departureCity) {
     try {
       const depCity = await City.findById(tourDetail.departureCity).lean();
@@ -315,8 +327,8 @@ module.exports.detail = async (req, res) => {
   try {
     const TourSegment = require("../../models/tour-segment.model");
     const Hotel = require("../../models/hotel.model");
-    const Order = require("../../models/order.model");
-    const HotelBooking = require("../../models/hotel-booking.model");
+    const Order = require("../../models/order.model"); // đếm phòng ở riêng
+    const HotelBooking = require("../../models/hotel-booking.model"); // đếm phòng ở ghép
 
     // Tự heal trạng thái segment dựa vào link request mới nhất-per-hotel:
     // dữ liệu cũ từng bị đánh dấu "rejected" trước khi helper recompute được
@@ -478,6 +490,7 @@ module.exports.detail = async (req, res) => {
               const bookedByRoomType = {};
 
               // Lọc đơn còn chiếm phòng
+              // Chỉ những đơn paid hoặc đang giữ chỗ tạm (isTemporaryHold + chưa hết holdExpiresAt)
               for (const ord of conflictOrders) {
                 const isPaid = ord.paymentStatus === "paid";
                 const isActiveHold =
@@ -486,6 +499,7 @@ module.exports.detail = async (req, res) => {
                     new Date(ord.holdExpiresAt) > _now);
                 if (!isPaid && !isActiveHold) continue;
 
+                // Sau khi qua lọc, mới cộng phòng riêng cho tour hiện tại
                 for (const it of ord.items || []) { // duyệt từng tour trong đơn
                   for (const rs of it.roomSelections || []) { // duyệt từng phòng trong tour
                     if (
@@ -516,20 +530,28 @@ module.exports.detail = async (req, res) => {
               // checkIn/checkOut + roomTypeId, rồi dedupe holdBookingId.
 
               // Đếm phòng shared
+
+              // 1. Lọc assignments shared của tour segment hiện tại
               const _segAssignsShared = (ts.assignments || []).filter(
                 (a) =>
                   String(a.hotelId) === String(hotelEntry.hotelId) &&
                   a.holdBookingId &&
                   a.accommodationMode === "shared"
               );
-              if (_segAssignsShared.length > 0) {
+              if (_segAssignsShared.length > 0) { // Chỉ chạy nếu có khách ở ghép
                 // Mỗi assignment trỏ tới một phòng vật lý qua holdBookingId.
                 // Nhiều khách cùng phòng → nhiều assignment, cùng một holdBookingId.
                 // Set → mỗi booking chỉ query một lần (tránh trùng, query gọn).
                 // Ví dụ: An và Bình chung phòng 101 → 2 assignment, 1 holdBookingId → _holdIds = ["HB-101"].
+
+                // 2. Gom các holdBookingId
                 const _holdIds = [
                   ...new Set(_segAssignsShared.map((a) => String(a.holdBookingId))),
                 ];
+
+                // 3. Query HotelBooking
+                // Assignment chỉ nói: “khách X nằm trên booking Y”.
+                // HotelBooking mới nói: loại phòng gì, check-in/out khi nào.
                 const _holdRows = await HotelBooking.find({
                   _id: { $in: _holdIds },
                   status: { $ne: "cancelled" },
@@ -544,16 +566,22 @@ module.exports.detail = async (req, res) => {
                   if (ci !== _segFromStr || co !== _segToStr) continue;
                   _holdMap[String(hb._id)] = String(hb.roomTypeId || "");
                 }
+
+                // 4. Dedupe — đếm phòng, không đếm người
                 const _holdsPerRt = {};
                 for (const a of _segAssignsShared) {
                   const rtId = _holdMap[String(a.holdBookingId)];
                   if (!rtId) continue;
                   if (!_holdsPerRt[rtId]) _holdsPerRt[rtId] = new Set();
-                  _holdsPerRt[rtId].add(String(a.holdBookingId));
+                  _holdsPerRt[rtId].add(String(a.holdBookingId)); // Nhóm theo loại phòng, mỗi loại dùng Set chứa holdBookingId (mỗi ID = 1 phòng vật lý).
+                  // _holdsPerRt = {
+                  //   "deluxe": Set { "HB-101", "HB-102" }   // size = 2
+                  // }
                 }
                 for (const rtId of Object.keys(_holdsPerRt)) {
                   bookedByRoomType[rtId] =
-                    (bookedByRoomType[rtId] || 0) + _holdsPerRt[rtId].size;
+                    (bookedByRoomType[rtId] || 0) + _holdsPerRt[rtId].size; // bookedByRoomType là từ Order
+                    // Tức là, đoạn này cộng cả Order và HotelBooking lại
                 }
               }
 
@@ -565,8 +593,9 @@ module.exports.detail = async (req, res) => {
                   bookedByRoomType[String(ra.roomTypeId)] || 0;
 
                 const availableForClient = Math.max(0, ra.assignedRooms - clientBookedCount);
+                // Thì đoạn này, sẽ trừ cả Order và HotelBooking lại
 
-                if (availableForClient > 0) {
+                if (availableForClient > 0) { // Chỉ hiển thị phòng còn trống thực tế
                   const matchedRoomType = (hotel.roomTypes || []).find(
                     (rt) => String(rt._id) === String(ra.roomTypeId)
                   );

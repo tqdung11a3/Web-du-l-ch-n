@@ -82,6 +82,8 @@ function hasTimeOverlap(searchCheckIn, searchCheckOut, bookingCheckIn, bookingCh
  */
 
 // hàm tính số phòng trống cho một loại phòng cụ thể trong khoảng thời gian
+
+// Trong khoảng checkIn → checkOut, loại phòng X còn bao nhiêu phòng vật lý có thể đặt?
 function getAvailableRoomsForType(allRooms, roomTypeId, bookings, checkIn, checkOut) {
   // Lọc phòng thuộc room type này và có status vacant
   const roomsOfType = allRooms.filter(r =>
@@ -91,6 +93,7 @@ function getAvailableRoomsForType(allRooms, roomTypeId, bookings, checkIn, check
 
   // Tập hợp roomId đã bị chiếm bởi booking có overlap thời gian
   // Chỉ tính booking đã gán phòng cụ thể (roomId != null)
+
   // Booking đã gán phòng cụ thể
   const occupiedRoomIds = new Set(
     bookings
@@ -104,6 +107,7 @@ function getAvailableRoomsForType(allRooms, roomTypeId, bookings, checkIn, check
 
   // Với booking chưa gán phòng (roomId = null) nhưng cùng roomTypeId và overlap:
   // đây là booking "chờ xếp phòng" — đếm riêng để trừ vào số phòng còn trống
+  
   // booking chờ xếp phòng
   const unassignedOverlapCount = bookings.filter(booking => {
     if (booking.status === "cancelled" || booking.status === "checked_out") return false;

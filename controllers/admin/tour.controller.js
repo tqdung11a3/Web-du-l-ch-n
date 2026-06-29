@@ -974,7 +974,7 @@ module.exports.trash = async (req, res) => {
 module.exports.createPost = async (req, res) => {
   try {
     // --- scope theo công ty ---
-    // verifyToken đã gán req.account, nên companyId lấy từ admin đang đăng nhập
+    // verifyToken đã gán req.account, nên companyId lấy từ admin đang đăng nhập, ở file auth.middleware.js
     const companyId = req.account.companyId;
     if (!companyId) {
       return res.json({
@@ -1809,6 +1809,60 @@ module.exports.editPatch = async (req, res) => {
   }
 };
 
+/**
+ * Kiểm tra xem một tour có còn dữ liệu liên quan đang hoạt động hay không.
+ * Chặn xóa (mềm hoặc vĩnh viễn) khi tour vẫn còn:
+ *   - Đơn đặt tour còn hiệu lực: Order tham chiếu tourId, chưa xóa, status
+ *     khác "cancel", và (không phải đơn giữ chỗ tạm hết hạn).
+ *   - Liên kết tour–khách sạn còn hiệu lực: HotelLinkRequest theo tourId với
+ *     status khác "cancelled"/"rejected".
+ *
+ * @returns {Promise<{ blocked: boolean, orderCount: number, linkCount: number, message: string }>}
+ */
+async function _checkTourDeletable(id) {
+  const Order = require("../../models/order.model");
+  const HotelLinkRequest = require("../../models/hotel-link-request.model");
+
+  const now = new Date();
+
+  // Đơn đặt tour còn hiệu lực (bỏ qua đơn đã hủy / đã xóa / giữ chỗ tạm hết hạn)
+  const orderCount = await Order.countDocuments({
+    deleted: { $ne: true },
+    status: { $ne: "cancel" },
+    "items.tourId": String(id),
+    $or: [
+      { isTemporaryHold: { $ne: true } },
+      { holdExpiresAt: null },
+      { holdExpiresAt: { $gt: now } },
+    ],
+  });
+
+  // Liên kết tour–khách sạn còn hiệu lực (bỏ qua đã hủy / đã từ chối)
+  const linkCount = await HotelLinkRequest.countDocuments({
+    tourId: id,
+    status: { $nin: ["cancelled", "rejected"] },
+  });
+
+  const blocked = orderCount > 0 || linkCount > 0;
+
+  let message = "";
+  if (blocked) {
+    const parts = [];
+    if (orderCount > 0) {
+      parts.push(`${orderCount} đơn đặt tour`);
+    }
+    if (linkCount > 0) {
+      parts.push(`${linkCount} liên kết tour–khách sạn`);
+    }
+    message =
+      `Không thể xóa tour vì vẫn còn ${parts.join(" và ")} đang hoạt động. ` +
+      `Vui lòng hủy hoặc xóa tất cả đơn đặt tour, và hủy tất cả liên kết ` +
+      `tour–khách sạn của tour này trước khi xóa.`;
+  }
+
+  return { blocked, orderCount, linkCount, message };
+}
+
 module.exports.deletePatch = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1834,6 +1888,15 @@ module.exports.deletePatch = async (req, res) => {
     };
 
     const tourBefore = await Tour.findOne(filter).select("name status").lean();
+
+    // 2b) CHẶN xóa khi tour còn đơn đặt tour hoặc liên kết tour–khách sạn.
+    if (tourBefore) {
+      const guard = await _checkTourDeletable(id);
+      if (guard.blocked) {
+        return res.json({ code: "error", message: guard.message });
+      }
+    }
+
     const result = await Tour.updateOne(filter, update);
 
     // 3) Kết quả
@@ -2066,6 +2129,15 @@ module.exports.destroyDelete = async (req, res) => {
       companyId: req.account.companyId,
       deleted: true,
     };
+
+    // 2b) CHẶN xóa vĩnh viễn khi tour còn đơn đặt tour hoặc liên kết tour–KS.
+    const tourExists = await Tour.findOne(filter).select("_id").lean();
+    if (tourExists) {
+      const guard = await _checkTourDeletable(id);
+      if (guard.blocked) {
+        return res.json({ code: "error", message: guard.message });
+      }
+    }
 
     const result = await Tour.deleteOne(filter);
 

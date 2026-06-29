@@ -535,6 +535,7 @@ function canAllocateAtomicGroupsAcrossHotels({
   let unplaced = taggedAtoms.slice();
   const allocations = [];
 
+  // Thử xếp atoms vào KS theo thứ tự ưu tiên; atom lớn vào KS trước; atom không fit → KS tiếp theo.
   for (const hotel of hotelList) {
     if (unplaced.length === 0) break;
 

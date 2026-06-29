@@ -385,8 +385,9 @@ module.exports.createPost = async (req, res) => {
 
       // Đếm số phòng đang bị chiếm bởi các booking khác (overlap, cùng
       // roomTypeId, không cancelled/checked_out) — phân 2 nhóm.
-      let holdRoomsByOthers = 0;
-      let paidRoomsByOthers = 0;
+
+      let holdRoomsByOthers = 0; // đang có khách đặt (giữ chỗ chưa thanh toán)
+      let paidRoomsByOthers = 0; // đã có khách đặt (đã thanh toán)
       for (const b of hotelBookings) {
         if (b.status === "cancelled" || b.status === "checked_out") continue;
         if (String(b.roomTypeId) !== String(item.roomTypeId)) continue;
@@ -406,13 +407,13 @@ module.exports.createPost = async (req, res) => {
       let kind;
       let blockedCount;
       if (holdRoomsByOthers > 0) {
-        kind = "hold";
+        kind = "hold"; // “Đang có khách đặt X phòng…” — có thể hết hạn sau
         blockedCount = holdRoomsByOthers;
       } else if (paidRoomsByOthers > 0) {
-        kind = "paid";
+        kind = "paid"; // “Đã có khách đặt X phòng…” — đã thanh toán xong
         blockedCount = paidRoomsByOthers;
       } else {
-        kind = "shortage";
+        kind = "shortage"; // “Loại phòng đó đã hết!” — không còn phòng nào
         blockedCount = 0;
       }
 

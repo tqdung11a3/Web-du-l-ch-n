@@ -183,6 +183,9 @@ module.exports.detail = async (req, res) => {
       );
 
       if (selectedDeparture) {
+
+        // Trạng thái "Đã xác nhận" từ TourSegment + HotelLinkRequest
+        // Lấy thông tin tour segment từ TourSegment, bao gồm status, rejectedByCompanyName, rejectedByCompanyNames, rejectedHotelName, rejectedResponseNote
         existingSegment = await TourSegment.findOne({
           tourId,
           departureDate: new Date(departureDateParam),
@@ -271,6 +274,7 @@ module.exports.detail = async (req, res) => {
       }
     }
 
+    // Danh sách lịch khởi hành
     tour.departuresFormatted = (tour.departures || []).map((d) => ({
       departureDateStr:     moment(d.departureDate).format("YYYY-MM-DD"),
       departureDateDisplay: moment(d.departureDate).format("DD/MM/YYYY"),
@@ -352,12 +356,15 @@ module.exports.detail = async (req, res) => {
 module.exports.hotelAvailability = async (req, res) => {
   try {
     const companyId = req.account.companyId;
+
+    // Lấy thông tin khách sạn, ngày checkin, checkout, và tour segment id (nếu có)
     const { hotelId, fromDate, toDate, excludeTourSegmentId } = req.query;
 
     if (!hotelId || !fromDate || !toDate) {
       return res.json({ success: false, message: "Thiếu tham số" });
     }
 
+    // Lấy ngày checkin, checkout
     const checkIn  = new Date(fromDate);
     const checkOut = new Date(toDate);
 
@@ -365,6 +372,7 @@ module.exports.hotelAvailability = async (req, res) => {
       return res.json({ success: false, message: "Khoảng ngày không hợp lệ" });
     }
 
+    // Lấy thông tin khách sạn
     const hotel = await Hotel.findOne({ _id: hotelId, deleted: false })
       .select("name address roomTypes rooms companyId")
       .lean();
@@ -373,6 +381,7 @@ module.exports.hotelAvailability = async (req, res) => {
       return res.json({ success: false, message: "Không tìm thấy khách sạn" });
     }
 
+    // Tìm booking đang chiếm phòng ( trừ tour hiện tại)
     const bookingQuery = {
       "hotel.hotelId": hotelId,
       status: { $nin: ["cancelled", "checked_out"] },
@@ -1470,6 +1479,9 @@ module.exports.saveAssignments = async (req, res) => {
 // ── API: Yêu cầu bổ sung phòng cho tour segment ──────────────────────────────
 // POST /admin/tour-hotel/api/request-additional-rooms
 // Body: { tourSegmentId, items: [{ hotelId, fromDate, toDate, roomTypeId, additionalRooms, note? }] }
+
+// Tour đã xác nhận nhưng quota phòng KS không đủ so với số ghế còn lại
+// Yêu cầu bổ sung phòng cho tour segment
 module.exports.requestAdditionalRooms = async (req, res) => {
   try {
     const companyId = req.account.companyId;
@@ -1569,6 +1581,8 @@ module.exports.requestAdditionalRooms = async (req, res) => {
         const fromStr = String(item.fromDate).slice(0, 10);
         const toStr = String(item.toDate).slice(0, 10);
         // Dùng positional operator để update đúng room allocation
+
+        // Cộng thêm phòng vào TourSegment
         await TourSegment.updateOne(
           {
             _id: tourSegmentId,
@@ -1611,6 +1625,7 @@ module.exports.requestAdditionalRooms = async (req, res) => {
         };
       });
 
+      // Tạo HotelLinkRequest
       const linkRequest = await HotelLinkRequest.create({
         fromCompanyId: companyId,
         fromCompanyName,

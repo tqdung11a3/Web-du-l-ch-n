@@ -1123,6 +1123,8 @@
       }
       submitBtn.disabled = true;
       try {
+
+        // gọi api yêu cầu bổ sung phòng
         const res = await fetch(`/${pathAdmin}/tour-hotel/api/request-additional-rooms`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
