@@ -1825,10 +1825,13 @@ async function _checkTourDeletable(id) {
 
   const now = new Date();
 
-  // Đơn đặt tour còn hiệu lực (bỏ qua đơn đã hủy / đã xóa / giữ chỗ tạm hết hạn)
+  // Đơn đặt tour chưa kết thúc: chỉ đếm đơn status = "initial" (đang xử lý).
+  // Đơn "done" (Hoàn thành) không chặn xóa vì tour đã kết thúc với những
+  // đơn đó. Đơn "cancel" và đơn đã xóa cũng không chặn.
+  // Đơn giữ chỗ tạm (isTemporaryHold) đã hết hạn cũng không tính.
   const orderCount = await Order.countDocuments({
     deleted: { $ne: true },
-    status: { $ne: "cancel" },
+    status: "initial",
     "items.tourId": String(id),
     $or: [
       { isTemporaryHold: { $ne: true } },
@@ -1837,11 +1840,29 @@ async function _checkTourDeletable(id) {
     ],
   });
 
-  // Liên kết tour–khách sạn còn hiệu lực (bỏ qua đã hủy / đã từ chối)
-  const linkCount = await HotelLinkRequest.countDocuments({
-    tourId: id,
-    status: { $nin: ["cancelled", "rejected"] },
+  // Tour đã kết thúc hay chưa: chỉ coi là đã kết thúc khi TẤT CẢ đơn hàng của
+  // tour (chưa xóa) đều ở trạng thái "done" (Hoàn thành) và phải có ít nhất 1
+  // đơn. Admin chỉ đánh dấu Hoàn thành sau khi tour kết thúc, nên khi mọi đơn
+  // đều Hoàn thành thì liên kết tour–khách sạn không còn ý nghĩa chặn xóa.
+  const totalOrderCount = await Order.countDocuments({
+    deleted: { $ne: true },
+    "items.tourId": String(id),
   });
+  const doneOrderCount = await Order.countDocuments({
+    deleted: { $ne: true },
+    status: "done",
+    "items.tourId": String(id),
+  });
+  const tourEnded = totalOrderCount > 0 && doneOrderCount === totalOrderCount;
+
+  // Liên kết tour–khách sạn còn hiệu lực (bỏ qua đã hủy / đã từ chối).
+  // Chỉ kiểm tra khi tour CHƯA kết thúc.
+  const linkCount = tourEnded
+    ? 0
+    : await HotelLinkRequest.countDocuments({
+        tourId: id,
+        status: { $nin: ["cancelled", "rejected"] },
+      });
 
   const blocked = orderCount > 0 || linkCount > 0;
 
@@ -1849,18 +1870,18 @@ async function _checkTourDeletable(id) {
   if (blocked) {
     const parts = [];
     if (orderCount > 0) {
-      parts.push(`${orderCount} đơn đặt tour`);
+      parts.push(`${orderCount} đơn đặt tour đang xử lý`);
     }
     if (linkCount > 0) {
       parts.push(`${linkCount} liên kết tour–khách sạn`);
     }
     message =
       `Không thể xóa tour vì vẫn còn ${parts.join(" và ")} đang hoạt động. ` +
-      `Vui lòng hủy hoặc xóa tất cả đơn đặt tour, và hủy tất cả liên kết ` +
+      `Vui lòng hủy hoặc xóa các đơn đặt tour đang xử lý, và hủy các liên kết ` +
       `tour–khách sạn của tour này trước khi xóa.`;
   }
 
-  return { blocked, orderCount, linkCount, message };
+  return { blocked, orderCount, linkCount, tourEnded, message };
 }
 
 module.exports.deletePatch = async (req, res) => {

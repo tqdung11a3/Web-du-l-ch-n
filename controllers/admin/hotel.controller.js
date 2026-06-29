@@ -2026,6 +2026,180 @@ module.exports.editPatch = async (req, res) => {
 };
 
 // ============== DELETE (soft) ==============
+// ============================================================================
+// GUARD XÓA: kiểm tra ràng buộc trước khi xóa khách sạn / loại phòng / phòng.
+//
+// Nguyên tắc chung:
+//   - Booking "còn hiệu lực": HotelBooking có status KHÁC cancelled/checked_out
+//     và checkOut > hiện tại (tức còn ở hiện tại hoặc tương lai). Bao gồm cả
+//     đặt phòng trực tiếp lẫn giữ chỗ tour (tour hold). Nếu mọi booking đã
+//     "Đã trả phòng" (checked_out) hoặc "Đã hủy" (cancelled) thì không chặn.
+//   - Liên kết tour–khách sạn "còn hiệu lực": HotelLinkRequest status thuộc
+//     pending/approved/partially_approved, TRỪ khi tour của liên kết đó đã kết
+//     thúc (tất cả đơn của tour đều "done").
+//   - Đơn hàng tour "đang xử lý": Order status = "initial" có roomSelections
+//     trỏ tới hotel/loại phòng tương ứng.
+// ============================================================================
+
+/** Tour được coi là đã kết thúc khi có >0 đơn và TẤT CẢ đơn (chưa xóa) là "done". */
+async function _isTourEnded(tourId) {
+  if (!tourId) return false;
+  const Order = require("../../models/order.model");
+  const total = await Order.countDocuments({
+    deleted: { $ne: true },
+    "items.tourId": String(tourId),
+  });
+  if (total === 0) return false;
+  const done = await Order.countDocuments({
+    deleted: { $ne: true },
+    status: "done",
+    "items.tourId": String(tourId),
+  });
+  return done === total;
+}
+
+/**
+ * Đếm liên kết tour–khách sạn còn hiệu lực cho 1 hotel (tùy chọn lọc roomTypeId),
+ * đã loại bỏ những liên kết thuộc tour đã kết thúc.
+ */
+async function _countActiveHotelLinks(hotelId, roomTypeId = null) {
+  const HotelLinkRequest = require("../../models/hotel-link-request.model");
+  const q = {
+    hotelId: hotelId,
+    status: { $in: ["pending", "approved", "partially_approved"] },
+  };
+  if (roomTypeId) {
+    q.$or = [
+      { "requestedRooms.roomTypeId": roomTypeId },
+      { "approvedRooms.roomTypeId": roomTypeId },
+    ];
+  }
+  const links = await HotelLinkRequest.find(q).select("tourId").lean();
+  if (!links.length) return 0;
+
+  // Loại bỏ liên kết của tour đã kết thúc.
+  const uniqueTourIds = [...new Set(links.map((l) => String(l.tourId)))];
+  const endedSet = new Set();
+  for (const tid of uniqueTourIds) {
+    if (await _isTourEnded(tid)) endedSet.add(tid);
+  }
+  return links.filter((l) => !endedSet.has(String(l.tourId))).length;
+}
+
+/** Kiểm tra xóa được PHÒNG CỤ THỂ chưa (theo roomId). */
+async function _checkRoomDeletable(hotelId, roomId) {
+  const now = new Date();
+  const bookingCount = await HotelBooking.countDocuments({
+    "hotel.hotelId": hotelId,
+    roomId: roomId,
+    status: { $nin: ["cancelled", "checked_out"] },
+    checkOut: { $gt: now },
+  });
+  const blocked = bookingCount > 0;
+  return {
+    blocked,
+    bookingCount,
+    message: blocked
+      ? "Không thể xóa phòng vì đang có đặt phòng/giữ chỗ còn hiệu lực " +
+        "(khách đang ở hoặc booking hiện tại/tương lai chưa trả phòng/chưa hủy). " +
+        "Vui lòng đợi khách trả phòng hoặc hủy các booking liên quan trước."
+      : "",
+  };
+}
+
+/** Kiểm tra xóa được LOẠI PHÒNG chưa (theo hotelId + roomTypeId). */
+async function _checkRoomTypeDeletable(hotelId, roomTypeId) {
+  const Order = require("../../models/order.model");
+  const now = new Date();
+  const rtId = String(roomTypeId);
+
+  // 1) Booking còn hiệu lực thuộc loại phòng này.
+  const bookingCount = await HotelBooking.countDocuments({
+    "hotel.hotelId": hotelId,
+    roomTypeId: roomTypeId,
+    status: { $nin: ["cancelled", "checked_out"] },
+    checkOut: { $gt: now },
+  });
+
+  // 2) Đơn hàng tour đang xử lý dùng loại phòng này.
+  const orderCount = await Order.countDocuments({
+    deleted: { $ne: true },
+    status: "initial",
+    items: {
+      $elemMatch: {
+        roomSelections: {
+          $elemMatch: { hotelId: String(hotelId), roomTypeId: rtId },
+        },
+      },
+    },
+  });
+
+  // 3) Liên kết tour–khách sạn còn hiệu lực dùng loại phòng này.
+  const linkCount = await _countActiveHotelLinks(hotelId, roomTypeId);
+
+  const blocked = bookingCount > 0 || orderCount > 0 || linkCount > 0;
+  return {
+    blocked,
+    bookingCount,
+    orderCount,
+    linkCount,
+    message: blocked
+      ? _buildDeleteBlockMessage("loại phòng", { bookingCount, orderCount, linkCount })
+      : "",
+  };
+}
+
+/** Kiểm tra xóa được KHÁCH SẠN chưa (kiểm tra toàn bộ booking/link/đơn của hotel). */
+async function _checkHotelDeletable(hotelId) {
+  const Order = require("../../models/order.model");
+  const now = new Date();
+
+  // 1) Mọi booking còn hiệu lực thuộc khách sạn (mọi loại phòng / phòng).
+  const bookingCount = await HotelBooking.countDocuments({
+    "hotel.hotelId": hotelId,
+    status: { $nin: ["cancelled", "checked_out"] },
+    checkOut: { $gt: now },
+  });
+
+  // 2) Đơn hàng tour đang xử lý dùng bất kỳ phòng nào của khách sạn này
+  //    (cả mode private: roomSelections, lẫn shared: sharedRoomRequest).
+  const orderCount = await Order.countDocuments({
+    deleted: { $ne: true },
+    status: "initial",
+    $or: [
+      { "items.roomSelections.hotelId": String(hotelId) },
+      { "items.sharedRoomRequest.hotelId": String(hotelId) },
+    ],
+  });
+
+  // 3) Liên kết tour–khách sạn còn hiệu lực tới khách sạn này.
+  const linkCount = await _countActiveHotelLinks(hotelId);
+
+  const blocked = bookingCount > 0 || orderCount > 0 || linkCount > 0;
+  return {
+    blocked,
+    bookingCount,
+    orderCount,
+    linkCount,
+    message: blocked
+      ? _buildDeleteBlockMessage("khách sạn", { bookingCount, orderCount, linkCount })
+      : "",
+  };
+}
+
+function _buildDeleteBlockMessage(label, { bookingCount, orderCount, linkCount }) {
+  const parts = [];
+  if (bookingCount > 0) parts.push(`${bookingCount} booking còn hiệu lực`);
+  if (orderCount > 0) parts.push(`${orderCount} đơn đặt tour đang xử lý`);
+  if (linkCount > 0) parts.push(`${linkCount} liên kết tour–khách sạn đang hoạt động`);
+  return (
+    `Không thể xóa ${label} vì vẫn còn ${parts.join(", ")}. ` +
+    `Chỉ xóa được khi mọi booking đã trả phòng hoặc đã hủy, ` +
+    `mọi đơn tour liên quan đã hoàn thành hoặc đã hủy, ` +
+    `và mọi liên kết tour–khách sạn đã được hủy (hoặc tour đã kết thúc).`
+  );
+}
+
 module.exports.deletePatch = async (req, res) => {
   try {
     const id = req.params.id;
@@ -2035,6 +2209,14 @@ module.exports.deletePatch = async (req, res) => {
     if (companyId) find.companyId = companyId;
 
     const hotelBefore = await Hotel.findOne(find).select("name").lean();
+
+    // Guard: chặn xóa khi khách sạn còn booking/đơn/liên kết còn hiệu lực.
+    if (hotelBefore) {
+      const guard = await _checkHotelDeletable(id);
+      if (guard.blocked) {
+        return res.json({ code: "error", message: guard.message });
+      }
+    }
     await Hotel.updateOne(find, {
       deleted: true,
       deletedAt: Date.now(),
@@ -2097,6 +2279,15 @@ module.exports.destroyDelete = async (req, res) => {
     const find = { _id: id };
     if (companyId) find.companyId = companyId;
 
+    // Guard: chặn xóa vĩnh viễn khi còn booking/đơn/liên kết còn hiệu lực.
+    const hotelExists = await Hotel.findOne(find).select("_id").lean();
+    if (hotelExists) {
+      const guard = await _checkHotelDeletable(id);
+      if (guard.blocked) {
+        return res.json({ code: "error", message: guard.message });
+      }
+    }
+
     await Hotel.deleteOne(find);
 
     res.json({
@@ -2144,30 +2335,53 @@ module.exports.changeMultiPatch = async (req, res) => {
         break;
 
       case "delete":
-        await Hotel.updateMany(baseFilter, {
-          deleted: true,
-          deletedAt: Date.now(),
-          deletedBy: req.account.id,
-        });
-        res.json({
+      case "destroy": {
+        // Guard từng khách sạn: chỉ xóa những KS không còn ràng buộc.
+        const hotelsToCheck = await Hotel.find(baseFilter).select("_id name").lean();
+        const deletableIds = [];
+        const blockedNames = [];
+        for (const h of hotelsToCheck) {
+          const guard = await _checkHotelDeletable(h._id);
+          if (guard.blocked) blockedNames.push(h.name || String(h._id));
+          else deletableIds.push(h._id);
+        }
+
+        if (deletableIds.length > 0) {
+          const delFilter = { _id: { $in: deletableIds } };
+          if (companyId) delFilter.companyId = companyId;
+          if (value === "delete") {
+            await Hotel.updateMany(delFilter, {
+              deleted: true,
+              deletedAt: Date.now(),
+              deletedBy: req.account.id,
+            });
+          } else {
+            await Hotel.deleteMany(delFilter);
+          }
+        }
+
+        if (blockedNames.length > 0) {
+          return res.json({
+            code: deletableIds.length > 0 ? "success" : "error",
+            message:
+              (deletableIds.length > 0
+                ? `Đã xóa ${deletableIds.length} khách sạn. `
+                : "") +
+              `Không thể xóa ${blockedNames.length} khách sạn do còn booking/đơn tour/liên kết đang hoạt động: ${blockedNames.join(", ")}.`,
+          });
+        }
+
+        return res.json({
           code: "success",
-          message: "Đã xóa thành công!",
+          message: value === "delete" ? "Đã xóa thành công!" : "Đã xóa vĩnh viễn!",
         });
-        break;
+      }
 
       case "undo":
         await Hotel.updateMany(baseFilter, { deleted: false });
         res.json({
           code: "success",
           message: "Đã khôi phục thành công!",
-        });
-        break;
-
-      case "destroy":
-        await Hotel.deleteMany(baseFilter);
-        res.json({
-          code: "success",
-          message: "Đã xóa vĩnh viễn!",
         });
         break;
 
@@ -2558,6 +2772,12 @@ module.exports.roomTypeDelete = async (req, res) => {
         code: "error",
         message: "Không tìm thấy loại phòng!",
       });
+    }
+
+    // Guard: chặn xóa khi loại phòng còn booking/đơn tour/liên kết còn hiệu lực.
+    const guard = await _checkRoomTypeDeletable(hotel._id, roomType._id);
+    if (guard.blocked) {
+      return res.json({ code: "error", message: guard.message });
     }
 
     // Xóa room type
@@ -6967,19 +7187,11 @@ module.exports.individualRoomDelete = async (req, res) => {
       return res.json({ code: "error", message: "Không tìm thấy phòng!" });
     }
 
-    const now = new Date();
-    const blocking = await HotelBooking.exists({
-      roomId,
-      "hotel.hotelId": hotel._id,
-      status: { $nin: ["cancelled", "checked_out"] },
-      checkOut: { $gt: now },
-    });
-
-    if (blocking) {
-      return res.json({
-        code: "error",
-        message: "Không thể xóa phòng đang có đặt phòng hoặc giữ chỗ còn hiệu lực.",
-      });
+    // Guard: chặn xóa khi phòng đang được giữ chỗ / có khách / có booking
+    // hiện tại hoặc tương lai chưa trả phòng và chưa hủy.
+    const guard = await _checkRoomDeletable(hotel._id, roomId);
+    if (guard.blocked) {
+      return res.json({ code: "error", message: guard.message });
     }
 
     sub.deleteOne();
