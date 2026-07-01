@@ -3006,7 +3006,7 @@ module.exports.bookingList = async (req, res) => {
         customerEmail: b.guest?.email || "",
         cccdImages: b.guest?.cccdImages || [],
         createdAtFormat: b.createdAt
-          ? moment(b.createdAt).format("DD/MM/YYYY HH:mm")
+          ? moment(b.createdAt).utcOffset("+07:00").format("DD/MM/YYYY HH:mm")
           : "—",
         checkIn: b.checkIn
           ? moment(b.checkIn).format("DD/MM/YYYY")
@@ -3391,7 +3391,7 @@ module.exports.bookingDetail = async (req, res) => {
       paymentMethod: paymentMethodText,
       note: firstBooking.note || "",
       transferProofImages: firstBooking.transferProofImages || [],
-      createdAt: moment(firstBooking.createdAt).format("HH:mm - DD/MM/YYYY"),
+      createdAt: moment(firstBooking.createdAt).utcOffset("+07:00").format("HH:mm - DD/MM/YYYY"),
       additionalServices: additionalServices, // Dịch vụ chung (global)
       perItemServices: Object.values(perItemServices), // Dịch vụ theo từng loại phòng
       roomDetails: bookings.map((b, idx) => {

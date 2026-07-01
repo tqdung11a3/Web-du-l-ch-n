@@ -4005,6 +4005,45 @@ button {
   color: white;
   cursor: pointer;
 }
+
+.box-filter .inner-group .inner-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  border: 1px solid #898b8d;
+  border-radius: 5px;
+}
+
+.box-filter .inner-group .inner-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+
+.box-filter .inner-group .inner-checkbox-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.box-filter .inner-group .inner-checkbox-item label {
+  font-weight: 400;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  color: #898b8d;
+  cursor: pointer;
+  line-height: 1.4;
+  user-select: none;
+}
+
+.box-filter .inner-group .inner-checkbox-item:hover label {
+  color: var(--color-primary);
+}
 /* End Box Filter */
 
 /* Box Pagination */

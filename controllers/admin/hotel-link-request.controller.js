@@ -220,8 +220,8 @@ function enrichRequests(list) {
   for (const r of list) {
     r.departureDateDisplay = moment(r.departureDate).format("DD/MM/YYYY");
     r.endDateDisplay = r.endDate ? moment(r.endDate).format("DD/MM/YYYY") : "—";
-    r.createdAtDisplay = moment(r.createdAt).format("DD/MM/YYYY HH:mm");
-    r.reviewedAtDisplay = r.reviewedAt ? moment(r.reviewedAt).format("DD/MM/YYYY HH:mm") : null;
+    r.createdAtDisplay = moment(r.createdAt).utcOffset("+07:00").format("DD/MM/YYYY HH:mm");
+    r.reviewedAtDisplay = r.reviewedAt ? moment(r.reviewedAt).utcOffset("+07:00").format("DD/MM/YYYY HH:mm") : null;
     r.reviewerName = r.reviewedBy?.fullName || null;
     r.totalRequestedRooms = r.requestedRooms.reduce((s, rr) => s + rr.assignedRooms, 0);
     r.totalApprovedRooms = (r.approvedRooms || []).reduce((s, ar) => s + ar.approvedRooms, 0);
