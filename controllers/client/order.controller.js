@@ -2136,7 +2136,7 @@ module.exports.success = async (req, res) => {
     orderDetail.paymentStatusName = ps ? ps.label : "Không xác định";
     orderDetail.statusName = st ? st.label : "Không xác định";
 
-    orderDetail.createdAtFormat = moment(orderDetail.createdAt).format(
+    orderDetail.createdAtFormat = moment(orderDetail.createdAt).utcOffset("+07:00").format(
       "HH:mm - DD/MM/YYYY"
     );
 
