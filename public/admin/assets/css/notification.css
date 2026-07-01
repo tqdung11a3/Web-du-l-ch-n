@@ -13,6 +13,10 @@
   background-color: rgba(59, 130, 246, 0.1);
 }
 
+.inner-notify:hover i {
+  color: #2563eb;
+}
+
 .inner-notify .notification-badge {
   position: absolute;
   top: 4px;

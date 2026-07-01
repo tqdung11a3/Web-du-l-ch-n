@@ -286,9 +286,10 @@ button {
   position: relative;
 }
 
-.header .inner-notify img {
-  width: 24px;
-  height: auto;
+.header .inner-notify i {
+  font-size: 22px;
+  color: #374151;
+  line-height: 1;
 }
 
 .header .inner-notify span {

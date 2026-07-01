@@ -5,7 +5,7 @@ header.header
       span Admin
   .inner-wrap
     .inner-notify#notificationBell
-      img(src="/admin/assets/images/icon-bell.svg", alt="")
+      i.fa-solid.fa-bell(aria-hidden="true")
       if unreadNotificationCount && unreadNotificationCount > 0
         span.notification-badge= unreadNotificationCount
     .inner-account

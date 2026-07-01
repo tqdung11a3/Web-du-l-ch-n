@@ -53,6 +53,10 @@ mixin product-item(item)
 
       // ===== THÔNG TIN CƠ BẢN =====
       .inner-desc
+        if item.customId
+          .inner-desc-item
+            | ID TOUR:
+            b #{item.customId}
         if item.time
           .inner-desc-item
             | Thời Gian:
