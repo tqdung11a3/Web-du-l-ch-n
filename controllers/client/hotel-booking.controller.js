@@ -5,7 +5,10 @@ const Cart = require("../../models/cart.model");
 const Hotel = require("../../models/hotel.model");
 const Notification = require("../../models/notification.model");
 const moment = require("moment");
-const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
+const {
+  getAvailableRoomsForType,
+  calculateItemExtraOccupancyFee,
+} = require("../../helpers/hotel-availability.helper");
 const auditLogHelper = require("../../helpers/audit-log.helper");
 
 /**
@@ -160,124 +163,28 @@ module.exports.createPost = async (req, res) => {
       subtotal += item.pricePerNight * item.nights * item.quantity;
     }
 
-    // Tính phụ thu vượt sức chứa (nếu có)
+    // Tính phụ thu vượt sức chứa (nếu có) — dùng thuật toán FFD trong helper
+    // để đồng bộ với /cart, tránh lệch giá giữa giỏ hàng và đơn thực tế.
     let extraOccupancyFee = 0;
-    const { calculateEffectiveOccupancy } = require("../../helpers/hotel-availability.helper");
-    
+
     for (const item of cart.items) {
-      if (item.roomsData) {
-        try {
-          const parsedRoomsData = JSON.parse(decodeURIComponent(item.roomsData));
-          
-          // Lấy room type
-          const roomType = Array.isArray(hotel.roomTypes) 
-            ? hotel.roomTypes.find(rt => String(rt._id) === String(item.roomTypeId))
-            : null;
-          
-          if (roomType) {
-            const ageBands = hotel.ageBands || [];
-            const baseOccupancy = roomType.baseOccupancy || 2;
-            
-            let itemExtraFee = 0;
-            
-            // Tính phụ thu cho từng phòng
-            parsedRoomsData.forEach((roomData) => {
-              const roomAdults = roomData.adults || 0;
-              const roomChildren = Array.isArray(roomData.children) ? roomData.children : [];
-              
-              // Tính effective occupancy cho phòng này
-              let roomEffectiveOccupancy = roomAdults;
-              
-              roomChildren.forEach(child => {
-                const age = child.age || 0;
-                const band = ageBands.find(b => {
-                  const minAge = b.minAge || 0;
-                  const maxAge = b.maxAge;
-                  if (maxAge === null || maxAge === undefined) {
-                    return age >= minAge;
-                  }
-                  return age >= minAge && age <= maxAge;
-                });
-                
-                if (band && band.countInOccupancy) {
-                  roomEffectiveOccupancy += (band.occupancyWeight || 1);
-                }
-              });
-              
-              // Nếu phòng này vượt base occupancy
-              if (roomEffectiveOccupancy > baseOccupancy) {
-                const roomExcessOccupancy = roomEffectiveOccupancy - baseOccupancy;
-                let roomExtraFee = 0;
-                let remainingExcessOccupancy = roomExcessOccupancy;
-                
-                // Tính phụ thu cho người lớn vượt
-                if (roomAdults > baseOccupancy && remainingExcessOccupancy > 0) {
-                  const adultExcess = Math.min(roomAdults - baseOccupancy, remainingExcessOccupancy);
-                  const adultBand = ageBands.find(band => 
-                    (band.bandType === 'adult' || (band.minAge >= 12 && (band.maxAge === null || band.maxAge >= 12))) &&
-                    band.applyExtraPersonFee === true &&
-                    band.extraPersonFeePerNight > 0
-                  );
-                  
-                  if (adultBand) {
-                    roomExtraFee += adultExcess * adultBand.extraPersonFeePerNight;
-                    remainingExcessOccupancy -= adultExcess;
-                  } else if (roomType.extraPersonFeePerNight) {
-                    roomExtraFee += adultExcess * roomType.extraPersonFeePerNight;
-                    remainingExcessOccupancy -= adultExcess;
-                  }
-                }
-                
-                // Tính phụ thu cho trẻ em vượt
-                if (remainingExcessOccupancy > 0 && roomChildren.length > 0) {
-                  for (const child of roomChildren) {
-                    if (remainingExcessOccupancy <= 0) break;
-                    
-                    const age = child.age || 0;
-                    const band = ageBands.find(b => {
-                      const minAge = b.minAge || 0;
-                      const maxAge = b.maxAge;
-                      if (maxAge === null || maxAge === undefined) {
-                        return age >= minAge;
-                      }
-                      return age >= minAge && age <= maxAge;
-                    });
-                    
-                    if (band && band.countInOccupancy && band.applyExtraPersonFee && band.extraPersonFeePerNight > 0) {
-                      const childWeight = band.occupancyWeight || 1;
-                      if (childWeight > 0 && remainingExcessOccupancy >= childWeight) {
-                        roomExtraFee += 1 * band.extraPersonFeePerNight;
-                        remainingExcessOccupancy -= childWeight;
-                      }
-                    }
-                  }
-                }
-                
-                // Nhân với số đêm
-                itemExtraFee += roomExtraFee * item.nights;
-              }
-            });
-            
-            // CHỈ nhân với quantity nếu parsedRoomsData chỉ có 1 phòng đại diện
-            // Nếu parsedRoomsData đã bao gồm nhiều phòng (length === quantity), không nhân nữa
-            console.log('=== DEBUG Extra Occupancy Fee ===');
-            console.log('parsedRoomsData.length:', parsedRoomsData.length);
-            console.log('item.quantity:', item.quantity);
-            console.log('itemExtraFee (before multiply):', itemExtraFee);
-            
-            if (parsedRoomsData.length < item.quantity) {
-              console.log('Multiplying by quantity:', item.quantity);
-              itemExtraFee = itemExtraFee * item.quantity;
-            } else {
-              console.log('NOT multiplying (parsedRoomsData.length === item.quantity)');
-            }
-            
-            console.log('itemExtraFee (after):', itemExtraFee);
-            extraOccupancyFee += itemExtraFee;
-          }
-        } catch (e) {
-          console.warn('Failed to parse roomsData for extra occupancy fee:', e);
-        }
+      if (!item.roomsData) continue;
+      try {
+        const parsedRoomsData = JSON.parse(decodeURIComponent(item.roomsData));
+        const roomType = Array.isArray(hotel.roomTypes)
+          ? hotel.roomTypes.find(rt => String(rt._id) === String(item.roomTypeId))
+          : null;
+        if (!roomType) continue;
+
+        extraOccupancyFee += calculateItemExtraOccupancyFee({
+          parsedRoomsData,
+          roomType,
+          ageBands: hotel.ageBands || [],
+          nights: item.nights,
+          quantity: item.quantity,
+        });
+      } catch (e) {
+        console.warn('Failed to parse roomsData for extra occupancy fee:', e);
       }
     }
 

@@ -2717,17 +2717,7 @@ module.exports.roomTypeCreatePost = async (req, res) => {
       maxOccupancy: req.body.maxOccupancy || 3,
       maxExtraBeds: req.body.maxExtraBeds || 1,
       extraBedFeePerNight: req.body.extraBedFeePerNight || 0,
-      
-      // Age Bands (chỉ lưu khi có flag override)
-      ageBands: [],
     };
-    
-    // Parse và lưu Age Bands - Override từ Hotel level
-    const ageBandsOverride = req.body.ageBandsOverride === 'true';
-    if (ageBandsOverride && req.body.ageBandNames) {
-      const ageBands = parseAgeBands(req.body);
-      newRoomType.ageBands = ageBands;
-    }
 
     // Thêm vào mảng roomTypes
     hotel.roomTypes.push(newRoomType);

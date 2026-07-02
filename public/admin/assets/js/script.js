@@ -3789,55 +3789,6 @@ if (hotelCreateForm) {
       // --- avatar ---
       const avatar = filePond.avatar.getFile()?.file;
 
-      // --- Loại phòng (room types) ---
-      // Hiện tại /admin/hotel/create chỉ hiển thị thông báo; loại phòng quản lý qua /admin/hotel/room-types …
-      // Đoạn dưới đây từng đọc từ modal (#hotel-room-modal) hoặc .hotel-room-row — UI đã không còn trên form này.
-      // Giữ mảng rỗng: FormData không gửi roomType* → backend parseRoomTypes → [].
-      const roomTypeNames = [];
-      const roomTypeMaxGuests = [];
-      const roomTypeBasePrices = [];
-      const roomTypeDescriptions = [];
-      const roomTypeSizes = [];
-      const roomTypeBedInfos = [];
-      const roomTypeViews = [];
-      const roomTypeSmokingPolicies = [];
-      const roomTypeBathroomAmenities = [];
-      const roomTypeRoomAmenities = [];
-      /*
-      if (window.roomTypesDataForSubmit && window.roomTypesDataForSubmit.length > 0) {
-        window.roomTypesDataForSubmit.forEach((room) => {
-          roomTypeNames.push(room.name);
-          roomTypeMaxGuests.push(room.maxGuests);
-          roomTypeBasePrices.push(room.basePrice);
-          roomTypeDescriptions.push(room.description);
-          roomTypeSizes.push(room.sizeM2 || "");
-          roomTypeBedInfos.push(room.bedInfo);
-          roomTypeViews.push(room.view);
-          roomTypeSmokingPolicies.push(room.smokingPolicy);
-          room.bathroomAmenities.forEach(amenity => roomTypeBathroomAmenities.push(amenity));
-          room.roomAmenities.forEach(amenity => roomTypeRoomAmenities.push(amenity));
-        });
-      } else {
-        hotelCreateForm.querySelectorAll(".hotel-room-row").forEach((row) => {
-          const nameInput = row.querySelector('input[name="roomTypeNames"]');
-          const guestInput = row.querySelector('input[name="roomTypeMaxGuests"]');
-          const priceInput = row.querySelector('input[name="roomTypeBasePrices"]');
-          const descInput = row.querySelector('input[name="roomTypeDescriptions"]');
-
-          if (nameInput && nameInput.value.trim()) {
-            roomTypeNames.push(nameInput.value);
-            roomTypeMaxGuests.push(guestInput?.value || "");
-            roomTypeBasePrices.push(priceInput?.value || "");
-            roomTypeDescriptions.push(descInput?.value || "");
-            roomTypeSizes.push("");
-            roomTypeBedInfos.push("");
-            roomTypeViews.push("");
-            roomTypeSmokingPolicies.push("");
-          }
-        });
-      }
-      */
-
       // --- build FormData ---
       const formData = new FormData();
       formData.append("name", name);
@@ -3965,22 +3916,14 @@ if (hotelCreateForm) {
             formData.append('ageBandCountInOccupancies', countInOccupancy ? 'on' : '');
             formData.append('ageBandOccupancyWeights', occupancyWeight);
             
-            // C.2: Free / Free limit
-            const isFree = item.querySelector('.config-is-free')?.checked || false;
-            const freeLimit = item.querySelector('.config-free-limit')?.value || '0';
-            const feeExceedingFree = item.querySelector('.config-fee-exceeding-free')?.value || '';
-            formData.append('ageBandIsFrees', isFree ? 'on' : '');
-            formData.append('ageBandFreeLimits', freeLimit);
-            formData.append('ageBandFeeExceedingFreeLimits', feeExceedingFree);
-            
-            // C.3: Breakfast (Khách hàng tự chọn đăng ký, admin chỉ cấu hình phí)
+            // C.2: Breakfast (Khách hàng tự chọn đăng ký, admin chỉ cấu hình phí)
             const breakfastFreeRadio = item.querySelector('.config-breakfast-free')?.checked || false;
             const breakfastPaidRadio = item.querySelector('.config-breakfast-paid')?.checked || false;
             const breakfastFee = item.querySelector('.config-breakfast-fee')?.value || '0';
             formData.append('ageBandBreakfastIsFrees', breakfastFreeRadio ? 'free' : (breakfastPaidRadio ? 'paid' : 'free'));
             formData.append('ageBandBreakfastFees', breakfastFee);
             
-            // C.4: Extra person charge (chỉ hiện khi countInOccupancy = true)
+            // C.3: Extra person charge (chỉ hiện khi countInOccupancy = true)
             const extraPersonFee = item.querySelector('.config-extra-person-fee')?.value || '0';
             formData.append('ageBandExtraPersonFeePerNights', extraPersonFee);
           }
@@ -4012,18 +3955,6 @@ if (hotelCreateForm) {
 
       // avatar
       if (avatar) formData.append("avatar", avatar);
-
-      // room types — cùng logic mảng rỗng ở trên (không gửi khi không có UI trên form create)
-      roomTypeNames.forEach((v) => formData.append("roomTypeNames", v));
-      roomTypeMaxGuests.forEach((v) => formData.append("roomTypeMaxGuests", v));
-      roomTypeBasePrices.forEach((v) => formData.append("roomTypeBasePrices", v));
-      roomTypeDescriptions.forEach((v) => formData.append("roomTypeDescriptions", v));
-      roomTypeSizes.forEach((v) => formData.append("roomTypeSizes", v));
-      roomTypeBedInfos.forEach((v) => formData.append("roomTypeBedInfos", v));
-      roomTypeViews.forEach((v) => formData.append("roomTypeViews", v));
-      roomTypeSmokingPolicies.forEach((v) => formData.append("roomTypeSmokingPolicies", v));
-      roomTypeBathroomAmenities.forEach((v) => formData.append("roomTypeBathroomAmenities", v));
-      roomTypeRoomAmenities.forEach((v) => formData.append("roomTypeRoomAmenities", v));
 
       // images gallery
       if (filePondMulti && filePondMulti.images) {
@@ -4073,7 +4004,7 @@ if (hotelEditForm && hotelEditForm.dataset.readOnly === "1") {
       },
     ])
     .onSuccess((event) => {
-      const id = event.target.id.value; // như cũ bạn đang dùng
+      const id = event.target.id.value;
 
       // --- basic fields ---
       const name = event.target.name.value;
@@ -4287,22 +4218,14 @@ if (hotelEditForm && hotelEditForm.dataset.readOnly === "1") {
             formData.append('ageBandCountInOccupancies', countInOccupancy ? 'on' : '');
             formData.append('ageBandOccupancyWeights', occupancyWeight);
             
-            // C.2: Free / Free limit
-            const isFree = item.querySelector('.config-is-free')?.checked || false;
-            const freeLimit = item.querySelector('.config-free-limit')?.value || '0';
-            const feeExceedingFree = item.querySelector('.config-fee-exceeding-free')?.value || '';
-            formData.append('ageBandIsFrees', isFree ? 'on' : '');
-            formData.append('ageBandFreeLimits', freeLimit);
-            formData.append('ageBandFeeExceedingFreeLimits', feeExceedingFree);
-            
-            // C.3: Breakfast (Khách hàng tự chọn đăng ký, admin chỉ cấu hình phí)
+            // C.2: Breakfast (Khách hàng tự chọn đăng ký, admin chỉ cấu hình phí)
             const breakfastFreeRadio = item.querySelector('.config-breakfast-free')?.checked || false;
             const breakfastPaidRadio = item.querySelector('.config-breakfast-paid')?.checked || false;
             const breakfastFee = item.querySelector('.config-breakfast-fee')?.value || '0';
             formData.append('ageBandBreakfastIsFrees', breakfastFreeRadio ? 'free' : (breakfastPaidRadio ? 'paid' : 'free'));
             formData.append('ageBandBreakfastFees', breakfastFee);
             
-            // C.4: Extra person charge (chỉ hiện khi countInOccupancy = true)
+            // C.3: Extra person charge (chỉ hiện khi countInOccupancy = true)
             const extraPersonFee = item.querySelector('.config-extra-person-fee')?.value || '0';
             formData.append('ageBandExtraPersonFeePerNights', extraPersonFee);
           }

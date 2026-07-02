@@ -1014,6 +1014,7 @@ if (boxTourDetail) {
     try { segmentsData = JSON.parse(roomSelectionWrap.getAttribute("data-room-segments") || "[]"); } catch (_) {}
   }
 
+  // Tra tuổi dựa vào cấu hình age bands của admin, rồi trả về trọng số sức chứa
   function getOccupancyWeight(age, ageBands) {
     if (!ageBands || ageBands.length === 0) return 1;
     for (const band of ageBands) {
@@ -1051,6 +1052,7 @@ if (boxTourDetail) {
     return segmentsData.find((s) => s.fromDate === fromDate && s.toDate === toDate) || null;
   }
 
+  // Tính sức chứa của cả đoàn
   function calcOccupancyBreakdown(ageBands) {
     const adults = parseInt(boxTourDetail.querySelector(`[name="quantityAdult"]`)?.value || "0", 10) || 0;
     const cAges = collectAges(childrenAgesList);

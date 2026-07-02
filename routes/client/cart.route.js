@@ -1,5 +1,4 @@
 // routes/client/cart.route.js
-// Route cho giỏ hàng TOUR (chỉ cần render trang, logic ở client-side)
 const express = require("express");
 const router = express.Router();
 const controller = require("../../controllers/client/cart.controller");

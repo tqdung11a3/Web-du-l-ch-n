@@ -6,7 +6,11 @@ const HotelBooking = require("../../models/hotel-booking.model");
 const Tour = require("../../models/tour.model");
 const moment = require("moment");
 const { v4: uuidv4 } = require('uuid');
-const { getAvailableRoomsForType, calculateEffectiveOccupancy } = require("../../helpers/hotel-availability.helper");
+const {
+  getAvailableRoomsForType,
+  calculateEffectiveOccupancy,
+  calculateItemExtraOccupancyFee,
+} = require("../../helpers/hotel-availability.helper");
 const {
   normalizeRoomsData,
   buildAllocationRoomsDisplay,
@@ -114,75 +118,20 @@ module.exports.index = async (req, res) => {
           hotelSubtotalCalc += basePrice;
           
           // Tính phụ thu vượt base occupancy nếu có roomsData
+          // (Thuật toán FFD: khách nặng nhất được ưu tiên nạp vào gói base,
+          // khách còn lại là "vượt" — mỗi người trả phí của chính band mình.)
           const parsed = parseItemRoomsData(item.roomsData);
           if (parsed) {
             const parsedRoomsData = parsed.normalized;
             const roomType = hotelInfo.roomTypes?.find(rt => String(rt._id) === String(item.roomTypeId));
             if (roomType) {
-              const ageBands = hotelInfo.ageBands || [];
-              const baseOccupancy = roomType.baseOccupancy || 2;
-              let itemExtraFee = 0;
-
-              parsedRoomsData.forEach((roomData) => {
-                const room = normalizeRoom(roomData);
-                const roomAdults = room.adults.length;
-                const minors = [...(room.children || []), ...(room.babies || [])];
-                const roomEffectiveOccupancy = calculateEffectiveOccupancy([roomData], ageBands);
-
-                if (roomEffectiveOccupancy > baseOccupancy) {
-                  const roomExcessOccupancy = roomEffectiveOccupancy - baseOccupancy;
-                  let roomExtraFee = 0;
-                  let remainingExcessOccupancy = roomExcessOccupancy;
-
-                  if (roomAdults > baseOccupancy && remainingExcessOccupancy > 0) {
-                    const adultExcess = Math.min(roomAdults - baseOccupancy, remainingExcessOccupancy);
-                    const adultBand = ageBands.find(band =>
-                      (band.bandType === 'adult' || (band.minAge >= 12 && (band.maxAge === null || band.maxAge >= 12))) &&
-                      band.applyExtraPersonFee === true &&
-                      band.extraPersonFeePerNight > 0
-                    );
-
-                    if (adultBand) {
-                      roomExtraFee += adultExcess * adultBand.extraPersonFeePerNight;
-                      remainingExcessOccupancy -= adultExcess;
-                    } else if (roomType.extraPersonFeePerNight) {
-                      roomExtraFee += adultExcess * roomType.extraPersonFeePerNight;
-                      remainingExcessOccupancy -= adultExcess;
-                    }
-                  }
-
-                  if (remainingExcessOccupancy > 0 && minors.length > 0) {
-                    for (const person of minors) {
-                      if (remainingExcessOccupancy <= 0) break;
-
-                      const age = person.age || 0;
-                      const band = ageBands.find(b => {
-                        const minAge = b.minAge || 0;
-                        const maxAge = b.maxAge;
-                        if (maxAge === null || maxAge === undefined) {
-                          return age >= minAge;
-                        }
-                        return age >= minAge && age <= maxAge;
-                      });
-
-                      if (band && band.countInOccupancy && band.applyExtraPersonFee && band.extraPersonFeePerNight > 0) {
-                        const childWeight = band.occupancyWeight || 1;
-                        if (childWeight > 0 && remainingExcessOccupancy >= childWeight) {
-                          roomExtraFee += 1 * band.extraPersonFeePerNight;
-                          remainingExcessOccupancy -= childWeight;
-                        }
-                      }
-                    }
-                  }
-
-                  itemExtraFee += roomExtraFee * item.nights;
-                }
+              hotelExtraOccupancyFee += calculateItemExtraOccupancyFee({
+                parsedRoomsData,
+                roomType,
+                ageBands: hotelInfo.ageBands || [],
+                nights: item.nights,
+                quantity: item.quantity,
               });
-
-              if (parsedRoomsData.length < item.quantity) {
-                itemExtraFee = itemExtraFee * item.quantity;
-              }
-              hotelExtraOccupancyFee += itemExtraFee;
             }
           }
         }
