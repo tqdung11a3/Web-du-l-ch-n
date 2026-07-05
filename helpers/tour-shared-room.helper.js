@@ -151,6 +151,8 @@ async function aggregateSharedDemand({
  * Capacity ở đây = `baseOccupancy` của loại phòng (vì khi xếp ghép, ta
  * đếm "1 chỗ" = 1 đầu người lớn vào occupancy chuẩn).
  */
+
+// admin cấp cho bao nhiêu phòng ?
 async function resolveRoomQuotaForSegmentHotel({
   tourSegmentId,
   hotelId,
@@ -799,6 +801,8 @@ async function aggregateSharedAtomsBySegment({
 // Chưa đặt phòng thật, chưa tạo booking.
 // Chỉ kiểm tra + mô phỏng xếp → trả ok: true/false và lời giải thích.
 // Chỉ dùng khi khách chọn ở ghép, không dùng cho ở riêng.
+
+// Trả lời "Đoàn khách ở ghép này có xếp được không? Nếu được — chia vào KS nào, ai vào KS nào?"
 async function evaluateSharedFeasibilityV2Multi(request) {
   const incomingHotels = Array.isArray(request.hotels) ? request.hotels : [];
   if (incomingHotels.length === 0) {
@@ -1022,6 +1026,8 @@ async function evaluateSharedFeasibilityV2Multi(request) {
  *
  * @returns {Promise<{ [roomTypeId:string]: number }>}
  */
+
+// Đã có mấy phòng giữ ?
 async function countActiveBookedRoomsByType({
   tourSegmentId,
   hotelId,
@@ -1112,7 +1118,7 @@ async function assignSharedAtomsToRooms({
   atoms,
 }) {
 
-  // quota: danh sách phòng thực có (theo loại) mà admin đã cấu hình cho cặp (segment, hotel) trong khung thời gian.
+  // 1. quota: danh sách phòng thực có (theo loại) mà admin đã cấu hình cho cặp (segment, hotel) trong khung thời gian.
   const quota = await resolveRoomQuotaForSegmentHotel({
     tourSegmentId,
     hotelId,
@@ -1131,6 +1137,9 @@ async function assignSharedAtomsToRooms({
   // ── Lấy các TH (phòng vật lý) đang được giữ chỗ shared còn slot trống ──
   // Mục tiêu: nếu phòng X đã có 1 nữ ở (1/2 cap) → đơn nữ tiếp theo ưu tiên
   // ghép vào phòng X thay vì mở phòng vật lý mới.
+
+  // 2. Trả về danh sách phòng cụ thể. 
+  // Ý nghĩa: Phòng ở ghép đã có người, còn slot
   const partialShared = await getPartialSharedRooms({
     tourSegmentId,
     hotelId,
@@ -1143,12 +1152,17 @@ async function assignSharedAtomsToRooms({
   // orderCode + guest != [Tour Hold]), nên ở đây những phòng partial sẽ được
   // expose qua `partialShared` để FFD có thể join — không bị tính 2 lần do
   // assignAtomsToPhysicalRooms phân biệt preExistingOpenRooms vs physicalRooms.
+
+  // 3. Object đếm theo loại phòng
+  // Tất cả phòng đã bị đơn chiếm (kể cả partial + đầy)
   const booked = await countActiveBookedRoomsByType({
     tourSegmentId,
     hotelId,
     fromDate,
     toDate,
   });
+
+  // 4. Trả về còn bao nhiêu phòng trống hoàn toàn
   const physicalRooms = [];
   for (const q of quota) {
     const usedCnt = booked[q.roomTypeId] || 0;
@@ -1162,6 +1176,7 @@ async function assignSharedAtomsToRooms({
     }
   }
 
+  // 5. Kiểm tra còn chỗ trống không ?
   if (physicalRooms.length === 0 && partialShared.length === 0) {
     return {
       ok: false,
@@ -1171,6 +1186,7 @@ async function assignSharedAtomsToRooms({
     };
   }
 
+  // 6. Gọi thuật toán xếp
   const result = assignAtomsToPhysicalRooms({
     atoms,
     physicalRooms,
@@ -1276,6 +1292,7 @@ async function assignSharedAtomsToRooms({
     }
   }
 
+  // 7. Chuẩn hóa kết quả
   const assignments = result.assignments.map((a) => ({
     roomTypeId: a.roomTypeId,
     roomTypeName: a.roomTypeName,
@@ -1317,6 +1334,7 @@ async function assignSharedAtomsToRooms({
 // Đơn B (nữ) có thể ghép vào 301 thay vì mở phòng 302
 // getPartialSharedRooms tìm các phòng kiểu đó và trả: [{ _thId: "301", roomTypeId: "301", roomTypeName: "Standard", capacity: 2, gender: "female", used: 1 }]
 
+// Trong tour + KS + khung ngày này, phòng ở ghép nào đã có khách nhưng còn chỗ trống để đơn mới ghép thêm?
 async function getPartialSharedRooms({
   tourSegmentId,
   hotelId,
@@ -1366,6 +1384,7 @@ async function getPartialSharedRooms({
     occupancyWeight: ab.countInOccupancy ? ab.occupancyWeight ?? 1 : 0,
   }));
 
+  // 1. Lấy tất cả assignments shared của tour-segment.
   const sharedAssigns = seg.assignments.filter(
     (a) => a && a.holdBookingId && a.accommodationMode === "shared" && thById[String(a.holdBookingId)]
   );
@@ -1444,7 +1463,7 @@ async function getPartialSharedRooms({
     };
   }
 
-  // 4) Group assignments theo holdBookingId; chỉ những TH có ít nhất 1
+  // Group assignments theo holdBookingId; chỉ những TH có ít nhất 1
   //    assignment shared mới được coi là "đang mở".
   const grouped = {}; // thId → { entries[], roomTypeId, gender }
   for (const a of sharedAssigns) {
@@ -1469,6 +1488,8 @@ async function getPartialSharedRooms({
         mixedGender: false,
       };
     }
+
+    // 2. Mỗi phòng đã dùng bao nhiêu chỗ ?
     grouped[thId].usedSum += usedAdd;
     if (!grouped[thId].gender && genderAdd) {
       grouped[thId].gender = genderAdd;
@@ -1481,7 +1502,7 @@ async function getPartialSharedRooms({
     }
   }
 
-  // 5) Build kết quả — cần resolve capacity từ Hotel.roomTypes (qua quota).
+  // 3. Mỗi loại phòng được admin cấp bao nhiêu chỗ ?
   const quota = await resolveRoomQuotaForSegmentHotel({
     tourSegmentId,
     hotelId,
@@ -1492,6 +1513,8 @@ async function getPartialSharedRooms({
   for (const q of quota) capByRoomType[String(q.roomTypeId)] = q.capacity;
 
   const out = [];
+
+  // 4. Lấy các phòng shared đã có người đang ở và còn chỗ trống để đơn mới ghép thêm.
   for (const thId of Object.keys(grouped)) {
     const g = grouped[thId];
     const cap = capByRoomType[String(g.roomTypeId)] || 0;
@@ -1500,7 +1523,7 @@ async function getPartialSharedRooms({
     if (g.mixedGender) continue; // phòng ghép chứa atoms khác giới — không hợp lệ.
     if (!g.gender) continue; // không có gender → không thể ghép cùng giới
     const remaining = cap - g.usedSum; // số chỗ trống còn lại trong phòng.
-    if (remaining <= 0) continue;
+    if (remaining <= 0) continue; // đầy thì bỏ
     out.push({
       _thId: thId,
       roomTypeId: g.roomTypeId,

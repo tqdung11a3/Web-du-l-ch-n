@@ -105,6 +105,15 @@ function _attachMemberToAtom(atom, member, ageBands) {
 function buildAtomsFromPassengers(passengers, ageBands) {
   if (!Array.isArray(passengers) || passengers.length === 0) return [];
 
+  // guardianIdx: người lớn đi cùng
+  // roomGuardianIdx: người lớn đi cùng phòng KS
+  // type: loại khách
+  // gender: giới tính
+  // idx: id khách
+  // name: tên khách
+  // age: tuổi khách
+  // type: loại khách
+  // gender: giới tính
   const list = passengers.map((p, i) => {
     const guardianIdx =
       p.guardianIdx === null || p.guardianIdx === undefined
@@ -146,6 +155,7 @@ function buildAtomsFromPassengers(passengers, ageBands) {
   const adults = list.filter((p) => p.type === "adult");
   const anchorAdults = [];
 
+  // Kiểm tra người lớn đi cùng
   for (const a of adults) {
     if (!a.gender) {
       throw new Error(
@@ -173,6 +183,7 @@ function buildAtomsFromPassengers(passengers, ageBands) {
 
   const adultByIdx = new Map(adults.map((a) => [a.idx, a]));
 
+  // validate những người cần người lớn đi cùng
   const dependents = list.filter((p) => {
     if (p.type === "baby") return babyNeedsGuardian(p);
     return passengerNeedsGuardian(p);
@@ -259,24 +270,6 @@ function buildAtomsFromPassengers(passengers, ageBands) {
       label: _atomLabelFromMembers(a, members),
     };
   });
-
-  // Em bé chọn anchor phòng KS = NL < 18 (hiếm, nhưng vẫn có thể): gắn em bé
-  // vào atom mà NL đi cùng đó thuộc về.
-  for (const baby of list) {
-    if (baby.type !== "baby") continue;
-    const roomAnchor = _babyAtomAnchorIdx(baby);
-    if (roomAnchor === null) continue;
-    if (anchorByIdx.has(roomAnchor)) continue;
-    const atom = atoms.find((at) =>
-      (at.members || []).some((m) => m.idx === roomAnchor)
-    );
-    if (!atom) {
-      throw new Error(
-        `Em bé "${baby.name || "(chưa có tên)"}" có người ở cùng phòng không thuộc đoàn hợp lệ.`
-      );
-    }
-    _attachMemberToAtom(atom, baby, ageBands);
-  }
 
   return atoms;
 }

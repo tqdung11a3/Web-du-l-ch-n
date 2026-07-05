@@ -459,6 +459,8 @@ module.exports.detail = async (req, res) => {
               // Order — không dùng HotelBooking [Tour Booking] vì các bản ghi
               // này có TTL 15 phút và không được cập nhật khi đơn paid, dẫn
               // đến sau 15 phút phòng "trống ảo" trong khi đơn vẫn còn hiệu lực.
+
+              // Nói chung là lấy các đơn tour có chọn phòng KS trong segment này
               const conflictOrders = await Order.find({
                 deleted: { $ne: true },
                 status: { $ne: "cancel" },

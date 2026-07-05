@@ -715,6 +715,7 @@ module.exports.confirmSegments = async (req, res) => {
       const toCompany = await Company.findById(hotelDoc.companyId).select("name").lean();
       const toCompanyName = toCompany ? toCompany.name : "";
 
+      // Tạo yêu cầu liên kết mới
       const linkRequest = await HotelLinkRequest.create({
         fromCompanyId: companyId,
         fromCompanyName,
@@ -773,6 +774,7 @@ module.exports.confirmSegments = async (req, res) => {
       }
     }
 
+    // Cập nhật holdBookingIds và linkRequestIds
     tourSeg.holdBookingIds = activeHolds.map((b) => b._id);
     tourSeg.linkRequestIds = existingLinkIds;
     await tourSeg.save();

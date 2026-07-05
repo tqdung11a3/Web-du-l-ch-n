@@ -1078,8 +1078,8 @@ module.exports.createPost = async (req, res) => {
               tourSegmentId: r.tourSegmentId,
               fromDate: r.fromDate,
               toDate: r.toDate,
-              hotels: r.candidateHotels,
-              passengers: item.passengers,
+              hotels: r.candidateHotels, // danh sách KS ứng viên
+              passengers: item.passengers, // danh sách khách
               excludeOrderId: null,
             });
             if (!fea.ok) {

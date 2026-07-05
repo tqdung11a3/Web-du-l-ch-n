@@ -267,7 +267,12 @@ function computeMaxFeasible(males, females, buckets) {
  *   },
  * }}
  */
+
+
+// "Cho danh sách nhóm khách (atoms) và phòng còn trống theo loại — có xếp được không, nếu không trộn nam/nữ trong cùng phòng?"
 function canAllocateAtomicGroups({ atoms, rooms }) {
+
+  // Tạo danh sách nhóm khách từ atoms
   const atomList = (atoms || [])
     .map((a) => ({
       gender: a.gender === "female" ? "female" : "male",
@@ -276,6 +281,7 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
     }))
     .filter((a) => a.effectiveSize > 0);
 
+  // Tạo danh sách phòng từ rooms
   const buckets = (rooms || [])
     .map((r) => ({
       capacity: Math.max(0, Math.floor(Number(r.capacity) || 0)),
@@ -283,6 +289,7 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
     }))
     .filter((r) => r.capacity > 0 && r.count > 0);
 
+  // Tính tổng size nhóm khách nam và nữ
   const males = atomList.filter((a) => a.gender === "male");
   const females = atomList.filter((a) => a.gender === "female");
   const totalSizeM = males.reduce((s, a) => s + a.effectiveSize, 0);
@@ -315,24 +322,30 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
   // Suffix-sum capacity để prune sớm khi enum split.
   const suffixCap = new Array(buckets.length + 1).fill(0);
   for (let i = buckets.length - 1; i >= 0; i--) {
-    suffixCap[i] = suffixCap[i + 1] + buckets[i].capacity * buckets[i].count;
+    suffixCap[i] = suffixCap[i + 1] + buckets[i].capacity * buckets[i].count; // Tổng capacity còn lại từ loại phòng i đến hết (để cắt nhánh sớm)
   }
 
-  let foundPlan = null;
-  const splitMale = new Array(buckets.length).fill(0);
+  let foundPlan = null; // đã tìm được cách chia hợp lệ chưa
+  const splitMale = new Array(buckets.length).fill(0); // loại phòng thứ i - bao nhiêu phòng dành cho nam
 
-  function recSplit(idx, capM, capF) {
-    if (foundPlan) return;
-    if (capM + suffixCap[idx] < totalSizeM) return;
-    if (capF + suffixCap[idx] < totalSizeF) return;
+  // thử mọi cách chia phòng giữa nam và nữ, rồi kiểm tra từng atom có nhét vừa không
+
+  // Với từng loại phòng, thử: 0 phòng cho nam, 1 phòng cho nam, … count phòng cho nam; phần còn lại cho nữ. Hết mọi loại → gọi canPackBins kiểm tra.
+  function recSplit(idx, capM, capF) { // idx: loại phòng thứ i, capM: tổng chỗ đã phân cho nam, capF: tổng chỗ đã phân cho nữ
+
+    if (foundPlan) return; // đã tìm được cách chia hợp lệ rồi thì không cần thử nữa
+    if (capM + suffixCap[idx] < totalSizeM) return; // nếu tổng chỗ đã phân cho nam + tổng capacity còn lại từ loại phòng i đến hết < tổng size nhóm khách nam thì không thử nữa
+    if (capF + suffixCap[idx] < totalSizeF) return; // nếu tổng chỗ đã phân cho nữ + tổng capacity còn lại từ loại phòng i đến hết < tổng size nhóm khách nữ thì không thử nữa
 
     if (idx === buckets.length) {
       if (capM < totalSizeM || capF < totalSizeF) return;
-      const maleBins = _expandBins(buckets, splitMale);
+      const maleBins = _expandBins(buckets, splitMale); // chuyển thành danh sách capacity của phòng dành cho nam
       const femaleBins = _expandBins(
         buckets,
         buckets.map((b, i) => b.count - splitMale[i])
-      );
+      ); // chuyển thành danh sách capacity của phòng dành cho nữ
+
+      // atom nam có nhét vừa maleBins không, atom nữ có nhét vừa femaleBins không
       if (canPackBins(males, maleBins) && canPackBins(females, femaleBins)) {
         foundPlan = {
           malePlan: buckets
@@ -379,6 +392,8 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
  * @param {number[]} bins  capacities of available bins
  * @returns {boolean}
  */
+
+// "Cho danh sách nhóm khách (atoms) và danh sách capacity của phòng (bins) — có thể đặt mọi atom vào bins không?"
 function canPackBins(atoms, bins) {
   if (!atoms || atoms.length === 0) return true;
   if (!bins || bins.length === 0) return false;
@@ -388,19 +403,19 @@ function canPackBins(atoms, bins) {
 
   const remaining = bins.slice();
 
-  function rec(i) {
+  function rec(i) { // i: index của atom hiện tại, mỗi i tương đương với 1 người
     if (i === sorted.length) return true;
-    const size = sorted[i].effectiveSize;
+    const size = sorted[i].effectiveSize; // size của atom thứ i, số chỗ cần cho atom hiện tại
     // Tránh thử lại bin có remaining giống nhau (cắt nhánh đối xứng).
     const tried = new Set();
-    for (let j = 0; j < remaining.length; j++) {
-      const cap = remaining[j];
-      if (tried.has(cap)) continue;
-      if (cap < size) continue;
-      tried.add(cap);
-      remaining[j] = cap - size;
+    for (let j = 0; j < remaining.length; j++) { // j: index của phòng hiện tại, mỗi j tương đương với 1 phòng
+      const cap = remaining[j]; // capacity của phòng thứ j, số chỗ còn trống của phòng hiện tại
+      if (tried.has(cap)) continue; // nếu capacity của phòng hiện tại đã thử thì không thử nữa
+      if (cap < size) continue; // nếu capacity của phòng hiện tại < size của atom hiện tại thì không thử nữa
+      tried.add(cap); // đánh dấu capacity của phòng hiện tại đã thử
+      remaining[j] = cap - size; // cập nhật số chỗ còn trống của phòng hiện tại
       if (rec(i + 1)) return true;
-      remaining[j] = cap;
+      remaining[j] = cap; // cập nhật lại số chỗ còn trống của phòng hiện tại
     }
     return false;
   }
@@ -679,6 +694,8 @@ function assignAtomsToPhysicalRooms({
   physicalRooms, // Phòng vật lý chưa ai dùng
   preExistingOpenRooms, // Phòng đang ghép, còn slot
 }) {
+
+  // 1. Chuẩn hóa atomList và roomPool
   const atomList = (atoms || [])
     .filter((a) => a && Number(a.effectiveSize) > 0)
     .map((a) => ({
@@ -696,11 +713,15 @@ function assignAtomsToPhysicalRooms({
       _origIdx: idx,
     }));
 
-  // Khởi tạo assignments với các "phòng đang mở" sẵn (cross-order shared).
+  // Khởi tạo assignments với các "phòng đang mở" sẵn.
   // Đặc điểm: KHÔNG có atoms trong group này (atoms thuộc đơn khác), nhưng đã
   // chiếm `used` cap. Khi nhồi atom mới sẽ tăng `used`. Nếu cuối cùng không có
   // atom nào của đơn hiện tại được nhồi vào → loại khỏi assignments.
+
   const assignments = [];
+
+  // 2. Đưa phòng partial vào bàn làm việc
+  // Phòng 301 còn chỗ, để sẵn đây cho đơn mới thử nhét — atoms rỗng vì chưa xếp; used và _reuseThId đã có vì phòng thật và đơn cũ đã biết
   for (const r of preExistingOpenRooms || []) {
     if (!r || !r._thId) continue;
     const cap = Math.floor(Number(r.capacity) || 0);
@@ -713,16 +734,16 @@ function assignAtomsToPhysicalRooms({
       roomTypeName: String(r.roomTypeName || ""),
       capacity: cap,
       gender: r.gender,
-      atoms: [],
-      used: used0,
-      _reuseThId: r._thId,
-      _reuseInitialUsed: used0,
+      atoms: [], // đơn mới chưa có ai
+      used: used0, // đơn cũ đã chiếm
+      _reuseThId: r._thId, // đánh dấu: ghép phòng cũ
+      _reuseInitialUsed: used0, // đánh dấu: số chỗ đã chiếm của đơn cũ
     });
   }
 
   const leftoverAtoms = [];
 
-  // Tách theo giới và xử lý từng giới riêng — đảm bảo không bao giờ trộn.
+  // 3. Tách theo giới và xử lý từng giới riêng — đảm bảo không bao giờ trộn.
   for (const gender of ["male", "female"]) {
     const groupAtoms = atomList
       .filter((a) => a.gender === gender)
@@ -741,6 +762,8 @@ function assignAtomsToPhysicalRooms({
       for (let i = 0; i < assignments.length; i++) {
         const a = assignments[i];
         if (a.gender !== gender) continue;
+
+        // 3.1. Tìm phòng đang mở (đã có atom cùng giới + còn capacity ≥ atom.size)
         const remaining = a.capacity - a.used;
         if (remaining < atom.effectiveSize) continue;
         if (a._reuseThId) {
@@ -763,7 +786,7 @@ function assignAtomsToPhysicalRooms({
         continue;
       }
 
-      // Mở phòng mới. Ưu tiên phòng có capacity NHỎ NHẤT mà vẫn đủ chứa atom
+      // 3.2 Mở phòng mới. Ưu tiên phòng có capacity NHỎ NHẤT mà vẫn đủ chứa atom
       // → giữ lại phòng to cho atom to ở sau.
       let bestNewIdx = -1;
       let bestNewCap = Infinity;
@@ -800,10 +823,10 @@ function assignAtomsToPhysicalRooms({
   // phần share của đơn này, không kể phần đã chiếm trước đó của đơn khác.
   const finalAssignments = [];
   for (const a of assignments) {
-    if (a._reuseThId && a.atoms.length === 0) continue;
+    if (a._reuseThId && a.atoms.length === 0) continue; // phòng đang mở, nhưng không nhồi được atom nào của đơn hiện tại → bỏ
     if (a._reuseThId) {
-      const u0 = Number(a._reuseInitialUsed) || 0;
-      a.used = Math.max(0, a.used - u0);
+      const u0 = Number(a._reuseInitialUsed) || 0; // số chỗ đã chiếm của đơn cũ
+      a.used = Math.max(0, a.used - u0); // điều chỉnh `used` về phần đóng góp của riêng đơn hiện tại
     }
     delete a._reuseInitialUsed;
     finalAssignments.push(a);
