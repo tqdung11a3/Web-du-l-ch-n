@@ -217,12 +217,100 @@
       suggestAllocation(el);
     });
 
-    // Ngày thay đổi → re-fetch phòng trống cho tất cả khách sạn đã có + cập nhật capacity
-    const onDateChange = () => refreshHotelsInSegment(el);
-    el.querySelector(".seg-from-date").addEventListener("change", onDateChange);
-    el.querySelector(".seg-to-date").addEventListener("change",   onDateChange);
+    // Khóa vùng ngày cho phép chọn = [departureDate, endDate] của tour để
+    // admin không thể tự nhập khung nằm ngoài khoảng tour.
+    const fromInput = el.querySelector(".seg-from-date");
+    const toInput   = el.querySelector(".seg-to-date");
+    if (departureMeta.departureDate) {
+      fromInput.min = departureMeta.departureDate;
+      toInput.min   = departureMeta.departureDate;
+    }
+    if (departureMeta.endDate) {
+      fromInput.max = departureMeta.endDate;
+      toInput.max   = departureMeta.endDate;
+    }
+
+    // Ngày thay đổi → validate range, re-fetch phòng trống cho tất cả khách sạn
+    // đã có + cập nhật capacity. Nếu ngoài range → reset ô + báo lỗi.
+    const onDateChange = (ev) => {
+      if (!enforceSegmentDateRange(el, ev && ev.target)) return;
+      refreshHotelsInSegment(el);
+    };
+    fromInput.addEventListener("change", onDateChange);
+    toInput.addEventListener("change",   onDateChange);
 
     return el;
+  }
+
+  // ── Validate 1 segment nằm trong khoảng tour ─────────────────────────────
+  // Trả về true nếu hợp lệ; false + toast + reset ô nếu ngoài khoảng /
+  // fromDate > toDate. targetInput là ô admin vừa sửa để reset đúng ô đó.
+  function enforceSegmentDateRange(segEl, targetInput) {
+    const fromInput = segEl.querySelector(".seg-from-date");
+    const toInput   = segEl.querySelector(".seg-to-date");
+    const minStr = departureMeta.departureDate || "";
+    const maxStr = departureMeta.endDate || "";
+    const fmt = (s) => {
+      if (!s || s.length < 10) return s || "";
+      return `${s.substring(8, 10)}/${s.substring(5, 7)}/${s.substring(0, 4)}`;
+    };
+    const from = fromInput.value;
+    const to   = toInput.value;
+
+    if (from && minStr && from < minStr) {
+      toastError(`Ngày phải nằm trong khoảng tour ${fmt(minStr)} → ${fmt(maxStr)}`);
+      fromInput.value = "";
+      return false;
+    }
+    if (from && maxStr && from > maxStr) {
+      toastError(`Ngày phải nằm trong khoảng tour ${fmt(minStr)} → ${fmt(maxStr)}`);
+      fromInput.value = "";
+      return false;
+    }
+    if (to && minStr && to < minStr) {
+      toastError(`Ngày phải nằm trong khoảng tour ${fmt(minStr)} → ${fmt(maxStr)}`);
+      toInput.value = "";
+      return false;
+    }
+    if (to && maxStr && to > maxStr) {
+      toastError(`Ngày phải nằm trong khoảng tour ${fmt(minStr)} → ${fmt(maxStr)}`);
+      toInput.value = "";
+      return false;
+    }
+    if (from && to && from > to) {
+      toastError(`"Từ ngày" phải ≤ "Đến ngày"`);
+      if (targetInput === fromInput) fromInput.value = "";
+      else toInput.value = "";
+      return false;
+    }
+    return true;
+  }
+
+  // ── Validate toàn bộ segments trước khi lưu / xác nhận ────────────────────
+  function validateAllSegmentsInRange() {
+    const minStr = departureMeta.departureDate || "";
+    const maxStr = departureMeta.endDate || "";
+    const fmt = (s) => {
+      if (!s || s.length < 10) return s || "";
+      return `${s.substring(8, 10)}/${s.substring(5, 7)}/${s.substring(0, 4)}`;
+    };
+    const errors = [];
+    const segEls = Array.from(segmentsWrapper.querySelectorAll(".th-segment-item"));
+    segEls.forEach((segEl, idx) => {
+      const f = segEl.querySelector(".seg-from-date").value;
+      const t = segEl.querySelector(".seg-to-date").value;
+      if (!f || !t) return;
+      if (f > t) {
+        errors.push(`Khung ${idx + 1}: "Từ ngày" phải ≤ "Đến ngày".`);
+        return;
+      }
+      if ((minStr && f < minStr) || (maxStr && t > maxStr)) {
+        errors.push(
+          `Khung ${idx + 1}: ngày ${fmt(f)} → ${fmt(t)} nằm ngoài khoảng tour ${fmt(minStr)} → ${fmt(maxStr)}.`
+        );
+      }
+    });
+    return errors;
   }
 
   // ── Tải lại phòng trống cho tất cả khách sạn trong khung khi ngày thay đổi ──
@@ -815,6 +903,11 @@
 
   // ── Lưu bản nháp (nút bấm thủ công → hiển thị alert) ───────────────────────
   async function saveDraft() {
+    const rangeErrors = validateAllSegmentsInRange();
+    if (rangeErrors.length > 0) {
+      toastError(rangeErrors[0]);
+      return;
+    }
     try {
       const data = await saveDraftInternal();
       if (data && data.success) toastSuccess(data.message || "Đã lưu bản nháp");
@@ -829,6 +922,18 @@
   // hàm trung tâm gửi yêu cầu liên kết
   // hàm quan trọng nhất, gửi yêu cầu liên kết
   async function confirmSegments() {
+    const rangeErrors = validateAllSegmentsInRange();
+    if (rangeErrors.length > 0) {
+      await showThConfirm({
+        title: "Khung ngoài khoảng tour",
+        message:
+          "Một số khung thời gian nằm ngoài khoảng ngày của tour:\n\n" +
+          rangeErrors.map((e, i) => `${i + 1}. ${e}`).join("\n"),
+        alertOnly: true,
+        cancelText: "Quay lại chỉnh sửa",
+      });
+      return;
+    }
     const segments = collectSegments();
     if (segments.length === 0) {
       toastError("Chưa có khung thời gian nào");

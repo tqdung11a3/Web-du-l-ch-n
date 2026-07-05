@@ -542,6 +542,54 @@ module.exports.saveSegments = async (req, res) => {
     const depDate  = new Date(departureDate);
     const endDateD = new Date(endDate);
 
+    if (isNaN(depDate.getTime()) || isNaN(endDateD.getTime())) {
+      return res.json({ success: false, message: "Ngày khởi hành / kết thúc tour không hợp lệ" });
+    }
+    if (depDate > endDateD) {
+      return res.json({ success: false, message: "Ngày khởi hành tour phải ≤ ngày kết thúc tour" });
+    }
+
+    // Chặn khung thời gian nằm ngoài khoảng [departureDate, endDate] của tour,
+    // hoặc có fromDate > toDate. So sánh theo mốc ngày (bỏ giờ) để tránh lệch múi giờ.
+    const _dayStart = (d) => {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return x.getTime();
+    };
+    const tourFromMs = _dayStart(depDate);
+    const tourToMs   = _dayStart(endDateD);
+    const tourFromLabel = moment(depDate).format("DD/MM/YYYY");
+    const tourToLabel   = moment(endDateD).format("DD/MM/YYYY");
+
+    for (let i = 0; i < segmentsArr.length; i++) {
+      const s = segmentsArr[i];
+      if (!s || !s.fromDate || !s.toDate) continue;
+      const f = new Date(s.fromDate);
+      const t = new Date(s.toDate);
+      if (isNaN(f.getTime()) || isNaN(t.getTime())) {
+        return res.json({
+          success: false,
+          message: `Khung ${i + 1}: ngày không hợp lệ`,
+        });
+      }
+      const fMs = _dayStart(f);
+      const tMs = _dayStart(t);
+      if (fMs > tMs) {
+        return res.json({
+          success: false,
+          message: `Khung ${i + 1}: "Từ ngày" phải ≤ "Đến ngày"`,
+        });
+      }
+      if (fMs < tourFromMs || tMs > tourToMs) {
+        return res.json({
+          success: false,
+          message:
+            `Khung ${i + 1}: ngày ${moment(f).format("DD/MM/YYYY")} → ${moment(t).format("DD/MM/YYYY")} ` +
+            `phải nằm trong khoảng tour ${tourFromLabel} → ${tourToLabel}.`,
+        });
+      }
+    }
+
     const existing = await TourSegment.findOne({ tourId, departureDate: depDate });
     if (existing) {
       existing.endDate     = endDateD;
