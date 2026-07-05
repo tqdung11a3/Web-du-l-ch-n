@@ -1774,7 +1774,9 @@ block main
                   if (String(roomsArr[rr].holdBookingId) === String(slotId)) {
                     matchedAtomLabels = Array.isArray(roomsArr[rr].atomLabels) ? roomsArr[rr].atomLabels : null;
                     matchedAtomAnchorIdxs = Array.isArray(roomsArr[rr].atomAnchorIdxs) ? roomsArr[rr].atomAnchorIdxs : null;
-                    matchedUsedCap = roomsArr[rr].numPeople != null ? roomsArr[rr].numPeople : null;
+                    matchedUsedCap = roomsArr[rr].usedCapacity != null
+                      ? roomsArr[rr].usedCapacity
+                      : (roomsArr[rr].numPeople != null ? roomsArr[rr].numPeople : null);
                     break;
                   }
                 }

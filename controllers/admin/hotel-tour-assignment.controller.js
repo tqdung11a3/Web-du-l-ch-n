@@ -838,6 +838,10 @@ module.exports.detail = async (req, res) => {
               toDate: String(sr.toDate || alloc.toDate || "").slice(0, 10),
               gender: ra.gender || null,
               usedCapacity: Math.max(1, Math.round(Number(ra.usedCapacity) || 1)),
+              // Giá trị occupancy quy đổi GỐC (float, vd 1.5) — dùng để hiển thị
+              // "sức chứa quy đổi" chính xác, không làm tròn như numPeople.
+              usedCapacityRaw:
+                Number(ra.usedCapacity) > 0 ? Number(ra.usedCapacity) : 1,
               atomLabels: Array.isArray(ra.atomLabels) ? ra.atomLabels.map(String) : [],
               _claimed: false,
             });
@@ -920,6 +924,9 @@ module.exports.detail = async (req, res) => {
         const stored = Number(a.numPeople);
         const hasStored = !Number.isNaN(stored) && stored > 0;
         let numPeople;
+        // usedCapacityRaw: occupancy quy đổi GỐC (float, vd 1.5) cho shared —
+        // để modal hiển thị "sức chứa quy đổi" đúng thay vì numPeople đã round.
+        let usedCapacityRaw = null;
         if (isShared) {
           const matched = pickMatchingRa(
             a.orderId,
@@ -930,8 +937,15 @@ module.exports.detail = async (req, res) => {
           );
           if (matched) {
             numPeople = matched.usedCapacity;
+            usedCapacityRaw =
+              matched.usedCapacityRaw != null
+                ? matched.usedCapacityRaw
+                : matched.usedCapacity;
           } else if (hasStored) {
             numPeople = Math.round(stored);
+            // DB (tourSeg.assignments.numPeople) đã lưu occupancy quy đổi gốc
+            // (có thể lẻ, vd 1.5) → giữ nguyên để hiển thị, không làm tròn.
+            usedCapacityRaw = stored;
           } else {
             numPeople = 1;
           }
@@ -951,6 +965,9 @@ module.exports.detail = async (req, res) => {
           holdBookingId: a.holdBookingId ? String(a.holdBookingId) : null,
           accommodationMode: isShared ? "shared" : (a.accommodationMode || "private"),
           numPeople,
+          // Chỉ shared mới có occupancy lẻ (1.5). Private để undefined → modal
+          // dùng baseOccupancy như cũ.
+          ...(usedCapacityRaw != null ? { usedCapacity: usedCapacityRaw } : {}),
         };
       });
 
@@ -1054,6 +1071,12 @@ module.exports.detail = async (req, res) => {
             ? a.atomLabels
             : null;
           let gender = a.gender || null;
+          // usedCapacityRaw: occupancy quy đổi GỐC (float, vd 1.5) — ưu tiên lấy
+          // từ assignment đã enrich; fallback từ Order pool khi thiếu.
+          let usedCapacityRaw =
+            a.usedCapacity != null && Number(a.usedCapacity) > 0
+              ? Number(a.usedCapacity)
+              : null;
           // Ưu tiên đọc atomAnchorIdxs đã lưu trực tiếp trong assignment
           // (schema mới). Đơn cũ chưa có field này → fallback các bước phía dưới.
           let atomAnchorIdxs = Array.isArray(a.atomAnchorIdxs) && a.atomAnchorIdxs.length > 0
@@ -1071,6 +1094,9 @@ module.exports.detail = async (req, res) => {
                 atomAnchorIdxs = matched.atomAnchorIdxs;
               }
               if (!gender) gender = matched.gender || null;
+              if (usedCapacityRaw == null && Number(matched.usedCapacity) > 0) {
+                usedCapacityRaw = Number(matched.usedCapacity);
+              }
             }
           }
 
@@ -1125,6 +1151,8 @@ module.exports.detail = async (req, res) => {
             roomTypeName:   a.roomTypeName || "",
             gender:         gender,
             numPeople:      a.numPeople || 1,
+            // Occupancy quy đổi gốc (float) để modal hiển thị đúng 1.5/2.
+            usedCapacity:   usedCapacityRaw != null ? usedCapacityRaw : (a.numPeople || 1),
             guestName:      a.guestName || targetCust.guestName || "",
             atomLabels:     atomLabels || [],
             atomAnchorIdxs: atomAnchorIdxs || [],
