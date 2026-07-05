@@ -4,9 +4,6 @@ block main
   - var _htaListHotelQs = (typeof selectedHotelId !== 'undefined' && selectedHotelId) ? ('?hotelId=' + encodeURIComponent(String(selectedHotelId))) : ''
   h1.box-title Phân phòng cho tour
 
-  .th-intro
-    p Chọn tour-segment có phòng của khách sạn bạn đã được giữ chỗ để phân khách vào phòng. Lọc theo khách sạn bằng thanh chọn khách sạn ở đầu trang (giống Dashboard, Đặt phòng, v.v.).
-
   form.th-search-form(method="GET" action=`/${pathAdmin}/hotel/tour-assignments`)
     if selectedHotelId
       input(type="hidden" name="hotelId" value=selectedHotelId)
