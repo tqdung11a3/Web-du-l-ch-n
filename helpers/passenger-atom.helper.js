@@ -105,15 +105,6 @@ function _attachMemberToAtom(atom, member, ageBands) {
 function buildAtomsFromPassengers(passengers, ageBands) {
   if (!Array.isArray(passengers) || passengers.length === 0) return [];
 
-  // guardianIdx: người lớn đi cùng
-  // roomGuardianIdx: người lớn đi cùng phòng KS
-  // type: loại khách
-  // gender: giới tính
-  // idx: id khách
-  // name: tên khách
-  // age: tuổi khách
-  // type: loại khách
-  // gender: giới tính
   const list = passengers.map((p, i) => {
     const guardianIdx =
       p.guardianIdx === null || p.guardianIdx === undefined
@@ -152,6 +143,7 @@ function buildAtomsFromPassengers(passengers, ageBands) {
       ? p.roomGuardianIdx
       : p.guardianIdx;
 
+  // gom danh sách người lớn làm anchor atom
   const adults = list.filter((p) => p.type === "adult");
   const anchorAdults = [];
 
@@ -162,6 +154,7 @@ function buildAtomsFromPassengers(passengers, ageBands) {
         `Hành khách "${a.name || "(chưa có tên)"}" là người lớn nhưng chưa khai giới tính.`
       );
     }
+    // Người lớn đủ 18 tuổi làm anchor atom
     if (isAnchorAdult(a)) {
       if (a.guardianIdx !== null) {
         throw new Error(
@@ -275,11 +268,7 @@ function buildAtomsFromPassengers(passengers, ageBands) {
 }
 
 /**
- * Tra weight cho 1 age dựa trên Hotel.ageBands. Nếu không match band nào,
- * fallback theo type:
- *   - adult → 1
- *   - child → 0.5
- *   - baby  → 0
+ * Tra weight cho 1 age dựa trên Hotel.ageBands.
  *
  * @param {number} age
  * @param {'adult'|'child'|'baby'} type

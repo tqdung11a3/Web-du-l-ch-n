@@ -524,7 +524,24 @@ async function evaluateSharedFeasibilityV2(request) {
       message: `Tour chưa cấu hình phòng cho ${hotelName} trong khung này. Vui lòng liên hệ tổ chức.`,
     };
   }
-  if (available.length === 0) {
+
+  // Phòng đang ghép dở của đơn khác (đã khoá giới tính, còn slot trống). Đơn
+  // hiện tại được phép ghép thêm vào các phòng này → validate phải tính chúng,
+  // nếu không sẽ báo "hết phòng" sai (false rejection) dù phòng còn chỗ.
+  const partialShared = await getPartialSharedRooms({
+    tourSegmentId: request.tourSegmentId,
+    hotelId: request.hotelId,
+    fromDate: request.fromDate,
+    toDate: request.toDate,
+  });
+  const partialRooms = partialShared
+    .map((p) => ({
+      capacity: Math.max(0, Math.floor(Number(p.capacity) || 0) - Math.floor(Number(p.used) || 0)),
+      gender: p.gender === "female" ? "female" : "male",
+    }))
+    .filter((p) => p.capacity > 0);
+
+  if (available.length === 0 && partialRooms.length === 0) {
     return {
       ok: false,
       reason: "no_capacity_left",
@@ -549,9 +566,14 @@ async function evaluateSharedFeasibilityV2(request) {
     };
   }
 
+  // Fit-check theo loại phòng (dùng sức chứa ĐẦY của phòng, gồm cả loại phòng
+  // đang có phòng partial) — để cảnh báo atom quá lớn nhất quán.
+  const roomsForFit = rooms
+    .map((r) => ({ capacity: r.capacity, count: r.count }))
+    .concat(partialShared.map((p) => ({ capacity: p.capacity, count: 1 })));
   const atomRoomCheck = validateAtomsFitSharedRooms(
     currentAtoms,
-    rooms,
+    roomsForFit,
     ageBands
   );
   if (!atomRoomCheck.ok) {
@@ -565,11 +587,14 @@ async function evaluateSharedFeasibilityV2(request) {
 
   // KHÔNG cộng dồn atoms từ Order khác: phòng họ đã bị trừ khỏi `available`.
   // Cộng thêm sẽ double-count (rooms − rooms_họ_giữ, atoms + atoms_họ).
+  // Riêng phòng partial được đưa vào qua `partialRooms` (chỉ phần slot còn
+  // trống, khoá giới) — mirror đúng bước tạo đơn thật assignSharedAtomsToRooms.
   const allAtoms = currentAtoms;
 
   const result = canAllocateAtomicGroups({
     atoms: allAtoms,
     rooms: rooms.map((r) => ({ capacity: r.capacity, count: r.count })),
+    partialRooms,
   });
 
   if (result.ok) return { ok: true, detail: result.detail };
@@ -817,6 +842,7 @@ async function evaluateSharedFeasibilityV2Multi(request) {
   // hotel ứng viên. Loại phòng đã hết → KHÔNG đưa vào maxCap / validate
   // (BR-02..04). Hotel còn 0 phòng → loại khỏi danh sách (BR-05).
   const hotelsResolved = [];
+  const partialRoomsByHotel = {};
   let anyHasRawQuota = false;
 
   // Mỗi KS còn bao nhiêu phòng còn trống thực tế
@@ -833,14 +859,32 @@ async function evaluateSharedFeasibilityV2Multi(request) {
     });
 
     if (raw.length > 0) anyHasRawQuota = true;
-    if (available.length === 0) continue;
+
+    // Phòng đang ghép dở (khoá giới, còn slot) — đơn hiện tại ghép thêm được.
+    const partialShared = await getPartialSharedRooms({
+      tourSegmentId: request.tourSegmentId,
+      hotelId: h.hotelId,
+      fromDate: request.fromDate,
+      toDate: request.toDate,
+    });
+    const partialRooms = partialShared
+      .map((p) => ({
+        capacity: Math.max(0, Math.floor(Number(p.capacity) || 0) - Math.floor(Number(p.used) || 0)),
+        gender: p.gender === "female" ? "female" : "male",
+      }))
+      .filter((p) => p.capacity > 0);
+
+    // KS chỉ được loại khi vừa hết phòng trống VỪA không còn phòng partial.
+    if (available.length === 0 && partialRooms.length === 0) continue;
     const ageBands = await _getHotelAgeBands(h.hotelId);
+    const hid = String(h.hotelId);
     hotelsResolved.push({
-      hotelId: String(h.hotelId),
+      hotelId: hid,
       hotelName: h.hotelName || "",
       ageBands,
       rooms: available.map((r) => ({ capacity: r.capacity, count: r.count })),
     });
+    if (partialRooms.length > 0) partialRoomsByHotel[hid] = partialRooms;
   }
 
 
@@ -901,6 +945,7 @@ async function evaluateSharedFeasibilityV2Multi(request) {
     currentAtoms,
     hotels: hotelsResolved,
     existingAtomsByHotel: {},
+    partialRoomsByHotel,
     reweightFn: reweightAtomsForAgeBands,
   });
 

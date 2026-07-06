@@ -1037,6 +1037,8 @@ module.exports.createPost = async (req, res) => {
             hotelsByTourSegmentId.set(segId, hotels);
           } catch (_) {}
         }
+
+        // Validate ở riêng
         const r = validatePrivateAssignmentsForItem({
           item,
           hotelsByTourSegmentId,
@@ -1074,6 +1076,8 @@ module.exports.createPost = async (req, res) => {
           //     cứng) → fallback V2 single hotel.
           // Đơn không có passengers → V1 (chỉ males/females, single hotel).
           if (hasPassengers && Array.isArray(r.candidateHotels) && r.candidateHotels.length > 0) {
+
+            // Validate ở ghép
             const fea = await evaluateSharedFeasibilityV2Multi({
               tourSegmentId: r.tourSegmentId,
               fromDate: r.fromDate,
@@ -1453,6 +1457,8 @@ module.exports.createPost = async (req, res) => {
         for (const p of item.passengers || []) {
           if (typeof p.idx === "number") itemPaxByIdx.set(p.idx, p);
         }
+
+        // Tạo HotelBooking cho ở riêng
         for (const sel of item.roomSelections) {
           for (let i = 0; i < sel.selectedRooms; i++) {
             const assignment = (sel.roomAssignments || []).find(
@@ -1589,6 +1595,8 @@ module.exports.createPost = async (req, res) => {
               //   append note + push entry tourSeg.assignments với cùng
               //   holdBookingId (multi-occupant share).
               let pickedTh = null;
+
+              // tạo HotelBooking cho ở ghép
               if (ra._reuseThId) {
                 const reuse = await HotelBooking.findById(ra._reuseThId)
                   .select("_id roomId roomTypeId hotel guest note")

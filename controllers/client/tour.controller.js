@@ -518,6 +518,7 @@ module.exports.detail = async (req, res) => {
                       : "";
                     if (rsFrom !== _segFromStr || rsTo !== _segToStr) continue;
                     const rtKey = String(rs.roomTypeId); // id loại phòng
+                    // cộng dồn vòng lặp
                     bookedByRoomType[rtKey] = // đếm số phòng đã được chọn
                       (bookedByRoomType[rtKey] || 0) +
                       Number(rs.selectedRooms || 0);
@@ -569,7 +570,7 @@ module.exports.detail = async (req, res) => {
                   _holdMap[String(hb._id)] = String(hb.roomTypeId || "");
                 }
 
-                // 4. Dedupe — đếm phòng, không đếm người
+                // 4. Dedupe — đếm phòng, không đếm người, bởi vì có thể nhiều người chung 1 phòng => lấy theo bookingId
                 const _holdsPerRt = {};
                 for (const a of _segAssignsShared) {
                   const rtId = _holdMap[String(a.holdBookingId)];
@@ -595,7 +596,6 @@ module.exports.detail = async (req, res) => {
                   bookedByRoomType[String(ra.roomTypeId)] || 0;
 
                 const availableForClient = Math.max(0, ra.assignedRooms - clientBookedCount);
-                // Thì đoạn này, sẽ trừ cả Order và HotelBooking lại
 
                 if (availableForClient > 0) { // Chỉ hiển thị phòng còn trống thực tế
                   const matchedRoomType = (hotel.roomTypes || []).find(

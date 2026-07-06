@@ -85,6 +85,7 @@ function hasTimeOverlap(searchCheckIn, searchCheckOut, bookingCheckIn, bookingCh
 
 // Trong khoảng checkIn → checkOut, loại phòng X còn bao nhiêu phòng vật lý có thể đặt?
 function getAvailableRoomsForType(allRooms, roomTypeId, bookings, checkIn, checkOut) {
+  
   // Lọc phòng thuộc room type này và có status vacant
   const roomsOfType = allRooms.filter(r =>
     String(r.roomTypeId) === String(roomTypeId) &&

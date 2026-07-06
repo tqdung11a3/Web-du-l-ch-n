@@ -270,7 +270,12 @@ function computeMaxFeasible(males, females, buckets) {
 
 
 // "Cho danh sách nhóm khách (atoms) và phòng còn trống theo loại — có xếp được không, nếu không trộn nam/nữ trong cùng phòng?"
-function canAllocateAtomicGroups({ atoms, rooms }) {
+//
+// `partialRooms` (tuỳ chọn): các phòng ĐANG ghép dở của đơn khác — đã KHOÁ giới
+// tính và chỉ còn `capacity` chỗ trống (remaining). Đơn hiện tại có thể ghép
+// thêm vào các phòng này (cùng giới) trước khi mở phòng trống mới. Mỗi phần tử:
+// { capacity: <số chỗ CÒN TRỐNG>, gender: 'male'|'female' }.
+function canAllocateAtomicGroups({ atoms, rooms, partialRooms }) {
 
   // Tạo danh sách nhóm khách từ atoms
   const atomList = (atoms || [])
@@ -281,7 +286,7 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
     }))
     .filter((a) => a.effectiveSize > 0);
 
-  // Tạo danh sách phòng từ rooms
+  // Tạo danh sách phòng từ rooms (phòng TRỐNG hoàn toàn — chưa khoá giới tính)
   const buckets = (rooms || [])
     .map((r) => ({
       capacity: Math.max(0, Math.floor(Number(r.capacity) || 0)),
@@ -289,14 +294,33 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
     }))
     .filter((r) => r.capacity > 0 && r.count > 0);
 
+  // Phòng partial: mỗi phòng là 1 bin CỐ ĐỊNH giới tính, chỉ chứa được thêm
+  // `capacity` (remaining) chỗ. Tách sẵn theo giới để nối vào bin packing.
+  const malePartialBins = [];
+  const femalePartialBins = [];
+  for (const p of partialRooms || []) {
+    const rem = Math.max(0, Math.floor(Number(p && p.capacity) || 0));
+    if (rem <= 0) continue;
+    if (p.gender === "female") femalePartialBins.push(rem);
+    else if (p.gender === "male") malePartialBins.push(rem);
+  }
+  const malePartialCap = malePartialBins.reduce((s, c) => s + c, 0);
+  const femalePartialCap = femalePartialBins.reduce((s, c) => s + c, 0);
+
   // Tính tổng size nhóm khách nam và nữ
   const males = atomList.filter((a) => a.gender === "male");
   const females = atomList.filter((a) => a.gender === "female");
   const totalSizeM = males.reduce((s, a) => s + a.effectiveSize, 0);
   const totalSizeF = females.reduce((s, a) => s + a.effectiveSize, 0);
-  const totalCapacity = buckets.reduce((s, b) => s + b.capacity * b.count, 0);
+  const emptyCapacity = buckets.reduce((s, b) => s + b.capacity * b.count, 0);
+  const totalCapacity = emptyCapacity + malePartialCap + femalePartialCap;
   const largestAtom = Math.max(0, ...atomList.map((a) => a.effectiveSize));
-  const largestRoom = Math.max(0, ...buckets.map((b) => b.capacity));
+  const largestRoom = Math.max(
+    0,
+    ...buckets.map((b) => b.capacity),
+    ...malePartialBins,
+    ...femalePartialBins
+  );
 
   const detail = {
     totalSizeMale: totalSizeM,
@@ -309,7 +333,7 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
   if (atomList.length === 0) {
     return { ok: true, detail, plan: { malePlan: [], femalePlan: [] } };
   }
-  if (buckets.length === 0) {
+  if (buckets.length === 0 && malePartialBins.length === 0 && femalePartialBins.length === 0) {
     return { ok: false, reason: "exceeds_total_capacity", detail };
   }
   if (largestAtom > largestRoom) {
@@ -319,7 +343,8 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
     return { ok: false, reason: "exceeds_total_capacity", detail };
   }
 
-  // Suffix-sum capacity để prune sớm khi enum split.
+  // Suffix-sum capacity để prune sớm khi enum split (chỉ tính phòng trống —
+  // phần partial đã được cộng sẵn vào capM/capF khởi tạo).
   const suffixCap = new Array(buckets.length + 1).fill(0);
   for (let i = buckets.length - 1; i >= 0; i--) {
     suffixCap[i] = suffixCap[i + 1] + buckets[i].capacity * buckets[i].count; // Tổng capacity còn lại từ loại phòng i đến hết (để cắt nhánh sớm)
@@ -339,11 +364,12 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
 
     if (idx === buckets.length) {
       if (capM < totalSizeM || capF < totalSizeF) return;
-      const maleBins = _expandBins(buckets, splitMale); // chuyển thành danh sách capacity của phòng dành cho nam
+      // Bin cho nam = phòng trống chia cho nam + phòng partial nam (remaining).
+      const maleBins = _expandBins(buckets, splitMale).concat(malePartialBins); // chuyển thành danh sách capacity của phòng dành cho nam
       const femaleBins = _expandBins(
         buckets,
         buckets.map((b, i) => b.count - splitMale[i])
-      ); // chuyển thành danh sách capacity của phòng dành cho nữ
+      ).concat(femalePartialBins); // chuyển thành danh sách capacity của phòng dành cho nữ
 
       // atom nam có nhét vừa maleBins không, atom nữ có nhét vừa femaleBins không
       if (canPackBins(males, maleBins) && canPackBins(females, femaleBins)) {
@@ -377,7 +403,8 @@ function canAllocateAtomicGroups({ atoms, rooms }) {
     splitMale[idx] = 0;
   }
 
-  recSplit(0, 0, 0);
+  // Khởi tạo capM/capF bằng tổng chỗ trống của phòng partial (đã khoá giới).
+  recSplit(0, malePartialCap, femalePartialCap);
 
   if (foundPlan) return { ok: true, detail, plan: foundPlan };
 
@@ -492,11 +519,13 @@ function canAllocateAtomicGroupsAcrossHotels({
   currentAtoms,
   hotels,
   existingAtomsByHotel,
+  partialRoomsByHotel,
   reweightFn,
 }) {
   const atomsList = (currentAtoms || []).filter(Boolean);
   const hotelList = (hotels || []).filter((h) => h && h.hotelId);
   const existingMap = existingAtomsByHotel || {};
+  const partialMap = partialRoomsByHotel || {};
   const reweight =
     typeof reweightFn === "function"
       ? reweightFn
@@ -526,9 +555,15 @@ function canAllocateAtomicGroupsAcrossHotels({
   for (const a of taggedAtoms) {
     let canFitSomewhere = false;
     for (const h of hotelList) {
-      const maxRoom = (h.rooms || []).reduce(
-        (m, r) => Math.max(m, Math.floor(r.capacity || 0)),
-        0
+      const partialHere =
+        partialMap[h.hotelId] || partialMap[String(h.hotelId)] || [];
+      const maxRoom = Math.max(
+        (h.rooms || []).reduce(
+          (m, r) => Math.max(m, Math.floor(r.capacity || 0)),
+          0
+        ),
+        // Phòng partial: chỉ còn `capacity` (remaining) chỗ trống.
+        ...partialHere.map((p) => Math.max(0, Math.floor(Number(p.capacity) || 0)))
       );
       const sizedHere = reweight([a], h.ageBands || [])[0];
       if (sizedHere && sizedHere.effectiveSize <= maxRoom) {
@@ -559,7 +594,17 @@ function canAllocateAtomicGroupsAcrossHotels({
       capacity: Math.max(0, Math.floor(Number(r.capacity) || 0)),
       count: Math.max(0, Math.floor(Number(r.count) || 0)),
     }));
-    if (rooms.length === 0) continue;
+    // Phòng partial (đã khoá giới, còn chỗ) của hotel này.
+    const partialHere = (
+      partialMap[hotel.hotelId] || partialMap[String(hotel.hotelId)] || []
+    )
+      .map((p) => ({
+        capacity: Math.max(0, Math.floor(Number(p.capacity) || 0)),
+        gender: p.gender === "female" ? "female" : "male",
+      }))
+      .filter((p) => p.capacity > 0);
+    // Không còn phòng trống lẫn phòng partial → bỏ qua hotel này.
+    if (rooms.length === 0 && partialHere.length === 0) continue;
 
     const existingHere = reweight(
       existingMap[hotel.hotelId] || existingMap[String(hotel.hotelId)] || [],
@@ -579,7 +624,11 @@ function canAllocateAtomicGroupsAcrossHotels({
     while (take > 0) {
       const trySubset = sizedUnplaced.slice(0, take);
       const combined = [...existingHere, ...trySubset];
-      const result = canAllocateAtomicGroups({ atoms: combined, rooms });
+      const result = canAllocateAtomicGroups({
+        atoms: combined,
+        rooms,
+        partialRooms: partialHere,
+      });
       if (result.ok) {
         placedHere = {
           atoms: trySubset,
