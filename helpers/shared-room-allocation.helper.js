@@ -515,6 +515,8 @@ function _expandBins(buckets, perBucket) {
  *   detail?: object,
  * }}
  */
+
+// Với đoàn khách hiện tại (các nhóm atom), có xếp được vào các khách sạn ứng viên không — mà vẫn tuân thủ quy tắc ở ghép (cùng phòng chỉ 1 giới, không tách nhóm gia đình)?
 function canAllocateAtomicGroupsAcrossHotels({
   currentAtoms,
   hotels,
@@ -582,8 +584,8 @@ function canAllocateAtomicGroupsAcrossHotels({
     }
   }
 
-  let unplaced = taggedAtoms.slice();
-  const allocations = [];
+  let unplaced = taggedAtoms.slice(); // các atom còn lại chưa xếp được
+  const allocations = []; // các atom đã xếp được
 
   // Thử xếp atoms vào KS theo thứ tự ưu tiên; atom lớn vào KS trước; atom không fit → KS tiếp theo.
   for (const hotel of hotelList) {
@@ -636,7 +638,7 @@ function canAllocateAtomicGroupsAcrossHotels({
         };
         break;
       }
-      take -= 1;
+      take -= 1; // không xếp được → bỏ bớt 1 atom nhỏ nhất, thử lại
     }
 
     if (placedHere && placedHere.atoms.length > 0) {

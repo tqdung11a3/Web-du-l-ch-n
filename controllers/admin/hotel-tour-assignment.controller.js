@@ -383,6 +383,7 @@ module.exports.detail = async (req, res) => {
       .lean();
 
     // Lấy hold bookings CHỈ thuộc hotels của company, có roomId cụ thể
+    // Xác định phòng nào
     const holdBookingsRaw = await HotelBooking.find({
       tourSegmentId: tourSeg._id,
       "hotel.hotelId": { $in: hotelIds },
@@ -521,11 +522,15 @@ module.exports.detail = async (req, res) => {
         : [];
 
       const allocation = matchedItem.hotelAllocation || null;
+
+      // Xác định đơn là ở ghép hay ở riêng
       const accommodationMode =
         matchedItem.accommodationMode === "shared" ? "shared" : "private";
 
       // Chỉ giữ roomSelections thuộc hotels của company (để hotel-admin không
       // phải check đơn đặt của khách sạn khác trong cùng tour).
+
+      // phòng ở riêng
       const myRoomSelections = Array.isArray(matchedItem.roomSelections)
         ? matchedItem.roomSelections.filter((rs) =>
             hotelIds.includes(String(rs.hotelId))
@@ -603,7 +608,7 @@ module.exports.detail = async (req, res) => {
         suggestedHotelId: allocation?.allocations?.[0]?.hotelId || null,
         suggestedHotelName: allocation?.allocations?.[0]?.hotelName || "",
         hotelAllocation: allocation,
-        accommodationMode,
+        accommodationMode, // share hay private
         roomSelections: myRoomSelectionsVisible,
         sharedRoomRequest: mySharedRequestsVisible,
         passengers: Array.isArray(matchedItem.passengers)
@@ -803,6 +808,8 @@ module.exports.detail = async (req, res) => {
     // company mình (không cho sửa của người khác).
     // Đếm số đơn share cùng 1 holdBookingId — nếu > 1 thì chắc chắn là shared
     // cross-order (kể cả với đơn cũ chưa có field `accommodationMode`).
+
+    // Phát hiện nhiều đơn cùng 1 phòng ghép
     const assignsPerHold = {};
     for (const a of (tourSeg.assignments || [])) {
       const bid = a.holdBookingId ? String(a.holdBookingId) : "";
@@ -822,7 +829,11 @@ module.exports.detail = async (req, res) => {
 
     // Build danh sách roomAssignments (ra) chuẩn (nguồn sự thật) lấy từ
     // customer.sharedRoomRequest. Dùng để override numPeople của tourSeg
-    // .assignments cho shared (đề phòng dữ liệu cũ lưu sai numPeople).
+    // .assignments cho shared.
+
+    // Build pool atomLabels + atomAnchorIdxs từ Order
+
+    // phòng ở ghép
     const orderRaListById = {};
     for (const c of customers) {
       if (!c || c.accommodationMode !== "shared") continue;
@@ -903,6 +914,7 @@ module.exports.detail = async (req, res) => {
     // assignments còn sót thì bỏ qua để không hiện trong "Khách đã được gán".
     const activeOrderIdsSet = new Set(customers.map((c) => String(c.orderId)));
 
+    // xác định đơn nào đang ở phòng đó
     const existingAssignments = (tourSeg.assignments || [])
       .filter((a) => hotelIds.includes(String(a.hotelId)))
       .filter((a) => activeOrderIdsSet.has(String(a.orderId)))

@@ -1009,8 +1009,8 @@ async function evaluateSharedFeasibilityV2Multi(request) {
   } else {
     // cannot_fit_anywhere: phân biệt các sub-case để đưa gợi ý phù hợp.
     const leftover = result.leftover || [];
-    const placed = currentAtoms.length - leftover.length;
-    const leftoverLabels = leftover.map((a) => a.label || "?").join(", ");
+    const placed = currentAtoms.length - leftover.length; // số atom đã xếp được
+    const leftoverLabels = leftover.map((a) => a.label || "?").join(", "); // label của atom còn lại
 
     if (totalNeeded > totalAvailableCap) {
       // Không đủ sức chứa tổng → vấn đề phòng trống, không phải giới tính.
@@ -1095,9 +1095,9 @@ async function countActiveBookedRoomsByType({
     orderCode: { $exists: true, $nin: [null, ""] },
     "guest.fullName": { $ne: "[Tour Hold]" },
     $or: [
-      { isTemporaryHold: { $ne: true } },
-      { holdExpiresAt: { $gt: now } },
-      { holdExpiresAt: null },
+      { isTemporaryHold: { $ne: true } }, // Đã thanh toán / xác nhận, không còn là giữ tạm
+      { holdExpiresAt: { $gt: now } }, // Giữ tạm nhưng CHƯA hết hạn (ví dụ còn 10 phút)
+      { holdExpiresAt: null }, // Giữ tạm nhưng không có hạn (ví dụ đang chờ thanh toán)
     ],
   };
   // Khi edit đơn cũ → không tính phòng do chính đơn này giữ vào "đã book".
