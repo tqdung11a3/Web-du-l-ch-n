@@ -716,7 +716,9 @@ block main
                             span.booking-pax  ·  Phòng hiện tại: 
                             strong.cr-room-label= booking.roomNumber
                             if booking.roomFloor
-                              span  (Tầng #{booking.roomFloor})
+                              - var _crFloor = String(booking.roomFloor).trim()
+                              - if (!/^tầng\s/i.test(_crFloor)) _crFloor = 'Tầng ' + _crFloor
+                              span  (#{_crFloor})
                           .booking-dates
                             span Check-in: #{booking.checkInDisplay} | Check-out: #{booking.checkOutDisplay}
                         button.btn-change-room(
@@ -2296,6 +2298,13 @@ block main
         return a < d && c < b;
       }
 
+      function formatFloorDisplay(floor) {
+        if (!floor) return '—';
+        var s = String(floor).trim();
+        if (/^tầng\s/i.test(s)) return s;
+        return 'Tầng ' + s;
+      }
+
       // sourceBtnEl: nút .btn-change-room trên card, dùng để cập nhật UI sau khi đổi xong
       function showReassignModal(bookingId, currentRoomId, currentRoomNumber, candidates, sourceBtnEl) {
         // Xoá modal cũ nếu còn
@@ -2321,7 +2330,7 @@ block main
                          + '  <input type="radio" name="newRoomId" value="' + r.roomId + '" class="room-input">'
                          + '  <div class="room-option-info">'
                          + '    <div class="room-option-number">Phòng ' + r.number + '</div>'
-                         + '    <div class="room-option-type">Tầng ' + (r.floor || '—') + '</div>'
+                         + '    <div class="room-option-type">' + formatFloorDisplay(r.floor) + '</div>'
                          + '  </div>'
                          + '</label>';
                      }).join('')

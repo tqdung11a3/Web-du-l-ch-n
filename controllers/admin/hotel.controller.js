@@ -5740,6 +5740,10 @@ module.exports.releaseHolds = async (req, res) => {
     let released = 0;
     // Gom id đã giải phóng theo tourSegmentId để gỡ khỏi holdBookingIds.
     const releasedIdsBySegment = {};
+    // Gom số phòng đã giải phóng theo (segment, hotel, loại phòng, khung ngày)
+    // để giảm assignedRooms/totalPeople tương ứng trên TourSegment — nếu không,
+    // trang tour detail (dựa vào assignedRooms) vẫn hiển thị số phòng cũ.
+    const quotaDecrements = {};
     for (const booking of bookings) {
       if (companyHotelIds.has(String(booking.hotel?.hotelId))) {
         booking.status = "cancelled";
@@ -5751,6 +5755,34 @@ module.exports.releaseHolds = async (req, res) => {
         if (segId) {
           if (!releasedIdsBySegment[segId]) releasedIdsBySegment[segId] = [];
           releasedIdsBySegment[segId].push(booking._id);
+
+          // Chỉ giảm quota cho các hold "chưa gán khách" ([Tour Hold]) —
+          // đây là phòng trống được trả lại, không ảnh hưởng đơn khách đã đặt.
+          const fromKey = booking.checkIn
+            ? moment(booking.checkIn).format("YYYY-MM-DD")
+            : "";
+          const toKey = booking.checkOut
+            ? moment(booking.checkOut).format("YYYY-MM-DD")
+            : "";
+          const rtId = booking.roomTypeId ? String(booking.roomTypeId) : "";
+          const hotelId = booking.hotel?.hotelId
+            ? String(booking.hotel.hotelId)
+            : "";
+          if (fromKey && toKey && rtId && hotelId) {
+            const key = [segId, hotelId, rtId, fromKey, toKey].join("|");
+            if (!quotaDecrements[key]) {
+              quotaDecrements[key] = {
+                segId,
+                hotelId,
+                rtId,
+                fromKey,
+                toKey,
+                rooms: 0,
+                baseOccupancy: Number(booking.adults) || 2,
+              };
+            }
+            quotaDecrements[key].rooms += Math.max(1, Number(booking.rooms) || 1);
+          }
         }
       }
     }
@@ -5760,11 +5792,40 @@ module.exports.releaseHolds = async (req, res) => {
     const segIds = Object.keys(releasedIdsBySegment);
     if (segIds.length > 0) {
       const TourSegment = require("../../models/tour-segment.model");
+      const mongoose = require("mongoose");
       await Promise.all(
         segIds.map((segId) =>
           TourSegment.updateOne(
             { _id: segId },
             { $pull: { holdBookingIds: { $in: releasedIdsBySegment[segId] } } }
+          )
+        )
+      );
+
+      // Giảm assignedRooms/totalPeople tương ứng (đối xứng với luồng thêm phòng
+      // ở tour-hotel.controller.js → request-additional-rooms).
+      await Promise.all(
+        Object.values(quotaDecrements).map((d) =>
+          TourSegment.updateOne(
+            { _id: d.segId },
+            {
+              $inc: {
+                "segments.$[seg].hotels.$[hot].roomAllocations.$[ra].assignedRooms":
+                  -d.rooms,
+                "segments.$[seg].hotels.$[hot].roomAllocations.$[ra].totalPeople":
+                  -d.rooms * (d.baseOccupancy || 2),
+              },
+            },
+            {
+              arrayFilters: [
+                {
+                  "seg.fromDate": new Date(d.fromKey),
+                  "seg.toDate": new Date(d.toKey),
+                },
+                { "hot.hotelId": new mongoose.Types.ObjectId(String(d.hotelId)) },
+                { "ra.roomTypeId": new mongoose.Types.ObjectId(String(d.rtId)) },
+              ],
+            }
           )
         )
       );
