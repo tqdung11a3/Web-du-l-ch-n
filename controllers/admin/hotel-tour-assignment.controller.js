@@ -483,6 +483,8 @@ module.exports.detail = async (req, res) => {
 
     // Danh sách khách hàng đã thanh toán khớp lịch khởi hành
     const departureDateDisplay = moment(tourSeg.departureDate).format("DD/MM/YYYY");
+
+    // Lọc theo Order
     const rawOrders = await Order.find({
       "items.tourId": String(tourSeg.tourId),
       $or: [{ paymentStatus: "paid" }, { status: "done" }],

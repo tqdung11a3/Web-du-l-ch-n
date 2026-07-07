@@ -749,6 +749,8 @@ module.exports.createPost = async (req, res) => {
       // Điều kiện: seatsRemaining >= seatsUsed (tránh race condition khi nhiều
       // user cùng đặt tour còn ít chỗ).
       // $inc giảm nguyên tử → chỉ 1 request thắng nếu ghế vừa đủ.
+
+      // trừ ghế tour
       const seatUpdateResult = await Tour.updateOne(
         {
           _id:            tourInfo._id,

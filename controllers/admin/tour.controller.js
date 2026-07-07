@@ -831,7 +831,7 @@ module.exports.create = async (req, res) => {
     await categoryHelper.getCategoriesForCompanyTourSelect();
   const categoryTree = categoryHelper.buildCategoryTree(categoryList, "");
 
-  // Lấy danh sách thành phố Việt Nam (không có countryId hoặc countryName không phải Châu Âu)
+  // Lấy danh sách thành phố Việt Nam
   const vietnamCities = await City.find({
     $or: [
       { countryId: null },

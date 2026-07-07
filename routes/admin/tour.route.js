@@ -38,7 +38,7 @@ router.patch(
     { name: "avatar", maxCount: 1 },
     { name: "images", maxCount: 10 },
   ]),
-  tourValidate.createPost, // xem mục 2
+  tourValidate.createPost, 
   tourController.editPatch
 );
 
