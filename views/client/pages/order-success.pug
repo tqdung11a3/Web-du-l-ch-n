@@ -21,7 +21,7 @@ block main
     .section-11(style="padding-top: 20px;")
       .inner-wrap
         .inner-head
-          .inner-title Danh sách tour
+          .inner-title Tour
         .inner-tour-list
           each item in orderDetail.items
             - const tourDetailUrl = item.companySlug ? `/company/${item.companySlug}/tour/detail/${item.slug}` : `/tour/detail/${item.slug}`
@@ -215,12 +215,6 @@ block main
                       i.fa-solid.fa-circle-info(style="margin-right:4px;color:#b45309")
                       | Chi phí phòng cộng thêm: #{Number(item.extraRoomCost).toLocaleString('vi-VN')}đ
         .inner-list-price
-          .inner-item
-            .inner-label Tạm tính:
-            .inner-price #{orderDetail.subTotal.toLocaleString("vi-VN")}đ
-          .inner-item
-            .inner-label Giảm:
-            .inner-price -#{orderDetail.discount.toLocaleString("vi-VN")}đ
           .inner-item
             .inner-label Thanh toán:
             .inner-price-hl #{orderDetail.total.toLocaleString("vi-VN")}đ
