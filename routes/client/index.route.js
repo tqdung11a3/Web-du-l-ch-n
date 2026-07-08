@@ -15,7 +15,6 @@ const homeRoutes = require("./home.route");
 const hotelCartRoutes = require("./hotel-cart.route"); // Cart cho hotel
 const cartRoutes = require("./cart.route"); // Cart cho tour
 const hotelBookingRoutes = require("./hotel-booking.route"); // Booking cho hotel
-const contactRoutes = require("./contact.route");
 const categoryRoutes = require("./category.route");
 const searchRoutes = require("./search.route");
 const orderRoutes = require("./order.route");
@@ -41,7 +40,6 @@ router.use("/hotel-cart", hotelCartRoutes); // Cart cho hotel
 router.use("/cart", cartRoutes); // Cart cho tour
 router.use("/hotel-booking", hotelBookingRoutes); // Booking cho hotel
 router.use("/company", companyRoutes);
-router.use("/contact", contactRoutes);
 router.use("/category", categoryRoutes);
 router.use("/search", searchRoutes);
 router.use("/order", orderRoutes);

@@ -113,12 +113,6 @@ router.get("/orders", orderController.companyList);
 router.get("/customers", customerController.list);
 router.get("/customers/:id", customerController.detail);
 
-// Trung tâm liên hệ
-const contactController = require("../../controllers/admin/super-admin/contact.controller");
-router.get("/contacts", contactController.list);
-router.patch("/contacts/mark-handled", contactController.markHandled);
-router.delete("/contacts/:id", contactController.remove);
-
 // Kiểm duyệt đánh giá
 const reviewController = require("../../controllers/admin/super-admin/review.controller");
 router.get("/reviews", reviewController.list);

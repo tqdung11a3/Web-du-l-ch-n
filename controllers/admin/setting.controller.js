@@ -12,7 +12,6 @@ const {
 } = require("../../helpers/website-setting-section4.helper");
 
 const TAB_ACCESS_SCOPES = [
-  "inherit",
   "full",
   "tour_only",
   "hotel_only",
@@ -21,7 +20,7 @@ const TAB_ACCESS_SCOPES = [
 ];
 
 module.exports.TAB_ACCESS_SCOPE_OPTIONS = [
-  { value: "inherit", label: "Toàn quyền" },
+  { value: "full", label: "Toàn quyền" },
   { value: "tour_only", label: "Quản trị viên tour" },
   { value: "hotel_only", label: "Quản trị viên khách sạn" },
   { value: "tour_staff", label: "Nhân viên Tour" },
@@ -29,27 +28,26 @@ module.exports.TAB_ACCESS_SCOPE_OPTIONS = [
 ];
 
 function normalizeTabAccessScope(v) {
-  const s = String(v || "inherit");
-  return TAB_ACCESS_SCOPES.includes(s) ? s : "inherit";
+  const s = String(v || "full");
+  return TAB_ACCESS_SCOPES.includes(s) ? s : "full";
 }
 
 function tabAccessScopeLabel(scope) {
   const map = {
-    inherit: "Theo nhóm quyền",
-    full: "Cả hai tab",
+    full: "Toàn quyền",
     tour_only: "Chỉ Tour",
     hotel_only: "Chỉ KS",
     tour_staff: "Nhân viên Tour",
     hotel_staff: "Nhân viên KS",
   };
-  return map[scope] || map.inherit;
+  return map[scope] || map.full;
 }
 
 function isTourAdminScope(account) {
   return (
     account &&
     !account.isSuperAdmin &&
-    (account.tabAccessScope || "inherit") === "tour_only"
+    (account.tabAccessScope || "full") === "tour_only"
   );
 }
 
@@ -57,12 +55,12 @@ function isHotelAdminScope(account) {
   return (
     account &&
     !account.isSuperAdmin &&
-    (account.tabAccessScope || "inherit") === "hotel_only"
+    (account.tabAccessScope || "full") === "hotel_only"
   );
 }
 
 function isStaffTabScope(account) {
-  const s = account?.tabAccessScope || "inherit";
+  const s = account?.tabAccessScope || "full";
   return s === "tour_staff" || s === "hotel_staff";
 }
 
@@ -70,7 +68,7 @@ function isStaffTabScope(account) {
 function canManageAccountAdminRecord(actor, target) {
   if (!actor || !target) return false;
   if (actor.isSuperAdmin) return true;
-  const targetScope = target.tabAccessScope || "inherit";
+  const targetScope = target.tabAccessScope || "full";
   const actorId = String(actor._id || actor.id);
   const targetId = String(target._id || target.id);
   if (isTourAdminScope(actor)) {
@@ -107,7 +105,7 @@ function tabAccessScopeOptionsForActor(actor, targetAccount) {
 function defaultSelectedScopeForCreate(actor) {
   if (isTourAdminScope(actor)) return "tour_staff";
   if (isHotelAdminScope(actor)) return "hotel_staff";
-  return "inherit";
+  return "full";
 }
 
 function respondAccountAdminForbidden(req, res) {
@@ -364,7 +362,7 @@ module.exports.accountAdminList = async (req, res) => {
 
     // Quản trị viên tour / KS: chỉ thấy chính họ + nhân viên tương ứng
     if (actor && !actor.isSuperAdmin) {
-      const s = actor.tabAccessScope || "inherit";
+      const s = actor.tabAccessScope || "full";
       if (s === "tour_only") {
         listQuery.$or = [
           { _id: actor._id },
@@ -405,7 +403,7 @@ module.exports.accountAdminList = async (req, res) => {
 
     for (const item of accountAdminList) {
       item.tabAccessScopeLabel = tabAccessScopeLabel(
-        item.tabAccessScope || "inherit"
+        item.tabAccessScope || "full"
       );
       if (
         item.tabAccessScope === "hotel_staff" &&
@@ -692,7 +690,7 @@ module.exports.accountAdminEditPatch = async (req, res) => {
     const nextScope =
       req.body.tabAccessScope !== undefined
         ? req.body.tabAccessScope
-        : String(accountDetail.tabAccessScope || "inherit");
+        : String(accountDetail.tabAccessScope || "full");
 
     if (!req.account.isSuperAdmin) {
       if (isTourAdminScope(req.account)) {

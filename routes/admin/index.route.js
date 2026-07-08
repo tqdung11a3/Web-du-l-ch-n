@@ -5,7 +5,6 @@ const categoryRoutes = require("./category.route");
 const tourRoutes = require("./tour.route");
 const orderRoutes = require("./order.route");
 const userRoutes = require("./user.route");
-const contactRoutes = require("./contact.route");
 const settingRoutes = require("./setting.route");
 const profileRoutes = require("./profile.route");
 const uploadRoutes = require("./upload.route");
@@ -72,14 +71,6 @@ router.use(
   notificationMiddleware.getUnreadCount,
   roleMiddleware.requirePermission("tour-access"),
   userRoutes
-);
-router.use(
-  "/contact",
-  authMiddleware.verifyToken,
-  roleMiddleware.loadRolePermissions,
-  notificationMiddleware.getUnreadCount,
-  hotelListMiddleware.getHotelList,
-  contactRoutes
 );
 router.use(
   "/setting",

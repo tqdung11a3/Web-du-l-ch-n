@@ -22,7 +22,7 @@ async function getCompanyAdminLoginRedirect(account) {
   const pathAdmin = global.pathAdmin || "admin";
   const base = `/${pathAdmin}`;
 
-  const scope = account.tabAccessScope || "inherit";
+  const scope = account.tabAccessScope || "full";
 
   async function firstHotelDashboardUrl() {
     const firstHotel = await Hotel.findOne({
@@ -49,11 +49,7 @@ async function getCompanyAdminLoginRedirect(account) {
     return firstHotelDashboardUrl();
   }
 
-  if (scope === "tour_only" || scope === "full" || scope === "tour_staff") {
-    return `${base}/dashboard`;
-  }
-
-  // inherit / mặc định: toàn quyền → vào dashboard tour
+  // full / inherit (backward compat) / mặc định: toàn quyền → vào dashboard tour
   return `${base}/dashboard`;
 }
 

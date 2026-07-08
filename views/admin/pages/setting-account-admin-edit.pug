@@ -21,7 +21,7 @@ block main
         input(type="text" id="phone" name="phone" value=accountDetail.phone)
       .inner-group
         label(for="tabAccessScope" class="inner-label") Phân quyền
-        - var _scope = accountDetail.tabAccessScope || "inherit"
+        - var _scope = accountDetail.tabAccessScope || "full"
         select#tabAccessScope(name="tabAccessScope")
           each opt in tabAccessScopeOptions
             option(value=opt.value selected=(opt.value === _scope)) #{opt.label}

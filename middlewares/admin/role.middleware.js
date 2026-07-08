@@ -162,9 +162,8 @@ module.exports.loadRolePermissions = async (req, res, next) => {
     return next();
   }
 
-  const scope = account.tabAccessScope || "inherit";
+  const scope = account.tabAccessScope || "full";
 
-  // Company admin đặt trực tiếp trên tài khoản (ưu tiên trên Role)
   if (scope === "full") {
     req.tabAccess = { hasTour: true, hasHotel: true, restricted: false };
     return next();
@@ -201,7 +200,7 @@ module.exports.loadRolePermissions = async (req, res, next) => {
     return next();
   }
 
-  // inherit / mặc định: toàn quyền
+  // mặc định: toàn quyền
   req.tabAccess = { hasTour: true, hasHotel: true, restricted: false };
   return next();
 };

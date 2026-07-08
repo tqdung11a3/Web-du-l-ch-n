@@ -37,19 +37,18 @@ const schema = new mongoose.Schema(
 
     /**
      * Phạm vi tab Tour / Khách sạn — do company admin cấu hình tại Cài đặt → Tài khoản quản trị.
-     * inherit / full: toàn quyền (cả Tab Tour và Khách sạn).
+     * full: toàn quyền (cả Tab Tour và Khách sạn).
      */
     tabAccessScope: {
       type: String,
       enum: [
-        "inherit",
         "full",
         "tour_only",
         "hotel_only",
         "tour_staff",
         "hotel_staff",
       ],
-      default: "inherit",
+      default: "full",
     },
 
     /** Khách sạn được phân công — chỉ dùng khi tabAccessScope === "hotel_staff". */
