@@ -218,7 +218,7 @@ block main
       .inner-group
         label(class="inner-label") Những địa điểm có trong tour
         
-        //- Tour trong nước: Hiển thị các tỉnh thành Việt Nam
+        //- Danh sách tỉnh thành Việt Nam
         .inner-group#vietnam-locations-group
           label(class="inner-label") Địa điểm trong nước (Việt Nam)
           .tour-locations-wrapper#tour-locations-wrapper
@@ -243,45 +243,6 @@ block main
                 button(type="button" class="location-remove-btn") Xóa điểm đến
           .location-global-actions
             button(type="button" id="location-add-btn") + Thêm điểm đến
-
-        //- Tour nước ngoài: Hiển thị các quốc gia Châu Âu với khối riêng cho mỗi quốc gia
-        .inner-group#tour-countries-group(style="display:none")
-          label(class="inner-label") Địa điểm nước ngoài (Châu Âu)
-          .inner-desc Chọn các quốc gia Châu Âu có trong tour. Mỗi quốc gia sẽ có khối địa điểm riêng.
-          .countries-wrapper
-            each country in europeanCountries
-              - const countryIdStr = String(country._id)
-              .country-item(data-country-id=countryIdStr)
-                .country-header
-                  input(
-                    type="checkbox"
-                    id=`country-${countryIdStr}`
-                    name="tourCountries"
-                    value=countryIdStr
-                    class="tour-country-checkbox"
-                    data-country-id=countryIdStr
-                  )
-                  label(for=`country-${country._id}` class="country-label")= country.name
-                .country-locations-wrapper(style="display:none" data-country-id=countryIdStr)
-                  .tour-location-item(data-index="0" data-country-id=countryIdStr)
-                    .inner-input-list
-                      .inner-input-item
-                        label Điểm đến
-                        select.location-city(data-country-id=countryIdStr)
-                          option(value="") -- Chọn thành phố --
-                      .inner-input-item
-                        label Các địa điểm nổi tiếng
-                        .location-spots-list
-                          .location-spot-item
-                            .spot-input-group
-                              textarea.spot-input(placeholder="VD: Tháp Eiffel" rows="2")
-                              button(type="button" class="spot-remove-btn") Xóa
-                        .spot-actions
-                          button(type="button" class="spot-add-btn") + Thêm địa điểm
-                    .location-actions
-                      button(type="button" class="location-remove-btn") Xóa điểm đến
-                  .location-global-actions
-                    button(type="button" class="country-location-add-btn" data-country-id=countryIdStr) + Thêm điểm đến
 
         //- Input ẩn: JS sẽ ghi JSON locations trước khi submit
         input(type="hidden" id="locationsJson" name="locations")
@@ -395,49 +356,8 @@ block main
       });
     })();
 
-    window.europeanCountries = !{JSON.stringify(europeanCountries || [])};
-    window.europeanCities = !{JSON.stringify(europeanCities || [])};
     window.vietnamCities = !{JSON.stringify(cityList || [])};
-    window.isInternationalTour = !{isInternationalTour ? 'true' : 'false'};
-    
-    console.log("Tour Create - isInternationalTour:", window.isInternationalTour);
-    console.log("Tour Create - europeanCountries:", window.europeanCountries);
-    console.log("Tour Create - europeanCities:", window.europeanCities);
-    console.log("Tour Create - europeanCities length:", window.europeanCities?.length);
-    
-    if (window.europeanCountries && window.europeanCountries.length > 0) {
-      console.log("Tour Create - First country:", window.europeanCountries[0]);
-      console.log("Tour Create - First country _id:", window.europeanCountries[0]._id, "type:", typeof window.europeanCountries[0]._id);
-    }
-    if (window.europeanCities && window.europeanCities.length > 0) {
-      console.log("Tour Create - Sample city:", window.europeanCities[0]);
-      console.log("Tour Create - Sample city countryId:", window.europeanCities[0].countryId, "type:", typeof window.europeanCities[0].countryId);
-      // Test match
-      if (window.europeanCountries && window.europeanCountries.length > 0 && window.europeanCities.length > 0) {
-        const testCountryId = window.europeanCountries[0]._id;
-        const testCity = window.europeanCities.find(c => String(c.countryId) === String(testCountryId));
-        console.log("Tour Create - Test match - Country:", testCountryId, "Found city:", testCity ? testCity.name : "NONE");
-      }
-    }
-    
-    // Hiển thị đúng khối địa điểm dựa trên loại tour
-    document.addEventListener('DOMContentLoaded', function() {
-      const vietnamGroup = document.getElementById('vietnam-locations-group');
-      const countriesGroup = document.getElementById('tour-countries-group');
-      
-      if (window.isInternationalTour) {
-        // Tour nước ngoài: hiển thị khối quốc gia, ẩn khối Việt Nam
-        if (vietnamGroup) vietnamGroup.style.display = 'none';
-        if (countriesGroup) countriesGroup.style.display = '';
-        console.log("Tour Create - Showing international tour form");
-      } else {
-        // Tour trong nước: hiển thị khối Việt Nam, ẩn khối quốc gia
-        if (vietnamGroup) vietnamGroup.style.display = '';
-        if (countriesGroup) countriesGroup.style.display = 'none';
-        console.log("Tour Create - Showing domestic tour form");
-      }
-    });
-    
+
     // Xử lý thêm/xóa địa điểm nổi tiếng trong locations
     document.addEventListener('DOMContentLoaded', function() {
       // Helper function để tạo spot item

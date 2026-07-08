@@ -573,119 +573,6 @@ if (tourCreateForm) {
     "#tour-locations-wrapper"
   );
   const locationAddBtn = tourCreateForm.querySelector("#location-add-btn");
-  const categorySelect = tourCreateForm.querySelector("#category");
-  const countriesGroup = tourCreateForm.querySelector("#tour-countries-group");
-  const vietnamLocationsGroup = tourCreateForm.querySelector("#vietnam-locations-group");
-  const countryCheckboxes = tourCreateForm.querySelectorAll(".tour-country-checkbox");
-
-  // Hàm lấy danh sách thành phố của một quốc gia cụ thể
-  function getCitiesByCountryId(countryId) {
-    if (!countryId) {
-      console.log("getCitiesByCountryId: No countryId provided");
-      return [];
-    }
-    const countryIdStr = String(countryId).trim();
-    const cities = window.europeanCities || [];
-    
-    console.log("getCitiesByCountryId - Looking for countryId:", countryIdStr);
-    console.log("getCitiesByCountryId - Total cities available:", cities.length);
-    if (cities.length > 0) {
-      console.log("getCitiesByCountryId - Sample city:", cities[0]);
-      console.log("getCitiesByCountryId - Sample city countryId:", cities[0].countryId, "type:", typeof cities[0].countryId);
-    }
-    
-    const filtered = cities.filter((city) => {
-      // Kiểm tra nhiều cách lấy countryId
-      let cityCountryId = null;
-      if (city.countryId) {
-        if (typeof city.countryId === 'object' && city.countryId !== null) {
-          // Nếu là object, lấy _id
-          cityCountryId = city.countryId._id ? String(city.countryId._id).trim() : null;
-        } else {
-          // Nếu là string hoặc giá trị khác, convert sang string
-          cityCountryId = String(city.countryId).trim();
-        }
-      }
-      
-      // So sánh (case-insensitive và trim)
-      const match = cityCountryId && cityCountryId === countryIdStr;
-      if (match) {
-        console.log("✓ Matched city:", city.name, "countryId:", cityCountryId, "=== looking for:", countryIdStr);
-      }
-      return match;
-    });
-    
-    console.log("getCitiesByCountryId - Found cities:", filtered.length);
-    if (filtered.length === 0 && cities.length > 0) {
-      console.warn("No cities found! Checking first few cities:");
-      cities.slice(0, 5).forEach((city, idx) => {
-        const cityCountryId = city.countryId ? (typeof city.countryId === 'object' ? String(city.countryId._id || '') : String(city.countryId)) : null;
-        console.log(`  City ${idx + 1}: ${city.name}, countryId: ${cityCountryId}, match: ${cityCountryId === countryIdStr}`);
-      });
-    }
-    return filtered;
-  }
-
-  // Hàm tạo location item cho quốc gia cụ thể
-  function createLocationItemForCountry(countryId) {
-    const div = document.createElement("div");
-    div.className = "tour-location-item";
-    div.setAttribute("data-country-id", countryId);
-
-    const cities = getCitiesByCountryId(countryId);
-    console.log("createLocationItemForCountry - countryId:", countryId, "found cities:", cities.length);
-    
-    let cityOptions = "";
-    if (cities.length > 0) {
-      cityOptions = cities
-        .map(
-          (city) =>
-            `<option value="${city._id || city.id}">${city.name}</option>`
-        )
-        .join("");
-      console.log("createLocationItemForCountry - cityOptions created, first city:", cities[0].name);
-    } else {
-      console.warn("createLocationItemForCountry - No cities found for countryId:", countryId);
-    }
-
-    div.innerHTML = `
-      <div class="inner-input-list">
-        <div class="inner-input-item">
-          <label>Điểm đến</label>
-          <select class="location-city" data-country-id="${countryId}">
-            <option value="">-- Chọn thành phố --</option>
-            ${cityOptions}
-          </select>
-        </div>
-        <div class="inner-input-item">
-          <label>Các địa điểm nổi tiếng</label>
-          <div class="location-spots-list">
-            <div class="location-spot-item">
-              <div class="spot-input-group">
-                <textarea class="spot-input" placeholder="VD: Tháp Eiffel" rows="2"></textarea>
-                <button type="button" class="spot-remove-btn">Xóa</button>
-              </div>
-            </div>
-          </div>
-          <div class="spot-actions">
-            <button type="button" class="spot-add-btn">+ Thêm địa điểm</button>
-          </div>
-        </div>
-      </div>
-      <div class="location-actions">
-        <button type="button" class="location-remove-btn">Xóa điểm đến</button>
-      </div>
-    `;
-    
-    // Kiểm tra lại sau khi tạo
-    const select = div.querySelector(".location-city");
-    console.log("createLocationItemForCountry - Select created with", select?.options.length, "options");
-    if (select && select.options.length > 1) {
-      console.log("createLocationItemForCountry - First option:", select.options[1].textContent);
-    }
-    
-    return div;
-  }
 
   // Hàm tạo location item cho Việt Nam
   function createLocationItem() {
@@ -730,146 +617,6 @@ if (tourCreateForm) {
     `;
     return div;
   }
-
-  // Xử lý khi chọn/bỏ chọn quốc gia
-  console.log("Tour Create - Found", countryCheckboxes.length, "country checkboxes");
-  if (countryCheckboxes.length > 0) {
-    countryCheckboxes.forEach((checkbox, idx) => {
-      console.log(`Setting up listener for checkbox ${idx + 1}:`, checkbox.value);
-      checkbox.addEventListener("change", (e) => {
-        const countryId = String(checkbox.value); // Đảm bảo là string
-        const countryItem = checkbox.closest(".country-item");
-        const locationsWrapper = countryItem?.querySelector(".country-locations-wrapper");
-        
-        console.log("Country checkbox changed:", {
-          countryId: countryId,
-          checkboxValue: checkbox.value,
-          checked: checkbox.checked,
-          countryItem: countryItem,
-          locationsWrapper: locationsWrapper
-        });
-        console.log("window.europeanCities length:", window.europeanCities?.length);
-        
-        if (checkbox.checked && locationsWrapper) {
-          // Hiển thị khối địa điểm của quốc gia
-          locationsWrapper.style.display = "";
-          
-          // Lấy danh sách cities cho quốc gia này
-          const cities = getCitiesByCountryId(countryId);
-          console.log("Country checkbox checked - countryId:", countryId, "found cities:", cities.length);
-          if (cities.length > 0) {
-            console.log("First few cities:", cities.slice(0, 3).map(c => c.name));
-          }
-          
-          // Kiểm tra xem đã có location item nào chưa
-          const existingItems = locationsWrapper.querySelectorAll(".tour-location-item");
-          console.log("Found", existingItems.length, "existing location items");
-          
-          // Luôn cập nhật tất cả location items (cả mới và cũ)
-          existingItems.forEach((item, idx) => {
-            const select = item.querySelector(".location-city");
-            if (select) {
-              const currentValue = select.value;
-              console.log(`Updating select ${idx + 1} for countryId: ${countryId}, current value:`, currentValue);
-              console.log(`Cities to add:`, cities.length);
-              
-              // Xóa tất cả options (trừ option đầu tiên)
-              while (select.options.length > 1) {
-                select.remove(1);
-              }
-              
-              // Thêm các thành phố
-              if (cities.length > 0) {
-                cities.forEach((city, cityIdx) => {
-                  const option = document.createElement("option");
-                  option.value = city._id || city.id;
-                  option.textContent = city.name;
-                  select.appendChild(option);
-                  if (cityIdx < 3) {
-                    console.log(`  Added city option: ${city.name} (${city._id || city.id})`);
-                  }
-                });
-                console.log(`Select ${idx + 1} updated with`, select.options.length, "options total");
-              } else {
-                console.warn(`No cities to add for countryId: ${countryId}`);
-              }
-              
-              // Khôi phục giá trị nếu còn tồn tại
-              if (currentValue && Array.from(select.options).some((opt) => opt.value === currentValue)) {
-                select.value = currentValue;
-              }
-            } else {
-              console.warn(`No select found in location item ${idx + 1}`);
-            }
-          });
-          
-          // Nếu chưa có location item nào, tạo một item mới
-          if (existingItems.length === 0) {
-            console.log("No existing items, creating new location item");
-            const firstItem = createLocationItemForCountry(countryId);
-            const locationGlobalActions = locationsWrapper.querySelector(".location-global-actions");
-            if (locationGlobalActions) {
-              locationsWrapper.insertBefore(firstItem, locationGlobalActions);
-            } else {
-              locationsWrapper.appendChild(firstItem);
-            }
-            
-            // Kiểm tra lại sau khi tạo
-            const select = firstItem.querySelector(".location-city");
-            console.log("After creation - Select has", select?.options.length, "options");
-            if (select) {
-              console.log("Select options:", Array.from(select.options).map(opt => ({value: opt.value, text: opt.textContent})));
-            }
-          }
-        } else if (!checkbox.checked && locationsWrapper) {
-          // Ẩn khối địa điểm của quốc gia
-          locationsWrapper.style.display = "none";
-        }
-      });
-    });
-  }
-
-  // Xử lý nút "Thêm điểm đến" cho mỗi quốc gia
-  document.addEventListener("click", (e) => {
-    const addBtn = e.target.closest(".country-location-add-btn");
-    if (addBtn) {
-      const countryId = addBtn.getAttribute("data-country-id");
-      const countryItem = addBtn.closest(".country-item");
-      const locationsWrapper = countryItem?.querySelector(".country-locations-wrapper");
-      
-      if (locationsWrapper && countryId) {
-        const newItem = createLocationItemForCountry(countryId);
-        const locationGlobalActions = locationsWrapper.querySelector(".location-global-actions");
-        if (locationGlobalActions) {
-          locationsWrapper.insertBefore(newItem, locationGlobalActions);
-        } else {
-          locationsWrapper.appendChild(newItem);
-        }
-      }
-    }
-  });
-
-  // Xử lý xóa location item trong khối quốc gia
-  document.addEventListener("click", (e) => {
-    const removeBtn = e.target.closest(".location-remove-btn");
-    if (removeBtn) {
-      const locationItem = removeBtn.closest(".tour-location-item");
-      const locationsWrapper = locationItem?.closest(".country-locations-wrapper") || 
-                               locationItem?.closest("#tour-locations-wrapper");
-      
-      if (locationItem && locationsWrapper) {
-        const allItems = locationsWrapper.querySelectorAll(".tour-location-item");
-        if (allItems.length > 1) {
-          locationItem.remove();
-        } else {
-          // Nếu chỉ còn 1 item, chỉ xóa giá trị thay vì xóa item
-          const citySelect = locationItem.querySelector(".location-city");
-          if (citySelect) citySelect.value = "";
-          locationItem.querySelectorAll(".spot-input").forEach(t => t.value = "");
-        }
-      }
-    }
-  });
 
   if (locationAddBtn && locationsWrapper) {
     locationAddBtn.addEventListener("click", () => {
@@ -1000,48 +747,14 @@ if (tourCreateForm) {
 
       // ==== ĐỊA ĐIỂM CÓ TRONG TOUR (mảng { cityId, spots[] }) ====
       const locations = [];
-      
-      // Kiểm tra xem có quốc gia nào được check không (tour nước ngoài)
-      const checkedCountries = tourCreateForm.querySelectorAll('.tour-country-checkbox:checked');
-      
-      if (checkedCountries.length > 0) {
-        // Tour nước ngoài: collect từ các .country-locations-wrapper
-        console.log("Tour Create - Collecting locations from", checkedCountries.length, "countries");
-        checkedCountries.forEach((checkbox) => {
-          const countryId = checkbox.value;
-          const countryItem = checkbox.closest(".country-item");
-          const countryLocationsWrapper = countryItem?.querySelector(".country-locations-wrapper");
-          
-          if (countryLocationsWrapper) {
-            countryLocationsWrapper
-              .querySelectorAll(".tour-location-item")
-              .forEach((item) => {
-                const citySelect = item.querySelector(".location-city");
-                const cityId = citySelect?.value || "";
-                
-                // Thu thập spots từ các spot-input textarea
-                const spots = [];
-                item.querySelectorAll(".spot-input").forEach(textarea => {
-                  const value = textarea.value.trim();
-                  if (value) spots.push(value);
-                });
 
-                if (cityId && spots.length > 0) {
-                  locations.push({ cityId, spots });
-                  console.log("Tour Create - Added location:", cityId, "with", spots.length, "spots");
-                }
-              });
-          }
-        });
-      } else if (locationsWrapper) {
-        // Tour trong nước: collect từ #tour-locations-wrapper
-        console.log("Tour Create - Collecting locations from Vietnam wrapper");
+      if (locationsWrapper) {
         locationsWrapper
           .querySelectorAll(".tour-location-item")
           .forEach((item) => {
             const citySelect = item.querySelector(".location-city");
             const cityId = citySelect?.value || "";
-            
+
             // Thu thập spots từ các spot-input textarea
             const spots = [];
             item.querySelectorAll(".spot-input").forEach(textarea => {
@@ -1051,12 +764,9 @@ if (tourCreateForm) {
 
             if (cityId && spots.length > 0) {
               locations.push({ cityId, spots });
-              console.log("Tour Create - Added location:", cityId, "with", spots.length, "spots");
             }
           });
       }
-      
-      console.log("Tour Create - Total locations collected:", locations.length);
 
       // ==== LỊCH KHỞI HÀNH (cặp ngày - CREATE) ====
       const departuresWrapperC = document.getElementById("departures-wrapper");
@@ -2905,84 +2615,6 @@ if (tourEditForm) {
     "#tour-locations-wrapper"
   );
   const locationAddBtnE = tourEditForm.querySelector("#location-add-btn");
-  const countriesGroupE = tourEditForm.querySelector("#tour-countries-group");
-  const vietnamLocationsGroupE = tourEditForm.querySelector("#vietnam-locations-group");
-  const countryCheckboxesE = tourEditForm.querySelectorAll(".tour-country-checkbox");
-  
-  console.log("Tour Edit Form - Found elements:", {
-    countriesGroup: !!countriesGroupE,
-    vietnamLocationsGroup: !!vietnamLocationsGroupE,
-    countryCheckboxes: countryCheckboxesE.length
-  });
-
-  // Hàm lấy danh sách thành phố của một quốc gia cụ thể (cho form edit)
-  function getCitiesByCountryIdEdit(countryId) {
-    if (!countryId) return [];
-    const countryIdStr = String(countryId);
-    const cities = window.europeanCities || [];
-    
-    return cities.filter((city) => {
-      // Kiểm tra nhiều cách lấy countryId
-      let cityCountryId = null;
-      if (city.countryId) {
-        if (typeof city.countryId === 'object') {
-          // Nếu là object, lấy _id
-          cityCountryId = city.countryId._id ? String(city.countryId._id) : null;
-        } else {
-          // Nếu là string hoặc giá trị khác, convert sang string
-          cityCountryId = String(city.countryId);
-        }
-      }
-      
-      // So sánh
-      return cityCountryId && String(cityCountryId) === countryIdStr;
-    });
-  }
-
-  // Hàm tạo location item cho quốc gia cụ thể (cho form edit)
-  function createLocationItemForCountryEdit(countryId) {
-    const div = document.createElement("div");
-    div.className = "tour-location-item";
-    div.setAttribute("data-country-id", countryId);
-
-    const cities = getCitiesByCountryIdEdit(countryId);
-    const cityOptions = cities
-      .map(
-        (city) =>
-          `<option value="${city._id || city.id}">${city.name}</option>`
-      )
-      .join("");
-
-    div.innerHTML = `
-      <div class="inner-input-list">
-        <div class="inner-input-item">
-          <label>Điểm đến</label>
-          <select class="location-city" data-country-id="${countryId}">
-            <option value="">-- Chọn thành phố --</option>
-            ${cityOptions}
-          </select>
-        </div>
-        <div class="inner-input-item">
-          <label>Các địa điểm nổi tiếng</label>
-          <div class="location-spots-list">
-            <div class="location-spot-item">
-              <div class="spot-input-group">
-                <textarea class="spot-input" placeholder="VD: Tháp Eiffel" rows="2"></textarea>
-                <button type="button" class="spot-remove-btn">Xóa</button>
-              </div>
-            </div>
-          </div>
-          <div class="spot-actions">
-            <button type="button" class="spot-add-btn">+ Thêm địa điểm</button>
-          </div>
-        </div>
-      </div>
-      <div class="location-actions">
-        <button type="button" class="location-remove-btn">Xóa điểm đến</button>
-      </div>
-    `;
-    return div;
-  }
 
   // Hàm tạo location item cho Việt Nam (cho form edit)
   function createLocationItemEdit() {
@@ -3027,144 +2659,6 @@ if (tourEditForm) {
     `;
     return div;
   }
-
-  // Xử lý khi chọn/bỏ chọn quốc gia (cho form edit)
-  console.log("Tour Edit - Found", countryCheckboxesE.length, "country checkboxes");
-  if (countryCheckboxesE.length > 0) {
-    countryCheckboxesE.forEach((checkbox, idx) => {
-      console.log(`Tour Edit - Setting up listener for checkbox ${idx + 1}:`, checkbox.value, checkbox.id);
-      checkbox.addEventListener("change", (e) => {
-        console.log("Tour Edit - Checkbox change event fired!", checkbox.value, checkbox.checked);
-        const countryId = String(checkbox.value); // Đảm bảo là string
-        const countryItem = checkbox.closest(".country-item");
-        const locationsWrapper = countryItem?.querySelector(".country-locations-wrapper");
-        
-        console.log("Tour Edit - Elements found:", {
-          countryId: countryId,
-          countryItem: !!countryItem,
-          locationsWrapper: !!locationsWrapper
-        });
-        
-        if (checkbox.checked && locationsWrapper) {
-          // Hiển thị khối địa điểm của quốc gia
-          locationsWrapper.style.display = "";
-          
-          // Lấy danh sách cities cho quốc gia này
-          const cities = getCitiesByCountryIdEdit(countryId);
-          console.log("Tour Edit - Country checkbox checked - countryId:", countryId, "found cities:", cities.length);
-          if (cities.length > 0) {
-            console.log("Tour Edit - First few cities:", cities.slice(0, 3).map(c => c.name));
-          }
-          
-          // Kiểm tra xem đã có location item nào chưa
-          const existingItems = locationsWrapper.querySelectorAll(".tour-location-item");
-          console.log("Tour Edit - Found", existingItems.length, "existing location items");
-          
-          // Luôn cập nhật tất cả location items (cả mới và cũ)
-          existingItems.forEach((item, idx) => {
-            const select = item.querySelector(".location-city");
-            if (select) {
-              const currentValue = select.value;
-              console.log(`Tour Edit - Updating select ${idx + 1} for countryId: ${countryId}, current value:`, currentValue);
-              console.log(`Tour Edit - Cities to add:`, cities.length);
-              
-              // Xóa tất cả options (trừ option đầu tiên)
-              while (select.options.length > 1) {
-                select.remove(1);
-              }
-              
-              // Thêm các thành phố
-              if (cities.length > 0) {
-                cities.forEach((city, cityIdx) => {
-                  const option = document.createElement("option");
-                  option.value = city._id || city.id;
-                  option.textContent = city.name;
-                  select.appendChild(option);
-                  if (cityIdx < 3) {
-                    console.log(`Tour Edit - Added city option: ${city.name} (${city._id || city.id})`);
-                  }
-                });
-                console.log(`Tour Edit - Select ${idx + 1} updated with`, select.options.length, "options total");
-              } else {
-                console.warn(`Tour Edit - No cities to add for countryId: ${countryId}`);
-              }
-              
-              // Khôi phục giá trị nếu còn tồn tại
-              if (currentValue && Array.from(select.options).some((opt) => opt.value === currentValue)) {
-                select.value = currentValue;
-              }
-            } else {
-              console.warn(`Tour Edit - No select found in location item ${idx + 1}`);
-            }
-          });
-          
-          // Nếu chưa có location item nào, tạo một item mới
-          if (existingItems.length === 0) {
-            console.log("Tour Edit - No existing items, creating new location item");
-            const firstItem = createLocationItemForCountryEdit(countryId);
-            const locationGlobalActions = locationsWrapper.querySelector(".location-global-actions");
-            if (locationGlobalActions) {
-              locationsWrapper.insertBefore(firstItem, locationGlobalActions);
-            } else {
-              locationsWrapper.appendChild(firstItem);
-            }
-            
-            // Kiểm tra lại sau khi tạo
-            const select = firstItem.querySelector(".location-city");
-            console.log("Tour Edit - After creation - Select has", select?.options.length, "options");
-            if (select) {
-              console.log("Tour Edit - Select options:", Array.from(select.options).map(opt => ({value: opt.value, text: opt.textContent})));
-            }
-          }
-        } else if (!checkbox.checked && locationsWrapper) {
-          // Ẩn khối địa điểm của quốc gia
-          locationsWrapper.style.display = "none";
-        }
-      });
-    });
-  }
-
-  // Xử lý nút "Thêm điểm đến" cho mỗi quốc gia (cho form edit)
-  document.addEventListener("click", (e) => {
-    const addBtn = e.target.closest(".country-location-add-btn");
-    if (addBtn && tourEditForm.contains(addBtn)) {
-      const countryId = addBtn.getAttribute("data-country-id");
-      const countryItem = addBtn.closest(".country-item");
-      const locationsWrapper = countryItem?.querySelector(".country-locations-wrapper");
-      
-      if (locationsWrapper && countryId) {
-        const newItem = createLocationItemForCountryEdit(countryId);
-        const locationGlobalActions = locationsWrapper.querySelector(".location-global-actions");
-        if (locationGlobalActions) {
-          locationsWrapper.insertBefore(newItem, locationGlobalActions);
-        } else {
-          locationsWrapper.appendChild(newItem);
-        }
-      }
-    }
-  });
-
-  // Xử lý xóa location item trong khối quốc gia (cho form edit)
-  document.addEventListener("click", (e) => {
-    const removeBtn = e.target.closest(".location-remove-btn");
-    if (removeBtn && tourEditForm.contains(removeBtn)) {
-      const locationItem = removeBtn.closest(".tour-location-item");
-      const locationsWrapper = locationItem?.closest(".country-locations-wrapper") || 
-                               locationItem?.closest("#tour-locations-wrapper");
-      
-      if (locationItem && locationsWrapper) {
-        const allItems = locationsWrapper.querySelectorAll(".tour-location-item");
-        if (allItems.length > 1) {
-          locationItem.remove();
-        } else {
-          // Nếu chỉ còn 1 item, chỉ xóa giá trị thay vì xóa item
-          const citySelect = locationItem.querySelector(".location-city");
-          if (citySelect) citySelect.value = "";
-          locationItem.querySelectorAll(".spot-input").forEach(t => t.value = "");
-        }
-      }
-    }
-  });
 
   if (locationAddBtnE && locationsWrapperE) {
     locationAddBtnE.addEventListener("click", () => {
@@ -3308,48 +2802,14 @@ if (tourEditForm) {
 
       // ==== ĐỊA ĐIỂM CÓ TRONG TOUR (mảng { cityId, spots[] }) ====
       const locations = [];
-      
-      // Kiểm tra xem có quốc gia nào được check không (tour nước ngoài)
-      const checkedCountries = tourEditForm.querySelectorAll('.tour-country-checkbox:checked');
-      
-      if (checkedCountries.length > 0) {
-        // Tour nước ngoài: collect từ các .country-locations-wrapper
-        console.log("Tour Edit - Collecting locations from", checkedCountries.length, "countries");
-        checkedCountries.forEach((checkbox) => {
-          const countryId = checkbox.value;
-          const countryItem = checkbox.closest(".country-item");
-          const countryLocationsWrapper = countryItem?.querySelector(".country-locations-wrapper");
-          
-          if (countryLocationsWrapper) {
-            countryLocationsWrapper
-              .querySelectorAll(".tour-location-item")
-              .forEach((item) => {
-                const citySelect = item.querySelector(".location-city");
-                const cityId = citySelect?.value || "";
-                
-                // Thu thập spots từ các spot-input textarea
-                const spots = [];
-                item.querySelectorAll(".spot-input").forEach(textarea => {
-                  const value = textarea.value.trim();
-                  if (value) spots.push(value);
-                });
 
-                if (cityId && spots.length > 0) {
-                  locations.push({ cityId, spots });
-                  console.log("Tour Edit - Added location:", cityId, "with", spots.length, "spots");
-                }
-              });
-          }
-        });
-      } else if (locationsWrapperE) {
-        // Tour trong nước: collect từ #tour-locations-wrapper
-        console.log("Tour Edit - Collecting locations from Vietnam wrapper");
+      if (locationsWrapperE) {
         locationsWrapperE
           .querySelectorAll(".tour-location-item")
           .forEach((item) => {
             const citySelect = item.querySelector(".location-city");
             const cityId = citySelect?.value || "";
-            
+
             // Thu thập spots từ các spot-input textarea
             const spots = [];
             item.querySelectorAll(".spot-input").forEach(textarea => {
@@ -3359,12 +2819,9 @@ if (tourEditForm) {
 
             if (cityId && spots.length > 0) {
               locations.push({ cityId, spots });
-              console.log("Tour Edit - Added location:", cityId, "with", spots.length, "spots");
             }
           });
       }
-      
-      console.log("Tour Edit - Total locations collected:", locations.length);
 
       // ==== LỊCH KHỞI HÀNH (cặp ngày - EDIT) ====
       const departuresWrapperEdit = document.getElementById("departures-wrapper");

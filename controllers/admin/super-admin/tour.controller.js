@@ -5,7 +5,6 @@ const Tour = require("../../../models/tour.model");
 const Company = require("../../../models/company.model");
 const Category = require("../../../models/category.model");
 const City = require("../../../models/city.model");
-const Country = require("../../../models/country.model");
 const categoryHelper = require("../../../helpers/category.helper");
 
 /**
@@ -231,122 +230,10 @@ module.exports.detail = async (req, res) => {
 
     // cityList (Việt Nam)
     const vietnamCities = await City.find({
-      $or: [
-        { countryId: null },
-        { countryName: { $exists: false } },
-        { countryName: "" },
-      ],
       deleted: { $ne: true },
     })
       .sort({ name: 1 })
       .lean();
-
-    // europeanCountries
-    const europeanCountriesRaw = await Country.find({
-      continent: "Europe",
-      deleted: { $ne: true },
-      status: "active",
-    })
-      .sort({ name: 1 })
-      .lean();
-    const europeanCountries = europeanCountriesRaw.map((country) => ({
-      _id: String(country._id),
-      id: String(country._id),
-      name: country.name || "",
-      nameEn: country.nameEn || "",
-      code: country.code || "",
-    }));
-
-    // europeanCities
-    const europeanCitiesRaw = await City.find({
-      countryId: { $exists: true, $ne: null },
-      deleted: { $ne: true },
-    })
-      .populate("countryId", "name code")
-      .sort({ countryName: 1, name: 1 })
-      .lean();
-    const europeanCities = europeanCitiesRaw.map((city) => {
-      let countryIdStr = null;
-      if (city.countryId) {
-        if (typeof city.countryId === "object" && city.countryId._id) {
-          countryIdStr = String(city.countryId._id);
-        } else {
-          countryIdStr = String(city.countryId);
-        }
-      }
-      return {
-        _id: String(city._id),
-        id: String(city._id),
-        name: city.name || "",
-        nameEn: city.nameEn || "",
-        countryId: countryIdStr,
-        countryName: city.countryName || "",
-      };
-    });
-
-    // Xác định tour trong nước / nước ngoài
-    let isInternationalTour = false;
-    if (tourDetail.category) {
-      const category = await Category.findById(tourDetail.category);
-      if (category && category.parent) {
-        const parentCategory = await Category.findById(category.parent);
-        if (parentCategory) {
-          const parentName = (parentCategory.name || "").toLowerCase();
-          const parentSlug = (parentCategory.slug || "").toLowerCase();
-          isInternationalTour =
-            parentName.includes("nước ngoài") ||
-            parentSlug.includes("nuoc-ngoai") ||
-            parentName.includes("international") ||
-            parentSlug.includes("international");
-        }
-      }
-    }
-
-    // Group location theo quốc gia (nước ngoài)
-    let tourCountries = [];
-    let locationsByCountry = {};
-    if (
-      isInternationalTour &&
-      tourDetail.locationBlocks &&
-      tourDetail.locationBlocks.length > 0
-    ) {
-      const cityIds = tourDetail.locationBlocks
-        .map((loc) => loc.city)
-        .filter(Boolean);
-      if (cityIds.length > 0) {
-        const citiesWithCountry = await City.find({
-          _id: { $in: cityIds },
-          countryId: { $exists: true, $ne: null },
-        })
-          .populate("countryId")
-          .lean();
-
-        const cityToCountry = {};
-        citiesWithCountry.forEach((city) => {
-          if (city.countryId) {
-            const countryId = String(
-              city.countryId._id || city.countryId
-            );
-            cityToCountry[String(city._id)] = countryId;
-            if (!tourCountries.includes(countryId)) {
-              tourCountries.push(countryId);
-            }
-          }
-        });
-
-        tourDetail.locationBlocks.forEach((loc) => {
-          const countryId = cityToCountry[loc.city];
-          if (countryId) {
-            if (!locationsByCountry[countryId]) {
-              locationsByCountry[countryId] = [];
-            }
-            locationsByCountry[countryId].push(loc);
-          }
-        });
-      }
-    }
-    tourDetail.tourCountries = tourCountries;
-    tourDetail.locationsByCountry = locationsByCountry;
 
     const toursListBackUrl =
       tourDetail.companyId && tourDetail.companyId._id
@@ -367,9 +254,6 @@ module.exports.detail = async (req, res) => {
       categoryList: categoryTree,
       tourDetail,
       cityList: vietnamCities,
-      europeanCountries,
-      europeanCities,
-      isInternationalTour,
       pathAdmin,
       toursListBackUrl,
       superAdminOverrideEditUrl,

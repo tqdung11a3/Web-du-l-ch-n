@@ -169,8 +169,8 @@ block main
       .inner-group
         label(class="inner-label") Những địa điểm có trong tour
 
-        //- Tour trong nước
-        .inner-group#vietnam-locations-group(style=isInternationalTour ? "display:none" : "")
+        //- Danh sách tỉnh thành Việt Nam
+        .inner-group#vietnam-locations-group
           label(class="inner-label") Địa điểm trong nước (Việt Nam)
           .tour-locations-wrapper
             if (tourDetail.locationBlocks && tourDetail.locationBlocks.length > 0)
@@ -197,51 +197,6 @@ block main
                               textarea.spot-input(rows="2" disabled)
             else
               p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có địa điểm
-
-        //- Tour nước ngoài
-        .inner-group#tour-countries-group(style=isInternationalTour ? "" : "display:none")
-          label(class="inner-label") Địa điểm nước ngoài (Châu Âu)
-          - var tcList = tourDetail.tourCountries || [];
-          - var lbcMap = tourDetail.locationsByCountry || {};
-          if tcList.length === 0
-            p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có quốc gia nào
-          else
-            .countries-wrapper
-              each country in europeanCountries
-                - var countryIdStr = String(country._id);
-                - var selected = tcList.indexOf(countryIdStr) !== -1;
-                if selected
-                  .country-item(data-country-id=countryIdStr)
-                    .country-header
-                      input(type="checkbox" id=`country-${countryIdStr}` name="tourCountries" value=countryIdStr class="tour-country-checkbox" checked disabled)
-                      label(for=`country-${countryIdStr}` class="country-label")= country.name
-                    .country-locations-wrapper(data-country-id=countryIdStr)
-                      - var locsOfCountry = lbcMap[countryIdStr] || [];
-                      if locsOfCountry.length === 0
-                        p.sa-ro-empty(style="padding:6px 0;color:#94a3b8;") Chưa có điểm đến
-                      else
-                        each loc, lIdx in locsOfCountry
-                          .tour-location-item(data-index=lIdx data-country-id=countryIdStr)
-                            .inner-input-list
-                              .inner-input-item
-                                label Điểm đến
-                                select.location-city(data-country-id=countryIdStr disabled)
-                                  option(value="") -- Chọn thành phố --
-                                  each city in europeanCities
-                                    if String(city.countryId) === countryIdStr
-                                      option(value=city.id selected=(loc.city && loc.city == city.id))= city.name
-                              .inner-input-item
-                                label Các địa điểm nổi tiếng
-                                .location-spots-list
-                                  if loc.spots && loc.spots.length > 0
-                                    each spot in loc.spots
-                                      .location-spot-item
-                                        .spot-input-group
-                                          textarea.spot-input(rows="2" disabled)= spot
-                                  else
-                                    .location-spot-item
-                                      .spot-input-group
-                                        textarea.spot-input(rows="2" disabled)
 
       .inner-group
         label(for="time" class="inner-label") Thời gian

@@ -1526,11 +1526,6 @@ module.exports.create = async (req, res) => {
   try {
     // Lấy danh sách tỉnh thành trong nước (Việt Nam)
     const cityList = await City.find({
-      $or: [
-        { countryId: null },
-        { countryName: { $exists: false } },
-        { countryName: "" },
-      ],
       deleted: { $ne: true },
     }).sort({ name: 1 });
 
@@ -1779,11 +1774,6 @@ module.exports.edit = async (req, res) => {
 
     // Lấy danh sách tỉnh thành trong nước (Việt Nam) - giống tour
     const cityList = await City.find({
-      $or: [
-        { countryId: null },
-        { countryName: { $exists: false } },
-        { countryName: "" },
-      ],
       deleted: { $ne: true },
     }).sort({ name: 1 });
 

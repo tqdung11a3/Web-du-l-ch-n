@@ -139,11 +139,6 @@ module.exports.detail = async (req, res) => {
     }
 
     const cityList = await City.find({
-      $or: [
-        { countryId: null },
-        { countryName: { $exists: false } },
-        { countryName: "" },
-      ],
       deleted: { $ne: true },
     })
       .sort({ name: 1 })

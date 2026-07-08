@@ -1,7 +1,6 @@
 const Category = require("../../models/category.model");
 const categoryHelper = require("../../helpers/category.helper");
 const City = require("../../models/city.model");
-const Country = require("../../models/country.model");
 const Tour = require("../../models/tour.model");
 const Hotel = require("../../models/hotel.model");
 const AccountAdmin = require("../../models/account-admin.model");
@@ -573,45 +572,6 @@ module.exports.list = async (req, res) => {
 
     const find = { deleted: false, companyId };
 
-    // Lọc theo tab: Tour trong nước hoặc Tour nước ngoài
-    const tab = req.query.tab || "domestic"; // mặc định là "domestic" (tour trong nước)
-    let categoryIds = [];
-
-    if (tab === "domestic" || tab === "international") {
-      try {
-        // Tìm category cha theo tên hoặc slug
-        const parentCategoryName = tab === "domestic" ? "tour trong nước" : "tour nước ngoài";
-        const parentCategorySlug = tab === "domestic" ? "tour-trong-nuoc" : "tour-nuoc-ngoai";
-        
-        // Tìm category cha theo tên hoặc slug
-        const parentCategory = await Category.findOne({
-          $or: [
-            { name: { $regex: new RegExp(parentCategoryName, "i") } },
-            { slug: { $regex: new RegExp(parentCategorySlug, "i") } }
-          ],
-          deleted: false,
-          status: "active"
-        });
-
-        if (parentCategory) {
-          const parentId = String(parentCategory._id);
-          // Lấy tất cả category con (bao gồm cả chính nó)
-          const categoryChild = await categoryHelper.getCategoryChild(parentId);
-          categoryIds = [parentId, ...categoryChild.map((item) => item.id)];
-          
-          // Lọc tour theo category (hỗ trợ categories[] + cascade)
-          if (categoryIds.length > 0) {
-            const catFilter =
-              categoryHelper.buildTourCategoryMatchFilter(categoryIds);
-            if (catFilter) Object.assign(find, catFilter);
-          }
-        }
-      } catch (categoryError) {
-        console.error("Error filtering by category:", categoryError);
-        // Nếu có lỗi khi tìm category, bỏ qua filter và hiển thị tất cả tour
-      }
-    }
-
   // Phân trang
   const limitItems = 10;
   let page = 1;
@@ -700,7 +660,6 @@ module.exports.list = async (req, res) => {
       pageTitle: "Quản lý tour",
       tourList: tourList,
       pagination: pagination,
-      currentTab: tab,
       tourAgeBands,
       pathAdmin,
       publishableMap,
@@ -833,70 +792,13 @@ module.exports.create = async (req, res) => {
 
   // Lấy danh sách thành phố Việt Nam
   const vietnamCities = await City.find({
-    $or: [
-      { countryId: null },
-      { countryName: { $exists: false } },
-      { countryName: "" },
-    ],
     deleted: { $ne: true },
   }).sort({ name: 1 });
 
-  // Lấy danh sách quốc gia Châu Âu
-  const europeanCountriesRaw = await Country.find({
-    continent: "Europe",
-    deleted: { $ne: true },
-    status: "active",
-  }).sort({ name: 1 }).lean();
-
-  // Chuyển đổi _id thành string
-  const europeanCountries = europeanCountriesRaw.map((country) => ({
-    _id: String(country._id),
-    id: String(country._id),
-    name: country.name || "",
-    nameEn: country.nameEn || "",
-    code: country.code || "",
-  }));
-
-  // Lấy danh sách thành phố Châu Âu (có countryId)
-  const europeanCitiesRaw = await City.find({
-    countryId: { $exists: true, $ne: null },
-    deleted: { $ne: true },
-  })
-    .populate("countryId", "name code")
-    .sort({ countryName: 1, name: 1 })
-    .lean(); // Sử dụng lean() để trả về plain object
-
-  // Chuyển đổi countryId thành string để dễ xử lý ở client
-  const europeanCities = europeanCitiesRaw.map((city) => {
-    let countryIdStr = null;
-    if (city.countryId) {
-      if (typeof city.countryId === 'object' && city.countryId._id) {
-        countryIdStr = String(city.countryId._id);
-      } else {
-        countryIdStr = String(city.countryId);
-      }
-    }
-    return {
-      _id: String(city._id),
-      id: String(city._id),
-      name: city.name || "",
-      nameEn: city.nameEn || "",
-      countryId: countryIdStr,
-      countryName: city.countryName || "",
-    };
-  });
-
-  // Kiểm tra query param để xác định loại tour (trong nước / nước ngoài)
-  const tourType = req.query.type; // 'domestic' hoặc 'international'
-  const isInternationalTour = tourType === 'international';
-
   res.render("admin/pages/tour-create", {
-    pageTitle: isInternationalTour ? "Tạo tour nước ngoài" : "Tạo tour trong nước",
+    pageTitle: "Tạo tour trong nước",
     categoryList: categoryTree,
     cityList: vietnamCities,
-    europeanCountries,
-    europeanCities,
-    isInternationalTour,
   });
 };
 
@@ -1342,124 +1244,10 @@ module.exports.edit = async (req, res) => {
     });
     const categoryTree = categoryHelper.buildCategoryTree(categoryList, "");
 
-    // Lấy danh sách thành phố Việt Nam (không có countryId hoặc countryName không phải Châu Âu)
+    // Lấy danh sách thành phố Việt Nam
     const vietnamCities = await City.find({
-      $or: [
-        { countryId: null },
-        { countryName: { $exists: false } },
-        { countryName: "" },
-      ],
       deleted: { $ne: true },
     }).sort({ name: 1 });
-
-    // Lấy danh sách quốc gia Châu Âu
-    const europeanCountriesRaw = await Country.find({
-      continent: "Europe",
-      deleted: { $ne: true },
-      status: "active",
-    }).sort({ name: 1 }).lean();
-
-    // Chuyển đổi _id thành string
-    const europeanCountries = europeanCountriesRaw.map((country) => ({
-      _id: String(country._id),
-      id: String(country._id),
-      name: country.name || "",
-      nameEn: country.nameEn || "",
-      code: country.code || "",
-    }));
-
-    // Lấy danh sách thành phố Châu Âu (có countryId)
-    const europeanCitiesRaw = await City.find({
-      countryId: { $exists: true, $ne: null },
-      deleted: { $ne: true },
-    })
-      .populate("countryId", "name code")
-      .sort({ countryName: 1, name: 1 })
-      .lean(); // Sử dụng lean() để trả về plain object
-
-    // Chuyển đổi countryId thành string để dễ xử lý ở client
-    const europeanCities = europeanCitiesRaw.map((city) => {
-      let countryIdStr = null;
-      if (city.countryId) {
-        if (typeof city.countryId === 'object' && city.countryId._id) {
-          countryIdStr = String(city.countryId._id);
-        } else {
-          countryIdStr = String(city.countryId);
-        }
-      }
-      return {
-        _id: String(city._id),
-        id: String(city._id),
-        name: city.name || "",
-        nameEn: city.nameEn || "",
-        countryId: countryIdStr,
-        countryName: city.countryName || "",
-      };
-    });
-
-    // Xác định tour là trong nước hay nước ngoài dựa trên danh mục đã gán
-    let isInternationalTour = false;
-    const assignedCatIds = tourDetail.categoryIds || [];
-    for (const catId of assignedCatIds) {
-      const category = await Category.findById(catId);
-      if (!category || !category.parent) continue;
-      const parentCategory = await Category.findById(category.parent);
-      if (!parentCategory) continue;
-      const parentName = parentCategory.name.toLowerCase();
-      const parentSlug = parentCategory.slug?.toLowerCase() || "";
-      if (
-        parentName.includes("nước ngoài") ||
-        parentSlug.includes("nuoc-ngoai") ||
-        parentName.includes("international") ||
-        parentSlug.includes("international")
-      ) {
-        isInternationalTour = true;
-        break;
-      }
-    }
-
-    // Nếu là tour nước ngoài, cần xác định các quốc gia và group locations theo quốc gia
-    let tourCountries = []; // Danh sách countryId mà tour này có
-    let locationsByCountry = {}; // { countryId: [{ city, spots: [...] }] }
-    
-    if (isInternationalTour && tourDetail.locationBlocks && tourDetail.locationBlocks.length > 0) {
-      // Populate cityId để lấy countryId
-      const cityIds = tourDetail.locationBlocks.map(loc => loc.city).filter(Boolean);
-      if (cityIds.length > 0) {
-        const citiesWithCountry = await City.find({
-          _id: { $in: cityIds },
-          countryId: { $exists: true, $ne: null }
-        }).populate('countryId').lean();
-        
-        // Tạo map cityId -> countryId
-        const cityToCountry = {};
-        citiesWithCountry.forEach(city => {
-          if (city.countryId) {
-            const countryId = String(city.countryId._id || city.countryId);
-            cityToCountry[String(city._id)] = countryId;
-            
-            // Thu thập danh sách quốc gia
-            if (!tourCountries.includes(countryId)) {
-              tourCountries.push(countryId);
-            }
-          }
-        });
-        
-        // Group locations theo countryId
-        tourDetail.locationBlocks.forEach(loc => {
-          const countryId = cityToCountry[loc.city];
-          if (countryId) {
-            if (!locationsByCountry[countryId]) {
-              locationsByCountry[countryId] = [];
-            }
-            locationsByCountry[countryId].push(loc);
-          }
-        });
-      }
-    }
-    
-    tourDetail.tourCountries = tourCountries;
-    tourDetail.locationsByCountry = locationsByCountry;
 
     // Kiểm tra điều kiện hiển thị (publish gate) để view render checklist
     const publishCheck = await canPublishTour(id, companyId);
@@ -1469,9 +1257,6 @@ module.exports.edit = async (req, res) => {
       categoryList: categoryTree,
       tourDetail,
       cityList: vietnamCities,
-      europeanCountries,
-      europeanCities,
-      isInternationalTour,
       pathAdmin,
       publishCheck,
       tourScheduleReadOnly: !!(

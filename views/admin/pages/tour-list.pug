@@ -4,13 +4,6 @@ block main
   
   h1.box-title Quản lý tour
 
-  // Tab: Tour trong nước (tab Tour nước ngoài đã ẩn)
-  .tour-tabs
-    a.tour-tab(
-      href=`/${pathAdmin}/tour?tab=domestic`
-      class=currentTab === "domestic" ? "is-active" : ""
-    ) Tour trong nước
-
   //- ── Cấu hình mức tuổi hành khách ──────────────────────────────────────────
   .age-band-panel
     .age-band-panel__header(onclick="toggleAgeBandPanel()")
@@ -156,8 +149,7 @@ block main
         <i class="fa-solid fa-magnifying-glass"></i>
         input(type="text" placeholder="Tìm kiếm" search)
       .inner-button-create
-        - const createLink = currentTab === "international" ? `/${pathAdmin}/tour/create?type=international` : `/${pathAdmin}/tour/create?type=domestic`
-        a(href=createLink) + Tạo mới
+        a(href=`/${pathAdmin}/tour/create`) + Tạo mới
       .inner-button-discount
         a(href=`/${pathAdmin}/tour/discounts`) Tour khuyến mãi
       .inner-button-trash
