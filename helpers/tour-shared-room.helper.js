@@ -1008,7 +1008,7 @@ async function evaluateSharedFeasibilityV2Multi(request) {
     message = `Tour chưa cấu hình khách sạn nào trong khung lưu trú này.`;
   } else {
     // cannot_fit_anywhere: phân biệt các sub-case để đưa gợi ý phù hợp.
-    const leftover = result.leftover || [];
+    const leftover = result.leftover || []; // các atom còn lại chưa xếp được
     const placed = currentAtoms.length - leftover.length; // số atom đã xếp được
     const leftoverLabels = leftover.map((a) => a.label || "?").join(", "); // label của atom còn lại
 

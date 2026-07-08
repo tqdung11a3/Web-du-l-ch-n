@@ -1,9 +1,5 @@
 const SettingWebsiteInfo = require("../../models/setting-website-info.model");
-const {
-  permissionList,
-  pathAdmin,
-} = require("../../config/variable.config");
-const Role = require("../../models/role.model");
+const { pathAdmin } = require("../../config/variable.config");
 const bcrypt = require("bcryptjs");
 const AccountAdmin = require("../../models/account-admin.model");
 const mongoose = require("mongoose");
@@ -386,19 +382,9 @@ module.exports.accountAdminList = async (req, res) => {
     const accountAdminList = await AccountAdmin.find(listQuery)
       .sort({ createdAt: "desc" })
       .select(
-        "fullName email phone role positionCompany status avatar companyId createdAt tabAccessScope assignedHotelId"
+        "fullName email phone positionCompany status avatar companyId createdAt tabAccessScope assignedHotelId"
       )
       .lean();
-
-    // Tránh N+1: gom roleId rồi truy một lần
-    const roleIds = accountAdminList.map((a) => a.role).filter(Boolean);
-    let roleMap = {};
-    if (roleIds.length) {
-      const roles = await Role.find({ _id: { $in: roleIds } })
-        .select("name")
-        .lean();
-      roleMap = Object.fromEntries(roles.map((r) => [String(r._id), r.name]));
-    }
 
     const assignHotelIds = [
       ...new Set(
@@ -418,7 +404,6 @@ module.exports.accountAdminList = async (req, res) => {
     }
 
     for (const item of accountAdminList) {
-      item.roleName = roleMap[String(item.role)] || "";
       item.tabAccessScopeLabel = tabAccessScopeLabel(
         item.tabAccessScope || "inherit"
       );
@@ -448,12 +433,6 @@ module.exports.accountAdminCreate = async (req, res) => {
     return respondAccountAdminForbidden(req, res);
   }
 
-  const roleList = await Role.find({
-    deleted: false,
-  }).sort({
-    createdAt: "desc",
-  });
-
   let companyHotels = [];
   if (req.account?.companyId) {
     companyHotels = await Hotel.find({
@@ -478,7 +457,6 @@ module.exports.accountAdminCreate = async (req, res) => {
 
   res.render("admin/pages/setting-account-admin-create", {
     pageTitle: "Tạo tài khoản quản trị",
-    roleList: roleList,
     tabAccessScopeOptions,
     tabAccessScopeDefault: defaultSelectedScopeForCreate(req.account),
     companyHotels,
@@ -556,7 +534,6 @@ module.exports.accountAdminCreatePost = async (req, res) => {
       fullName: req.body.fullName,
       email: req.body.email,
       phone: req.body.phone,
-      role: req.body.role || undefined,
       positionCompany: req.body.positionCompany,
       status: req.body.status || "active",
       password: hashedPassword,
@@ -590,109 +567,6 @@ module.exports.accountAdminCreatePost = async (req, res) => {
   }
 };
 
-module.exports.roleList = async (req, res) => {
-  const roleList = await Role.find({
-    deleted: false,
-  }).sort({
-    createdAt: "desc",
-  });
-
-  res.render("admin/pages/setting-role-list", {
-    pageTitle: "Nhóm quyền",
-    roleList: roleList,
-  });
-};
-
-module.exports.roleCreate = async (req, res) => {
-  res.render("admin/pages/setting-role-create", {
-    pageTitle: "Tạo nhóm quyền",
-    permissionList: permissionList,
-  });
-};
-
-module.exports.roleCreatePost = async (req, res) => {
-  try {
-    req.body.createdBy = req.account.id;
-    req.body.updatedBy = req.account.id;
-
-    const newRecord = new Role(req.body);
-    await newRecord.save();
-
-    res.json({
-      code: "success",
-      message: "Tạo nhóm quyền thành công!",
-    });
-  } catch (error) {
-    res.json({
-      code: "error",
-      message: "Dữ liệu không hợp lệ!",
-    });
-  }
-};
-
-module.exports.roleEdit = async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    const roleDetail = await Role.findOne({
-      _id: id,
-      deleted: false,
-    });
-
-    if (!roleDetail) {
-      res.redirect(`/${pathAdmin}/setting/role/list`);
-      return;
-    }
-
-    res.render("admin/pages/setting-role-edit", {
-      pageTitle: "Chỉnh sửa nhóm quyền",
-      permissionList: permissionList,
-      roleDetail: roleDetail,
-    });
-  } catch (error) {
-    res.redirect(`/${pathAdmin}/setting/role/list`);
-  }
-};
-
-module.exports.roleEditPatch = async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    const roleDetail = await Role.findOne({
-      _id: id,
-      deleted: false,
-    });
-
-    if (!roleDetail) {
-      res.json({
-        code: "error",
-        message: "Bản ghi không tồn tại!",
-      });
-      return;
-    }
-
-    req.body.updatedBy = req.account.id;
-
-    await Role.updateOne(
-      {
-        _id: id,
-        deleted: false,
-      },
-      req.body
-    );
-
-    res.json({
-      code: "success",
-      message: "Cập nhật nhóm quyền thành công!",
-    });
-  } catch (error) {
-    res.json({
-      code: "error",
-      message: "Dữ liệu không hợp lệ!",
-    });
-  }
-};
-
 module.exports.accountAdminEdit = async (req, res) => {
   try {
     if (req.account && !req.account.isSuperAdmin && isStaffTabScope(req.account)) {
@@ -707,9 +581,7 @@ module.exports.accountAdminEdit = async (req, res) => {
       ? new mongoose.Types.ObjectId(String(rawCid))
       : String(rawCid);
 
-    // nếu có superadmin thì cho phép bỏ lọc company
-    const baseFind = { _id: id, deleted: false };
-    if (req.account?.role !== "superadmin") baseFind.companyId = companyId;
+    const baseFind = { _id: id, deleted: false, companyId };
 
     const accountDetail = await AccountAdmin.findOne(baseFind);
     if (!accountDetail) {
@@ -719,10 +591,6 @@ module.exports.accountAdminEdit = async (req, res) => {
     if (!canManageAccountAdminRecord(req.account, accountDetail)) {
       return res.redirect(`/${pathAdmin}/setting/account-admin/list`);
     }
-
-    const roleList = await Role.find({ deleted: false }).sort({
-      createdAt: "desc",
-    });
 
     let companyHotels = [];
     if (req.account?.companyId) {
@@ -742,7 +610,6 @@ module.exports.accountAdminEdit = async (req, res) => {
 
     return res.render("admin/pages/setting-account-admin-edit", {
       pageTitle: "Chỉnh sửa tài khoản quản trị",
-      roleList,
       accountDetail,
       tabAccessScopeOptions,
       companyHotels,
@@ -761,9 +628,7 @@ module.exports.accountAdminEditPatch = async (req, res) => {
       ? new mongoose.Types.ObjectId(String(rawCid))
       : String(rawCid);
 
-    // chỉ được sửa admin thuộc công ty mình (trừ superadmin)
-    const baseFind = { _id: id, deleted: false };
-    if (req.account?.role !== "superadmin") baseFind.companyId = companyId;
+    const baseFind = { _id: id, deleted: false, companyId };
 
     const accountDetail = await AccountAdmin.findOne(baseFind);
     if (!accountDetail) {

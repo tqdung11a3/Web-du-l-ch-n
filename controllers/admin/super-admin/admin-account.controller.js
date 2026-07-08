@@ -1,7 +1,6 @@
 // controllers/admin/super-admin/admin-account.controller.js
 const AccountAdmin = require("../../../models/account-admin.model");
 const Company = require("../../../models/company.model");
-const Role = require("../../../models/role.model");
 const bcrypt = require("bcrypt");
 const auditLogHelper = require("../../../helpers/audit-log.helper");
 
@@ -206,18 +205,9 @@ module.exports.createGet = async (req, res) => {
       .sort({ name: 1 })
       .lean();
 
-    // Lấy danh sách roles
-    const roles = await Role.find({
-      deleted: { $ne: true },
-    })
-      .select("name")
-      .sort({ name: 1 })
-      .lean();
-
     res.render("admin/pages/super-admin/admin-create", {
       pageTitle: "Tạo Company Admin",
       companies,
-      roles,
     });
   } catch (error) {
     console.error("Create Admin Get Error:", error);
@@ -295,7 +285,6 @@ module.exports.createPost = async (req, res) => {
       email,
       phone,
       companyId: finalCompanyId,
-      role,
       positionCompany,
       password: hashedPassword,
       avatar: avatarUrl,
@@ -359,19 +348,10 @@ module.exports.editGet = async (req, res) => {
       .sort({ name: 1 })
       .lean();
 
-    // Lấy danh sách roles
-    const roles = await Role.find({
-      deleted: { $ne: true },
-    })
-      .select("name")
-      .sort({ name: 1 })
-      .lean();
-
     res.render("admin/pages/super-admin/admin-edit", {
       pageTitle: `Chỉnh sửa: ${admin.fullName}`,
       admin,
       companies,
-      roles,
     });
   } catch (error) {
     console.error("Edit Admin Get Error:", error);
@@ -385,7 +365,7 @@ module.exports.editGet = async (req, res) => {
 module.exports.editPatch = async (req, res) => {
   try {
     const id = req.params.id;
-    const { fullName, email, phone, companyId, role, positionCompany, password, status } = req.body;
+    const { fullName, email, phone, companyId, positionCompany, password, status } = req.body;
 
     console.log("=== EDIT ADMIN DEBUG ===");
     console.log("Admin ID:", id);
@@ -433,7 +413,6 @@ module.exports.editPatch = async (req, res) => {
       email,
       phone,
       companyId,
-      role,
       positionCompany,
       status,
       updatedBy: req.account.id,

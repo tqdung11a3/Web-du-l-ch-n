@@ -15,8 +15,6 @@ const guestSchema = new Schema(
 const hotelSnapshotSchema = new Schema(
   {
     hotelId: { type: Schema.Types.ObjectId, ref: "Hotel" }, // ID của hotel
-    amadeusOfferId: String, // id của offer trong Amadeus
-    amadeusHotelId: String, // hotelId
     name: String,
     cityCode: String,
     address: String,

@@ -19,16 +19,6 @@ block main
       .inner-group
         label(for="positionCompany" class="inner-label") Chức vụ
         input(type="text" id="positionCompany" name="positionCompany" value=account.positionCompany)
-      //- Tạm ẩn khối Nhóm quyền
-      //- .inner-group
-      //-   label(for="role" class="inner-label") Nhóm quyền
-      //-   select#role(name="role")
-      //-     option(value="" selected=!account.role) -- Chọn nhóm quyền --
-      //-     each item in (roleList || [])
-      //-       option(
-      //-         value=item._id
-      //-         selected=(String(account.role || '') === String(item._id))
-      //-       )= item.name
       .inner-group.inner-two-col
         label(for="avatar" class="inner-label") Ảnh đại diện
         .inner-upload-image(image-default=account.avatar)

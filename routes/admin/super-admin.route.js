@@ -154,15 +154,6 @@ router.patch(
   settingController.websiteInfoPatch
 );
 
-// Quản lý vai trò (toàn hệ thống)
-const roleController = require("../../controllers/admin/super-admin/role.controller");
-router.get("/roles", roleController.list);
-router.get("/roles/create", roleController.createGet);
-router.post("/roles/create", roleController.createPost);
-router.get("/roles/edit/:id", roleController.editGet);
-router.patch("/roles/edit/:id", roleController.editPatch);
-router.delete("/roles/:id", roleController.remove);
-
 // Nhật ký thao tác (audit log)
 const auditLogController = require("../../controllers/admin/super-admin/audit-log.controller");
 router.get("/audit", auditLogController.list);

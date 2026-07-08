@@ -59,13 +59,6 @@ block main
         )
 
       .inner-group
-        label.inner-label(for="role") Nhóm quyền
-        select#role.inner-control(name="role")
-          option(value="") -- Chọn nhóm quyền --
-          each roleItem in roles
-            option(value=roleItem._id)= roleItem.name
-
-      .inner-group
         label.inner-label(for="password") Mật khẩu *
         input#password.inner-control(
           type="password"

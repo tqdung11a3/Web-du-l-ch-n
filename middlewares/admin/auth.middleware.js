@@ -1,7 +1,6 @@
 const jwt = require("jsonwebtoken");
 const AccountAdmin = require("../../models/account-admin.model");
 const { pathAdmin } = require("../../config/variable.config");
-const Role = require("../../models/role.model");
 
 module.exports.verifyToken = async (req, res, next) => {
   try {
@@ -24,27 +23,15 @@ module.exports.verifyToken = async (req, res, next) => {
       return handleUnauthed(req, res);
     }
 
-    // CHỌN THÊM role ở đây
     const existAccount = await AccountAdmin.findOne({ _id: id, email })
       .select(
-        "_id email fullName phone positionCompany avatar role companyId status isSuperAdmin tabAccessScope assignedHotelId"
+        "_id email fullName phone positionCompany avatar companyId status isSuperAdmin tabAccessScope assignedHotelId"
       )
       .exec();
 
     if (!existAccount || existAccount.status !== "active") {
       res.clearCookie("token");
       return handleUnauthed(req, res);
-    }
-
-    // Lấy tên role nếu có, do bảng account-admin có field role là ObjectId của bảng role
-    if (existAccount.role) {
-      const roleInfo = await Role.findOne({ _id: existAccount.role })
-        .select("name")
-        .lean();
-      if (roleInfo) {
-        // gắn tạm để render (không persist DB)
-        existAccount.roleName = roleInfo.name;
-      }
     }
 
     req.account = existAccount; // Document (không lean)

@@ -45,15 +45,4 @@ router.patch(
   settingController.accountAdminEditPatch
 );
 
-router.get("/role/list", settingController.roleList);
-
-// Role CRUD giờ chỉ dành cho Super Admin (route company admin chỉ xem)
-router.get("/role/create", roleMiddleware.requireSuperAdmin, settingController.roleCreate);
-
-router.post("/role/create", roleMiddleware.requireSuperAdmin, settingController.roleCreatePost);
-
-router.get("/role/edit/:id", roleMiddleware.requireSuperAdmin, settingController.roleEdit);
-
-router.patch("/role/edit/:id", roleMiddleware.requireSuperAdmin, settingController.roleEditPatch);
-
 module.exports = router;

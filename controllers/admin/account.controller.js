@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const AccountAdmin = require("../../models/account-admin.model");
 const Company = require("../../models/company.model");
-const Role = require("../../models/role.model");
 const Hotel = require("../../models/hotel.model");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -54,26 +53,7 @@ async function getCompanyAdminLoginRedirect(account) {
     return `${base}/dashboard`;
   }
 
-  // inherit: giống loadRolePermissions — chỉ dùng Role nếu có tour-access / hotel-access
-  if (!account.role) {
-    return `${base}/dashboard`;
-  }
-
-  const role = await Role.findOne({
-    _id: account.role,
-    deleted: { $ne: true },
-  })
-    .select("permissions")
-    .lean();
-
-  const perms = role?.permissions || [];
-  const hasTour = perms.includes("tour-access");
-  const hasHotel = perms.includes("hotel-access");
-
-  if (hasHotel && !hasTour) {
-    return firstHotelDashboardUrl();
-  }
-
+  // inherit / mặc định: toàn quyền → vào dashboard tour
   return `${base}/dashboard`;
 }
 

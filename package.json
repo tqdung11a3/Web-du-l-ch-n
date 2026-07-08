@@ -6,14 +6,10 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "sync:amadeus": "node scripts/syncAmadeusActivities.js",
-    "import:amadeus-tours": "node scripts/importAmadeusActivitiesAsTours.js",
-    "sync:amadeus-hotels": "node scripts/sync-hotels-from-amadeus.js",
     "seed:super-admin": "node scripts/seed-super-admin.js",
     "fix:category-created-by": "node scripts/fix-category-created-by.js"
   },
   "dependencies": {
-    "amadeus": "^11.0.0",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",

@@ -1,8 +1,4 @@
 // middlewares/admin/role.middleware.js
-const Role = require("../../models/role.model");
-
-/** Tab-level permissions used to split Tour vs Khách sạn for company admins */
-const TAB_ACCESS_PERMS = ["tour-access", "hotel-access"];
 
 /**
  * Middleware: Chỉ cho phép Super Admin truy cập
@@ -205,40 +201,8 @@ module.exports.loadRolePermissions = async (req, res, next) => {
     return next();
   }
 
-  // inherit: theo Role (dữ liệu cũ có thể còn tour-access/hotel-access trong permissions)
-  if (!account.role) {
-    return next();
-  }
-
-  try {
-    const role = await Role.findOne({
-      _id: account.role,
-      deleted: { $ne: true },
-    })
-      .select("permissions")
-      .lean();
-
-    if (!role || !Array.isArray(role.permissions)) {
-      return next();
-    }
-
-    const perms = role.permissions;
-    const hasTour = perms.includes("tour-access");
-    const hasHotel = perms.includes("hotel-access");
-    const restricted = perms.some((p) => TAB_ACCESS_PERMS.includes(p));
-
-    req.tabAccess = {
-      hasTour,
-      hasHotel,
-      restricted,
-    };
-
-    res.locals.isTourOnlyAdmin = hasTour && !hasHotel;
-    res.locals.isHotelOnlyAdmin = hasHotel && !hasTour;
-  } catch (err) {
-    return next(err);
-  }
-
+  // inherit / mặc định: toàn quyền
+  req.tabAccess = { hasTour: true, hasHotel: true, restricted: false };
   return next();
 };
 

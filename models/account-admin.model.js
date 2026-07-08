@@ -5,7 +5,6 @@ const schema = new mongoose.Schema(
     fullName: String,
     email: String,
     phone: String,
-    role: String,
     positionCompany: String,
     status: String, // initial: Khởi tạo, active: Hoạt động, inactive: Tạm dừng
     password: String,
@@ -38,7 +37,7 @@ const schema = new mongoose.Schema(
 
     /**
      * Phạm vi tab Tour / Khách sạn — do company admin cấu hình tại Cài đặt → Tài khoản quản trị.
-     * inherit: áp dụng tour-access/hotel-access trên Role (tương thích dữ liệu cũ).
+     * inherit / full: toàn quyền (cả Tab Tour và Khách sạn).
      */
     tabAccessScope: {
       type: String,

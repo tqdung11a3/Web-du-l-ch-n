@@ -668,7 +668,7 @@ function canAllocateAtomicGroupsAcrossHotels({
     ok: false,
     reason: "cannot_fit_anywhere",
     allocations,
-    leftover: unplaced,
+    leftover: unplaced, // các atom còn lại chưa xếp được
   };
 }
 
@@ -780,6 +780,8 @@ function assignAtomsToPhysicalRooms({
     const used0 = Math.max(0, Number(r.used) || 0);
     if (used0 >= cap) continue;
     if (r.gender !== "male" && r.gender !== "female") continue;
+
+    // danh sách phòng đang được xem xét để xếp atom
     assignments.push({
       roomTypeId: String(r.roomTypeId || ""),
       roomTypeName: String(r.roomTypeName || ""),
@@ -806,10 +808,10 @@ function assignAtomsToPhysicalRooms({
       // Ưu tiên phòng REUSE trước (cross-order share) để lấp đầy phòng đang dở
       // — sau đó mới đến phòng vừa được mở trong call này — và đều dùng best-fit
       // (remaining ít nhất).
-      let bestReuseIdx = -1;
-      let bestReuseRemaining = Infinity;
-      let bestOpenIdx = -1;
-      let bestOpenRemaining = Infinity;
+      let bestReuseIdx = -1; // Chỉ số phòng reuse (phòng cũ còn chỗ) tốt nhất; -1 = chưa tìm được
+      let bestReuseRemaining = Infinity; // Số chỗ trống còn lại của phòng reuse tốt nhất
+      let bestOpenIdx = -1; // Chỉ số phòng mới tốt nhất; -1 = chưa tìm được
+      let bestOpenRemaining = Infinity; // Số chỗ trống còn lại của phòng mới tốt nhất
       for (let i = 0; i < assignments.length; i++) {
         const a = assignments[i];
         if (a.gender !== gender) continue;

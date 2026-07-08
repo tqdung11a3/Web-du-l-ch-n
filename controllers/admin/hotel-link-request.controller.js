@@ -447,7 +447,7 @@ module.exports.approve = async (req, res) => {
         rr.assignedRooms
       );
 
-      if (approved <= 0) continue;
+      if (approved <= 0) continue; // nếu không duyệt phòng nào → bỏ qua
 
       const checkIn = new Date(rr.fromDate);
       const checkOut = new Date(rr.toDate);
@@ -483,7 +483,7 @@ module.exports.approve = async (req, res) => {
         );
       }
 
-      if (roomsToBook === 0) continue;
+      if (roomsToBook === 0) continue; // nếu không còn phòng trống => bỏ qua
 
       const selectedRoomIds = availableRoomIds.slice(0, roomsToBook);
       for (const roomId of selectedRoomIds) {

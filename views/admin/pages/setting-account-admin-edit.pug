@@ -19,16 +19,6 @@ block main
       .inner-group
         label(for="phone" class="inner-label") Số điện thoại
         input(type="text" id="phone" name="phone" value=accountDetail.phone)
-      //- Tạm ẩn khối Nhóm quyền
-      //- .inner-group
-      //-   label(for="role" class="inner-label") Nhóm quyền
-      //-   select(id="role" name="role")
-      //-     option(value="") -- Chọn nhóm quyền --
-      //-     each item in roleList
-      //-       option(
-      //-         value=item.id
-      //-         selected=(item.id == accountDetail.role ? true : false)
-      //-         ) #{item.name}
       .inner-group
         label(for="tabAccessScope" class="inner-label") Phân quyền
         - var _scope = accountDetail.tabAccessScope || "inherit"

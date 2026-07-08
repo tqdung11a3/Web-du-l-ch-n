@@ -1,45 +1,27 @@
-const mongoose = require("mongoose");
 const AccountAdmin = require("../../models/account-admin.model");
-const Role = require("../../models/role.model");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 module.exports.edit = async (req, res) => {
-  let roleList = [];
-  try {
-    roleList = await Role.find({ deleted: { $ne: true } })
-      .select("name")
-      .sort({ name: 1 })
-      .lean();
-  } catch (e) {
-    console.error("[profile.edit] roleList", e);
-  }
-
   res.render("admin/pages/profile-edit", {
     pageTitle: "Thông tin cá nhân",
-    roleList,
   });
 };
 
 module.exports.editPatch = async (req, res) => {
   try {
-    const accountId = req.account.id; // Document -> có virtual id
+    const accountId = req.account.id;
 
-    // 1) Lấy và chuẩn hoá các field cho phép sửa trong "Hồ sơ"
-    //    (không đổi status/companyId/isSuperAdmin từ trang này)
     const {
       fullName = "",
       email = "",
       phone = "",
       positionCompany = "",
       password = "",
-      role: roleBody = "",
     } = req.body;
 
     const emailNorm = String(email).trim().toLowerCase();
 
-    // 2) Kiểm tra email trùng (toàn cục; nếu muốn theo công ty,
-    //    thêm điều kiện companyId: req.account.companyId)
     if (emailNorm) {
       const existEmail = await AccountAdmin.findOne({
         _id: { $ne: accountId },
@@ -54,7 +36,6 @@ module.exports.editPatch = async (req, res) => {
       }
     }
 
-    // 3) Xây dựng payload cập nhật (whitelist)
     const update = {
       fullName: String(fullName).trim(),
       email: emailNorm,
@@ -62,29 +43,6 @@ module.exports.editPatch = async (req, res) => {
       positionCompany: String(positionCompany).trim(),
       updatedBy: accountId,
     };
-
-    const roleId = String(roleBody || "").trim();
-    if (roleId) {
-      if (!mongoose.Types.ObjectId.isValid(roleId)) {
-        return res.json({
-          code: "error",
-          message: "Nhóm quyền không hợp lệ!",
-        });
-      }
-      const roleOk = await Role.findOne({
-        _id: roleId,
-        deleted: { $ne: true },
-      })
-        .select("_id")
-        .lean();
-      if (!roleOk) {
-        return res.json({
-          code: "error",
-          message: "Nhóm quyền không tồn tại!",
-        });
-      }
-      update.role = roleId;
-    }
 
     // 4) Mật khẩu: chỉ cập nhật khi người dùng thực sự nhập
     if (password && String(password).trim().length > 0) {
