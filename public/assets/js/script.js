@@ -490,52 +490,6 @@ if (boxTourSchedule) {
 }
 // End Zoom Box Tour Schedule
 
-// ===============================
-// Email Form
-// ===============================
-const emailForm = document.querySelector("#email-form");
-if (emailForm) {
-  const validator = new JustValidate("#email-form");
-
-  validator
-    .addField("#email-input", [
-      {
-        rule: "required",
-        errorMessage: "Vui lòng nhập email!",
-      },
-      {
-        rule: "email",
-        errorMessage: "Email không đúng định dạng!",
-      },
-    ])
-    .onSuccess((event) => {
-      const email = event.target.email.value;
-
-      const dataFinal = {
-        email: email,
-      };
-
-      fetch(`/contact/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(dataFinal),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.code == "error") {
-            notify.error(data.message);
-          }
-
-          if (data.code == "success") {
-            notify.success(data.message);
-            emailForm.email.value = "";
-          }
-        });
-    });
-}
-// End Email Form
 
 // ===============================
 // Coupon Form

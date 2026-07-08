@@ -1911,16 +1911,16 @@ if (adminTabSwitch) {
   if (currentPath.includes("/hotel")) {
     currentTab = "hotel";
   } else {
-    // Các URL khác (dashboard, tour, order, user, contact, company) đều thuộc tour
+    // Các URL khác (dashboard, tour, order, user, company) đều thuộc tour
     currentTab = "tour";
   }
   
   // Lấy tab từ localStorage nếu có (ưu tiên URL hơn localStorage)
   // Chỉ dùng localStorage khi không thể xác định từ URL
   const savedTab = localStorage.getItem("adminActiveTab");
-  if (!currentPath.includes("/hotel") && !currentPath.includes("/tour") && 
+  if (!currentPath.includes("/hotel") && !currentPath.includes("/tour") &&
       !currentPath.includes("/dashboard") && !currentPath.includes("/order") &&
-      !currentPath.includes("/user") && !currentPath.includes("/contact") &&
+      !currentPath.includes("/user") &&
       !currentPath.includes("/company") && !currentPath.includes("/category")) {
     if (savedTab && (savedTab === "tour" || savedTab === "hotel")) {
       currentTab = savedTab;
