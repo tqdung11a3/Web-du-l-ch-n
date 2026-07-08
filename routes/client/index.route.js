@@ -4,11 +4,11 @@ const tourRoutes = require("./tour.route");
 
 // ── TEMPORARY: bắt buộc đăng nhập mới vào toàn bộ trang client ───────────────
 // Để gỡ: xoá khối từ đây đến // ── END TEMPORARY ──
-// const { verifyToken } = require("../../middlewares/client/auth.middleware");
-// router.use((req, res, next) => {
-//   if (req.path.startsWith("/account")) return next();
-//   return verifyToken(req, res, next);
-// });
+const { verifyToken } = require("../../middlewares/client/auth.middleware");
+router.use((req, res, next) => {
+  if (req.path.startsWith("/account")) return next();
+  return verifyToken(req, res, next);
+});
 // ── END TEMPORARY ─────────────────────────────────────────────────────────────
 
 const homeRoutes = require("./home.route");
