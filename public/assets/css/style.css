@@ -1576,6 +1576,34 @@ button {
   color: #0ea5e9;
 }
 
+.accommodation-mode-picker__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0369a1;
+  line-height: 1.5;
+}
+
+.accommodation-mode-picker__notice i {
+  flex-shrink: 0;
+  margin-top: 1px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0071c2;
+}
+
+.accommodation-mode-picker__notice span {
+  flex: 1;
+  min-width: 0;
+}
+
 .accommodation-mode-picker__options {
   display: grid;
   grid-template-columns: 1fr 1fr;

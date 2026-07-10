@@ -970,11 +970,15 @@ async function evaluateSharedFeasibilityV2Multi(request) {
   let reason = result.reason;
 
   // Tính tổng capacity còn trống (đã trừ booking) trên tất cả các hotel.
-  const totalAvailableCap = hotelsResolved.reduce(
-    (s, h) =>
-      s + h.rooms.reduce((hs, r) => hs + r.capacity * r.count, 0),
-    0
-  );
+  // Bao gồm cả slot ghép dở (partial) vì những slot đó vẫn có thể nhận thêm khách.
+  const totalAvailableCap = hotelsResolved.reduce((s, h) => {
+    const wholeCap = h.rooms.reduce((hs, r) => hs + r.capacity * r.count, 0);
+    const partialCap = (partialRoomsByHotel[h.hotelId] || []).reduce(
+      (ps, p) => ps + p.capacity,
+      0
+    );
+    return s + wholeCap + partialCap;
+  }, 0);
   // Tổng "chỗ" (occupancy weight) đoàn hiện tại cần — dùng effectiveSize sau
   // reweight theo hotel đầu tiên (hoặc 1 mỗi atom nếu chỉ có NL).
   const totalNeeded = currentAtoms.reduce(
@@ -1024,24 +1028,32 @@ async function evaluateSharedFeasibilityV2Multi(request) {
     } else if (placed > 0) {
       // Đủ tổng chỗ nhưng không xếp hết — thường do tách giới tính hoặc nhóm
       // gia đình lẻ không khớp phòng còn lại.
+      const hotelAt =
+        hotelsResolved.length === 1
+          ? hotelNames
+          : `các khách sạn (${hotelNames})`;
       const suffix = hasChildren
-        ? "Vui lòng điều chỉnh người trông trẻ trong đoàn hoặc chuyển sang ở riêng."
-        : "Phòng còn lại không đủ để chia theo giới tính cho đoàn bạn. " +
-          "Vui lòng chuyển sang ở riêng hoặc liên hệ công ty du lịch.";
+        ? "Vui lòng điều chỉnh người trông trẻ trong đoàn hoặc chọn ở riêng."
+        : "Vui lòng chọn ở riêng hoặc liên hệ công ty du lịch để được hỗ trợ.";
       message =
-        `Đã xếp được ${placed}/${currentAtoms.length} nhóm vào ${hotelLabel}, ` +
-        `nhưng vẫn còn ${leftover.length} nhóm chưa có chỗ (${leftoverLabels}). ` +
+        `${hotelAt} hiện chỉ còn chỗ ở ghép phù hợp cho ${placed}/${currentAtoms.length} nhóm. ` +
+        `Nhóm ${leftoverLabels} chưa có chỗ ở ghép phù hợp theo giới tính. ` +
         suffix;
     } else {
       // Không xếp được nhóm nào — tổng cap đủ nhưng không chia được.
-      const suffix = hasChildren
-        ? "Vui lòng điều chỉnh người trông trẻ trong đoàn hoặc chuyển sang ở riêng."
-        : "Phòng còn lại không thể chia theo giới tính phù hợp với đoàn. " +
-          "Vui lòng chuyển sang ở riêng hoặc liên hệ công ty du lịch.";
-      message =
-        `Phòng còn trống tại ${hotelLabel} không thể xếp đoàn bạn ở ghép ` +
-        `(${currentAtoms.length} nhóm). ` +
-        suffix;
+      const hotelAt =
+        hotelsResolved.length === 1
+          ? hotelNames
+          : `các khách sạn (${hotelNames})`;
+      if (hasChildren) {
+        message =
+          `Hiện không còn phòng ở ghép phù hợp với giới tính và số lượng khách trong đoàn tại ${hotelAt}. ` +
+          `Vui lòng điều chỉnh người trông trẻ trong đoàn hoặc chọn ở riêng.`;
+      } else {
+        message =
+          `Hiện không còn phòng ở ghép phù hợp với giới tính và số lượng khách trong đoàn tại ${hotelAt}. ` +
+          `Vui lòng chọn ở riêng hoặc liên hệ công ty du lịch để được hỗ trợ.`;
+      }
     }
   }
 

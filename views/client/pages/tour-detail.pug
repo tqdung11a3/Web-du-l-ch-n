@@ -334,12 +334,12 @@ block main
                   .age-inputs-list#babies-ages-list
 
             //- Chọn phòng khách sạn (bắt buộc nếu tour có liên kết khách sạn)
-            if hotelAccommodationRequired && (!tourRoomSegments || tourRoomSegments.length === 0)
+            if hotelAccommodationRequired && !privateAvailable && !sharedAvailable
               .hotel-quota-exhausted-banner
                 i.fa-solid.fa-circle-xmark
                 span  Tất cả phòng lưu trú của lịch này đã hết chỗ trong quota. Vui lòng liên hệ công ty du lịch để được hỗ trợ hoặc chọn lịch khởi hành khác.
 
-            if tourRoomSegments && tourRoomSegments.length > 0
+            if (privateAvailable || sharedAvailable) && tourRoomSegments && tourRoomSegments.length > 0
               - const _segmentsJson = JSON.stringify(tourRoomSegments)
 
               //- Chọn hình thức lưu trú: ở riêng (cộng full giá phòng) hoặc ở ghép (khai số nam/nữ).
@@ -348,24 +348,30 @@ block main
                 .accommodation-mode-picker__hint
                   i.fa-solid.fa-circle-info
                   span  Chọn cách bạn muốn ở khi tham gia tour. Hình thức "Ở ghép" sẽ được hệ thống xếp tự động ghép cùng giới với các đoàn khác.
+                if !privateAvailable && sharedAvailable
+                  .accommodation-mode-picker__notice
+                    i.fa-solid.fa-circle-info
+                    span  Đã hết phòng ở riêng cho lịch này. Chỉ còn lựa chọn ở ghép.
                 .accommodation-mode-picker__options
-                  label.accommodation-mode-option.is-selected
+                  label.accommodation-mode-option(class=!privateAvailable ? "is-disabled" : "is-selected")
                     input(
                       type="radio"
                       name="accommodationMode"
                       value="private"
-                      checked
+                      checked=privateAvailable
+                      disabled=!privateAvailable
                     )
                     .accommodation-mode-option__body
                       .accommodation-mode-option__title
                         i.fa-solid.fa-bed
                         span  Ở riêng
                       .accommodation-mode-option__desc Bạn chọn loại phòng cụ thể, được sử dụng riêng cả phòng. Toàn bộ tiền phòng được cộng vào tổng tour.
-                  label.accommodation-mode-option
+                  label.accommodation-mode-option(class=!privateAvailable ? "is-selected" : "")
                     input(
                       type="radio"
                       name="accommodationMode"
                       value="shared"
+                      checked=!privateAvailable
                     )
                     .accommodation-mode-option__body
                       .accommodation-mode-option__title
@@ -408,27 +414,28 @@ block main
                                     span.room-hotel-block__agebands-name= ' · ' + band.bandName
                                   span.room-hotel-block__agebands-weight= ': ' + weightText
                         each rt in hotel.roomTypes
-                          .room-type-row(
-                            data-room-type-id=rt.roomTypeId
-                            data-hotel-id=hotel.hotelId
-                            data-base-occupancy=rt.baseOccupancy
-                            data-available-rooms=rt.availableRooms
-                            data-price-per-night=rt.pricePerNight
-                          )
-                            .room-type-row__info
-                              .room-type-row__name= rt.roomTypeName
-                              .room-type-row__meta #{rt.baseOccupancy} người/phòng · còn #{rt.availableRooms} phòng
-                              if Number(rt.pricePerNight) > 0
-                                .room-type-row__price #{Number(rt.pricePerNight).toLocaleString('vi-VN')}đ/đêm
-                            .room-type-row__input
-                              input.room-qty-input(
-                                type="number"
-                                min="0"
-                                max=rt.availableRooms
-                                value="0"
-                                placeholder="0"
-                              )
-                              span.room-type-row__input-unit phòng
+                          if rt.availableRooms > 0
+                            .room-type-row(
+                              data-room-type-id=rt.roomTypeId
+                              data-hotel-id=hotel.hotelId
+                              data-base-occupancy=rt.baseOccupancy
+                              data-available-rooms=rt.availableRooms
+                              data-price-per-night=rt.pricePerNight
+                            )
+                              .room-type-row__info
+                                .room-type-row__name= rt.roomTypeName
+                                .room-type-row__meta #{rt.baseOccupancy} người/phòng · còn #{rt.availableRooms} phòng
+                                if Number(rt.pricePerNight) > 0
+                                  .room-type-row__price #{Number(rt.pricePerNight).toLocaleString('vi-VN')}đ/đêm
+                              .room-type-row__input
+                                input.room-qty-input(
+                                  type="number"
+                                  min="0"
+                                  max=rt.availableRooms
+                                  value="0"
+                                  placeholder="0"
+                                )
+                                span.room-type-row__input-unit phòng
                 .room-selection-required-warning(style="display:none") Vui lòng chọn đủ phòng ở từng khung thời gian.
 
               //- Vùng "Thông tin hành khách" — dùng chung cho cả 2 mode (private/shared).

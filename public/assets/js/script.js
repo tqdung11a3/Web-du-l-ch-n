@@ -724,6 +724,28 @@ if (boxTourDetail) {
       ? baby
       : passengerState.filter((p) => p.type === "baby" && p.babySeatType === "private").length;
 
+    // ----- GIỚI HẠN SỐ EM BÉ TỐI ĐA -----
+    // Công thức: maxBaby = (số slot ngồi chung theo NL) + (ghế trống còn lại sau NL+TE)
+    // Nếu maxBabiesPerAdult === 0 (auto mode): mọi em bé đều chiếm ghế → không có slot ngồi chung
+    if (maxSeats > 0) {
+      const seatsUsedByOthers = adult + child; // NL + TE đã chiếm
+      const remainingSeats = Math.max(0, maxSeats - seatsUsedByOthers);
+      // Slot ngồi chung: mỗi NL chứa được tối đa maxBabiesPerAdult em bé ngồi cùng
+      const sharedSlots = maxBabiesPerAdult > 0 ? adult * maxBabiesPerAdult : 0;
+      const maxBaby = sharedSlots + remainingSeats;
+      if (baby > maxBaby) {
+        baby = maxBaby;
+        inputBaby.value = baby;
+        if (changedInput === inputBaby) {
+          notify?.error?.(
+            maxBabiesPerAdult > 0
+              ? `Số em bé tối đa là ${maxBaby} (${sharedSlots} ngồi chung + ${remainingSeats} ghế trống còn lại).`
+              : `Số em bé không được vượt quá số ghế còn lại (${remainingSeats}).`
+          );
+        }
+      }
+    }
+
     // ----- RÀNG BUỘC GHẾ -----
     if (maxSeats > 0) {
       let usedSeats = adult + child + privateSeatBabyCount;
@@ -3020,6 +3042,11 @@ if (boxTourDetail) {
         e.target &&
         e.target.matches('input[name="accommodationMode"]')
       ) {
+        // Chặn chuyển về "ở riêng" nếu radio đó đang bị vô hiệu hoá.
+        if (e.target.value === "private" && e.target.disabled) {
+          e.preventDefault();
+          return;
+        }
         // Khi chuyển sang "ở riêng", xóa guardianIdx khỏi state vì không dùng.
         if (e.target.value === "private") {
           passengerState.forEach((p) => {
@@ -3195,7 +3222,9 @@ if (boxTourDetail) {
                 return;
               }
             }
-            offlineCheckSharedFeasibility();
+            // Không gọi lại offlineCheckSharedFeasibility() ở đây vì hàm đó
+            // không kiểm tra giới tính → sẽ ghi đè mất kết quả false từ
+            // remoteCheckSharedFeasibility(). Dùng thẳng giá trị hiện tại.
             if (!sharedFeasibilityOk) {
               applySharedFeasibilityUI();
               sharedFeasibilityWarning?.scrollIntoView({

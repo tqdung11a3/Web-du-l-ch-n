@@ -588,6 +588,23 @@ module.exports.detail = async (req, res) => {
                 }
               }
 
+              // Tính slot ghép còn trống theo loại phòng (có thể có người nhưng chưa đầy)
+              const { getPartialSharedRooms } = require("../../helpers/tour-shared-room.helper");
+              const _partialRooms = await getPartialSharedRooms({
+                tourSegmentId: ts._id,
+                hotelId: String(hotelEntry.hotelId),
+                fromDate: seg.fromDate,
+                toDate: seg.toDate,
+              });
+              // residualByRoomType[rtId] = tổng slot trống cộng dồn từ các phòng ghép dở
+              const residualByRoomType = {};
+              for (const p of _partialRooms) {
+                const rtId = String(p.roomTypeId);
+                const rem = Math.max(0, Number(p.capacity || 0) - Number(p.used || 0));
+                if (rem <= 0) continue;
+                residualByRoomType[rtId] = (residualByRoomType[rtId] || 0) + rem;
+              }
+
               const roomTypes = [];
               for (const ra of hotelEntry.roomAllocations) {
                 if (!ra.assignedRooms || ra.assignedRooms <= 0) continue;
@@ -595,24 +612,27 @@ module.exports.detail = async (req, res) => {
                 const clientBookedCount =
                   bookedByRoomType[String(ra.roomTypeId)] || 0;
 
-                const availableForClient = Math.max(0, ra.assignedRooms - clientBookedCount);
+                const wholeFree = Math.max(0, ra.assignedRooms - clientBookedCount);
+                const sharedResidual = residualByRoomType[String(ra.roomTypeId)] || 0;
 
-                if (availableForClient > 0) { // Chỉ hiển thị phòng còn trống thực tế
-                  const matchedRoomType = (hotel.roomTypes || []).find(
-                    (rt) => String(rt._id) === String(ra.roomTypeId)
-                  );
-                  const pricePerNight = matchedRoomType ? (matchedRoomType.basePrice || 0) : 0;
+                // Đưa vào form nếu còn phòng nguyên (ở riêng) HOẶC còn slot ghép
+                if (wholeFree <= 0 && sharedResidual <= 0) continue;
 
-                  // Thêm vào form chọn phòng khi đặt tour
-                  roomTypes.push({
-                    roomTypeId: String(ra.roomTypeId),
-                    roomTypeName: ra.roomTypeName || "",
-                    baseOccupancy: ra.baseOccupancy || 2,
-                    availableRooms: availableForClient,
-                    maxCapacity: availableForClient * (ra.baseOccupancy || 2),
-                    pricePerNight,
-                  });
-                }
+                const matchedRoomType = (hotel.roomTypes || []).find(
+                  (rt) => String(rt._id) === String(ra.roomTypeId)
+                );
+                const pricePerNight = matchedRoomType ? (matchedRoomType.basePrice || 0) : 0;
+
+                roomTypes.push({
+                  roomTypeId: String(ra.roomTypeId),
+                  roomTypeName: ra.roomTypeName || "",
+                  baseOccupancy: ra.baseOccupancy || 2,
+                  availableRooms: wholeFree,          // cho ở riêng (0 = không thể ở riêng)
+                  maxCapacity: wholeFree * (ra.baseOccupancy || 2),
+                  pricePerNight,
+                  sharedAvailable: wholeFree > 0 || sharedResidual > 0,
+                  sharedResidualSlots: sharedResidual,
+                });
               }
 
               if (roomTypes.length > 0) {
@@ -667,6 +687,14 @@ module.exports.detail = async (req, res) => {
   }
   const tourRoomSegments = Object.values(_segMap);
 
+  // Cờ tổng hợp để view quyết định ẩn/hiện banner và vô hiệu hoá mode
+  const privateAvailable = tourRoomSegments.some((seg) =>
+    seg.hotels.some((h) => h.roomTypes.some((rt) => rt.availableRooms > 0))
+  );
+  const sharedAvailable = tourRoomSegments.some((seg) =>
+    seg.hotels.some((h) => h.roomTypes.some((rt) => rt.sharedAvailable))
+  );
+
   res.render("client/pages/tour-detail", {
     pageTitle: tourDetail.name,
     breadcrumb: breadcrumb,
@@ -675,6 +703,8 @@ module.exports.detail = async (req, res) => {
     tourRoomOptions: tourRoomOptions,
     tourRoomSegments: tourRoomSegments,
     hotelAccommodationRequired,
+    privateAvailable,
+    sharedAvailable,
   });
 };
 

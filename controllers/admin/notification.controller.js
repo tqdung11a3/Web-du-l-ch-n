@@ -43,6 +43,11 @@ module.exports.getNotifications = async (req, res) => {
       } else if (n.type === "review") {
         icon = "fa-star";
         iconColor = "#EF4444";
+      } else if (n.type === "tour_hotel_quota") {
+        icon = n.metadata?.pressureLevel === "exhausted"
+          ? "fa-circle-exclamation"
+          : "fa-triangle-exclamation";
+        iconColor = n.metadata?.pressureLevel === "exhausted" ? "#DC2626" : "#F59E0B";
       }
       
       return {

@@ -12052,24 +12052,30 @@ ul.tour-status-create-warn li { margin-bottom: 3px; }
 .th-add-rooms-modal {
   position: fixed;
   inset: 0;
-  z-index: 9000;
+  z-index: 20050;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 .th-add-rooms-modal[aria-hidden="true"] { display: none !important; }
 .th-add-rooms-modal__backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(0,0,0,.45);
 }
 .th-add-rooms-modal__panel {
   position: relative;
+  z-index: 1;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0,0,0,.25);
   width: min(760px, 95vw);
-  max-height: 85vh;
+  max-height: min(85vh, calc(100vh - 32px));
+  margin: auto;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;

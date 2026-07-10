@@ -12,6 +12,7 @@ const TourSegment = require("../../models/tour-segment.model");
 const HotelLinkRequest = require("../../models/hotel-link-request.model");
 const Order       = require("../../models/order.model");
 const AccountUser = require("../../models/account-user.model");
+const Notification = require("../../models/notification.model");
 
 const { getAvailableRoomsForType } = require("../../helpers/hotel-availability.helper");
 const { generateRandomNumber }     = require("../../helpers/generate.helper");

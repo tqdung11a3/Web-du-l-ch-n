@@ -189,7 +189,15 @@ module.exports.list = async (req, res) => {
       });
     }
 
-    const selectedHotelId = (req.query.hotelId || "").trim();
+    let selectedHotelId = (req.query.hotelId || "").trim();
+    // Nếu hotelId trên URL không thuộc công ty đang đăng nhập (stale localStorage,
+    // khách sạn đã xoá, hoặc của công ty khác) thì coi như "không lọc". Nếu không,
+    // scope sẽ fallback về tất cả KS (đúng) nhưng cột "Khách sạn (của bạn)" lại lọc
+    // theo id không hợp lệ → không hiển thị KS nào. Chuẩn hoá tại đây để mọi logic
+    // phía dưới (scope, cột hiển thị, đếm khách) đồng nhất.
+    if (selectedHotelId && !hotelIds.includes(selectedHotelId)) {
+      selectedHotelId = "";
+    }
     const q = (req.query.q || "").trim().toLowerCase();
     const scopeHotelIds = selectedHotelId && hotelIds.includes(selectedHotelId)
       ? [selectedHotelId]

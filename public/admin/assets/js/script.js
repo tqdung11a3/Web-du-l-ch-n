@@ -1789,7 +1789,10 @@ function initHotelSelector() {
 
   if (hotelIdFromUrl && optionValues.has(hotelIdFromUrl)) {
     localStorage.setItem("selectedHotelId", hotelIdFromUrl);
-  } else if (!hotelIdFromUrl && initialHotelId && optionValues.has(initialHotelId)) {
+  } else if (initialHotelId && optionValues.has(initialHotelId)) {
+    // URL/localStorage đang giữ hotelId không hợp lệ (KS đã xoá, của công ty khác,
+    // hoặc giá trị cũ) → ghi đè bằng KS hợp lệ (option đầu) để các link sidebar
+    // lần sau không tiếp tục gắn id sai khiến trang không lọc đúng khách sạn.
     localStorage.setItem("selectedHotelId", initialHotelId);
   }
 }
