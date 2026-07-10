@@ -1929,6 +1929,8 @@ if (boxTourDetail) {
   }
 
   // ── Ở ghép: kiểm tra NL đủ phân bổ TE/EB theo baseOccupancy ─────────────
+
+  // offline fail => trả ra câu mặc định
   const SHARED_INSUFFICIENT_ADULTS_MSG =
     "Số lượng trẻ em đi cùng vượt quá khả năng phân bổ phòng ở ghép. " +
     "Với loại phòng hiện tại, mỗi phòng cần có ít nhất 1 người lớn đi kèm trẻ em. " +
@@ -2177,6 +2179,7 @@ if (boxTourDetail) {
     const v = validatePassengers();
     if (!v.ok) return;
 
+    // Check sâu từ server
     try {
       const res = await fetch(sharedFeasibilityCheckUrl, {
         method: "POST",
@@ -2207,6 +2210,8 @@ if (boxTourDetail) {
       applySharedFeasibilityUI();
       return;
     }
+
+    // Bước 2: Check nhanh offline
     offlineCheckSharedFeasibility();
     applySharedFeasibilityUI();
     if (sharedFeasibilityTimer) clearTimeout(sharedFeasibilityTimer);
@@ -2896,6 +2901,8 @@ if (boxTourDetail) {
       sharedRequiredWarning.style.display =
         mode === "shared" && isRoomRequired && anySharedMismatch ? "" : "none";
     }
+
+    // Bước 1: Khách điền thông tin ở ghép, kiểm tra xem có xếp được không
     if (mode === "shared" && passengerState.length > 0) {
       scheduleSharedFeasibilityCheck();
     } else {

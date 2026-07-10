@@ -941,6 +941,8 @@ async function evaluateSharedFeasibilityV2Multi(request) {
   // Nếu cộng thêm atoms ở đây sẽ bị double-count (vừa trừ phòng vừa trừ
   // người). Trade-off: bỏ qua tối ưu cross-shared-partial — bù lại logic
   // validate khớp đúng "phòng còn trống thực tế" như BR yêu cầu.
+
+  // thử xếp atoms vào phòng theo giới tính + sức chứa
   const result = canAllocateAtomicGroupsAcrossHotels({
     currentAtoms,
     hotels: hotelsResolved,

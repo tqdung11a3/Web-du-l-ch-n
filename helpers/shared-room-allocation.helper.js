@@ -524,6 +524,8 @@ function canAllocateAtomicGroupsAcrossHotels({
   partialRoomsByHotel,
   reweightFn,
 }) {
+
+  // Phần 1: Chuẩn bị đầu vào
   const atomsList = (currentAtoms || []).filter(Boolean);
   const hotelList = (hotels || []).filter((h) => h && h.hotelId);
   const existingMap = existingAtomsByHotel || {};
@@ -533,6 +535,7 @@ function canAllocateAtomicGroupsAcrossHotels({
       ? reweightFn
       : (atoms /* , bands */) => atoms.map((a) => ({ ...a }));
 
+  // phần 2: kiểm tra nhanh nếu không có khách sạn nào
   if (hotelList.length === 0) {
     return {
       ok: false,
@@ -554,18 +557,21 @@ function canAllocateAtomicGroupsAcrossHotels({
   // Quick fail: với MỌI hotel, atom lớn nhất có vượt phòng lớn nhất không?
   // Nếu mỗi hotel đều có ít nhất 1 phòng đủ chứa atom đó thì không sao —
   // ta chỉ fail khi không hotel nào chứa nổi atom lớn nhất.
+
+  // phần 3: Kiểm tra xem có atom nào đó quá lớn không
   for (const a of taggedAtoms) {
     let canFitSomewhere = false;
     for (const h of hotelList) {
       const partialHere =
         partialMap[h.hotelId] || partialMap[String(h.hotelId)] || [];
+      // phòng trống lớn nhất của hotel h
       const maxRoom = Math.max(
         (h.rooms || []).reduce(
           (m, r) => Math.max(m, Math.floor(r.capacity || 0)),
           0
         ),
-        // Phòng partial: chỉ còn `capacity` (remaining) chỗ trống.
-        ...partialHere.map((p) => Math.max(0, Math.floor(Number(p.capacity) || 0)))
+        // partial room có chỗ còn trống nhiều nhất của hotel h
+        ...partialHere.map((p) => Math.max(0, Math.floor(Number(p.capacity) || 0))) // quy đổi lại effectiveSize theo ageBands của hotel h
       );
       const sizedHere = reweight([a], h.ageBands || [])[0];
       if (sizedHere && sizedHere.effectiveSize <= maxRoom) {
@@ -589,7 +595,7 @@ function canAllocateAtomicGroupsAcrossHotels({
 
   // Thử xếp atoms vào KS theo thứ tự ưu tiên; atom lớn vào KS trước; atom không fit → KS tiếp theo.
   for (const hotel of hotelList) {
-    if (unplaced.length === 0) break;
+    if (unplaced.length === 0) break; // xếp hết rồi thì đóng
 
     const ageBands = hotel.ageBands || [];
     const rooms = (hotel.rooms || []).map((r) => ({
@@ -622,9 +628,9 @@ function canAllocateAtomicGroupsAcrossHotels({
     // Thử fit từ "all" → giảm dần "atom nhỏ nhất" để tối đa hoá lượng atom
     // nhận được tại hotel ưu tiên cao này.
     let placedHere = null; // { atoms, plan }
-    let take = sizedUnplaced.length;
+    let take = sizedUnplaced.length; // thử nhét TẤT CẢ atom còn lại trước
     while (take > 0) {
-      const trySubset = sizedUnplaced.slice(0, take);
+      const trySubset = sizedUnplaced.slice(0, take); // // lấy `take` atom LỚN NHẤT
       const combined = [...existingHere, ...trySubset];
       const result = canAllocateAtomicGroups({
         atoms: combined,
