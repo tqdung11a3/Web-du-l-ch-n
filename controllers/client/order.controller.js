@@ -26,8 +26,6 @@ const {
   enrichItemBabySeatsDisplay,
 } = require("../../helpers/order-baby-seats-display.helper");
 const {
-  evaluateSharedFeasibility,
-  evaluateSharedFeasibilityV2,
   evaluateSharedFeasibilityV2Multi,
   assignSharedAtomsToRooms,
 } = require("../../helpers/tour-shared-room.helper");
@@ -1071,15 +1069,14 @@ module.exports.createPost = async (req, res) => {
         for (const r of item.sharedRoomRequest) {
           const hasPassengers =
             Array.isArray(item.passengers) && item.passengers.length > 0;
-          // Đơn có passengers chi tiết:
-          //   • Nếu segment có ≥ 1 candidateHotel → dùng V2-Multi (multi-hotel
-          //     pooling, fallback giữa các hotel cùng segment).
-          //   • Nếu vì lý do nào đó chưa có candidate (đơn cũ legacy gửi hotelId
-          //     cứng) → fallback V2 single hotel.
-          // Đơn không có passengers → V1 (chỉ males/females, single hotel).
-          if (hasPassengers && Array.isArray(r.candidateHotels) && r.candidateHotels.length > 0) {
-
-            // Validate ở ghép
+          if (!hasPassengers) {
+            sharedFailures.push(
+              "Đơn ở ghép cần có thông tin hành khách chi tiết. Vui lòng cập nhật lại danh sách khách và thử lại."
+            );
+            continue;
+          }
+          {
+            // Validate ở ghép qua V2-Multi (pooling nhiều khách sạn cùng segment).
             const fea = await evaluateSharedFeasibilityV2Multi({
               tourSegmentId: r.tourSegmentId,
               fromDate: r.fromDate,
@@ -1178,31 +1175,6 @@ module.exports.createPost = async (req, res) => {
               r.hotelId = primary.hotelId;
               r.hotelName = primary.hotelName;
             }
-            continue;
-          }
-          // Fallback đơn-cũ: V2 single hoặc V1 (legacy males/females).
-          const fea = hasPassengers
-            ? await evaluateSharedFeasibilityV2({
-                tourSegmentId: r.tourSegmentId,
-                hotelId: r.hotelId,
-                hotelName: r.hotelName,
-                fromDate: r.fromDate,
-                toDate: r.toDate,
-                passengers: item.passengers,
-                excludeOrderId: null,
-              })
-            : await evaluateSharedFeasibility({
-                tourSegmentId: r.tourSegmentId,
-                hotelId: r.hotelId,
-                hotelName: r.hotelName,
-                fromDate: r.fromDate,
-                toDate: r.toDate,
-                males: r.males,
-                females: r.females,
-                excludeOrderId: null,
-              });
-          if (!fea.ok) {
-            sharedFailures.push(formatSharedFeasibilityFailureMessage(fea));
           }
         }
       }
