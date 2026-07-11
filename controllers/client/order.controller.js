@@ -1529,65 +1529,88 @@ module.exports.createPost = async (req, res) => {
             }
           }
 
-          // Mọi đơn (KỂ CẢ đơn này) đang giữ chỗ/đã thanh toán cùng
-          // segment + hotel + roomType + dates.
-          const rivalOrders = await Order.find({
-            deleted: { $ne: true },
-            status: { $ne: "cancel" },
-            "items.roomSelections.hotelId": String(sel.hotelId),
-            "items.roomSelections.roomTypeId": String(sel.roomTypeId),
+          // ── Đếm số PHÒNG VẬT LÝ đã tiêu thụ cho loại phòng này ──
+          // Nguồn sự thật là HotelBooking (gồm CẢ ở riêng lẫn ở ghép):
+          //   • ở riêng: HotelBooking tạm (roomId=null) gắn orderCode khách
+          //   • ở ghép:  Tour Hold (roomId!=null) đã bind khách thật
+          // Bỏ placeholder "[Tour Hold]" (đó chính là quota, chưa có khách).
+          // Mỗi booking = 1 phòng vật lý (phòng ghép reuse dùng chung 1 TH nên
+          // chỉ tính 1 lần). Query giống countActiveBookedRoomsByType nhưng giữ
+          // orderCode để áp tiebreaker theo thứ tự tạo đơn.
+          const nowD = new Date();
+          const activeBookings = await HotelBooking.find({
+            "hotel.hotelId": String(sel.hotelId),
+            tourSegmentId: String(sel.tourSegmentId),
+            roomTypeId: String(sel.roomTypeId),
+            status: { $in: ["pending", "confirmed", "checkedIn"] },
+            orderCode: { $exists: true, $nin: [null, ""] },
+            "guest.fullName": { $ne: "[Tour Hold]" },
+            $or: [
+              { isTemporaryHold: { $ne: true } },
+              { holdExpiresAt: { $gt: nowD } },
+              { holdExpiresAt: null },
+            ],
           })
-            .select(
-              "_id createdAt paymentStatus isTemporaryHold holdExpiresAt items"
-            )
+            .select("checkIn checkOut rooms orderCode roomId")
             .lean();
 
-          const nowD = new Date();
-          const holders = []; // { id, createdAt, rooms }
-          for (const ord of rivalOrders) {
-            let rooms = 0;
-            for (const it of ord.items || []) {
-              for (const rs of it.roomSelections || []) {
-                if (
-                  String(rs.tourSegmentId) === String(sel.tourSegmentId) &&
-                  String(rs.hotelId) === String(sel.hotelId) &&
-                  String(rs.roomTypeId) === String(sel.roomTypeId) &&
-                  String(rs.fromDate) === String(sel.fromDate) &&
-                  String(rs.toDate) === String(sel.toDate)
-                ) {
-                  rooms += Number(rs.selectedRooms || 0);
-                }
-              }
-            }
-            if (rooms === 0) continue;
-            const isActive =
-              ord.paymentStatus === "paid" ||
-              (ord.isTemporaryHold &&
-                (!ord.holdExpiresAt || new Date(ord.holdExpiresAt) > nowD));
-            if (!isActive) continue;
-            holders.push({
-              id: String(ord._id),
-              createdAt: ord.createdAt ? new Date(ord.createdAt).getTime() : 0,
-              rooms,
-            });
+          const _dk = (d) => {
+            if (!d) return "";
+            const dt = d instanceof Date ? d : new Date(d);
+            return isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10);
+          };
+          const fromKey = _dk(sel.fromDate);
+          const toKey = _dk(sel.toDate);
+
+          // Gom số phòng theo orderCode (chỉ booking đúng khung ngày).
+          const roomsByOrderCode = {};
+          for (const b of activeBookings) {
+            if (_dk(b.checkIn) !== fromKey) continue;
+            if (_dk(b.checkOut) !== toKey) continue;
+            const oc = String(b.orderCode || "");
+            if (!oc) continue;
+            roomsByOrderCode[oc] =
+              (roomsByOrderCode[oc] || 0) +
+              Math.max(1, Math.floor(Number(b.rooms) || 1));
           }
 
-          // Đơn tạo trước ưu tiên giữ phòng (tiebreaker: createdAt → _id).
-          holders.sort((a, b) =>
-            a.createdAt !== b.createdAt
-              ? a.createdAt - b.createdAt
-              : a.id < b.id
-              ? -1
-              : a.id > b.id
-              ? 1
-              : 0
+          // Tra createdAt của các đơn KHÁC để áp tiebreaker.
+          const otherCodes = Object.keys(roomsByOrderCode).filter(
+            (oc) => oc !== code
           );
+          const otherOrders = otherCodes.length
+            ? await Order.find({ code: { $in: otherCodes } })
+                .select("code createdAt _id")
+                .lean()
+            : [];
+          const orderMetaByCode = {};
+          for (const o of otherOrders) {
+            orderMetaByCode[String(o.code)] = {
+              createdAt: o.createdAt ? new Date(o.createdAt).getTime() : 0,
+              id: String(o._id),
+            };
+          }
 
-          // Cộng dồn số phòng của các đơn đứng TRƯỚC đơn này.
+          const myCreatedAt = newRecord.createdAt
+            ? new Date(newRecord.createdAt).getTime()
+            : Date.now();
+          const myId = String(newRecord._id);
+
+          // Số phòng bị giữ bởi các đơn "ưu tiên hơn" đơn này:
+          //   - đơn tạo trước (createdAt nhỏ hơn), hoặc cùng lúc nhưng _id nhỏ hơn
+          //   - đơn không tra được metadata → coi là booking cũ (ưu tiên hơn)
           let roomsBeforeMe = 0;
-          for (const h of holders) {
-            if (h.id === String(newRecord._id)) break;
-            roomsBeforeMe += h.rooms;
+          for (const oc of otherCodes) {
+            const meta = orderMetaByCode[oc];
+            let isBefore;
+            if (!meta) {
+              isBefore = true;
+            } else if (meta.createdAt !== myCreatedAt) {
+              isBefore = meta.createdAt < myCreatedAt;
+            } else {
+              isBefore = meta.id < myId;
+            }
+            if (isBefore) roomsBeforeMe += roomsByOrderCode[oc];
           }
 
           if (roomsBeforeMe + myRooms > assignedRooms) {
