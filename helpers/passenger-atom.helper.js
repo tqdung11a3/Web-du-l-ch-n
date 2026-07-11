@@ -285,7 +285,7 @@ function _weightForAge(age, type, ageBands) {
     });
     if (band) {
       const w = Number(band.occupancyWeight);
-      if (!isNaN(w)) return w;
+      if (!isNaN(w)) return w; // trọng số của band
     }
     // Có ageBands nhưng age không khớp band nào → countInOccupancy=false thì 0,
     // không thì fallback theo type.

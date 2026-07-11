@@ -749,7 +749,6 @@ module.exports.checkSharedFeasibility = async (req, res) => {
           hotelName: h.hotelName || "",
         })),
         passengers,
-        excludeOrderId: null,
       });
 
       if (!fea.ok) {

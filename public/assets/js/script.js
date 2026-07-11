@@ -3080,7 +3080,7 @@ if (boxTourDetail) {
   renderPassengerRows();
   updateRoomValidation();
 
-  // === ĐẶT NGAY (không còn locationFrom) ===
+  // === ĐẶT NGAY ===
   const buttonAddToCart = boxTourDetail.querySelector(".inner-button-add-cart");
   if (buttonAddToCart) {
     const tourId = buttonAddToCart.getAttribute("tour-id");

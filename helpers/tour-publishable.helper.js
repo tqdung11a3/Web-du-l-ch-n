@@ -90,7 +90,7 @@ module.exports.canPublishTour = async (tourId, companyId) => {
     });
   }
 
-  // 3) Tất cả HotelLinkRequest cross-company phải approved / partially_approved
+  // 3) Tất cả HotelLinkRequest cross-company phải approved
   const segIds = tourSegs.map((ts) => ts._id);
   const rawLinkReqs = segIds.length
     ? await HotelLinkRequest.find({ tourSegmentId: { $in: segIds } })

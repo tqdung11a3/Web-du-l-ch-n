@@ -927,9 +927,9 @@ module.exports.detail = async (req, res) => {
       .filter((a) => hotelIds.includes(String(a.hotelId)))
       .filter((a) => activeOrderIdsSet.has(String(a.orderId)))
       .map((a) => {
-        const bid = a.holdBookingId ? String(a.holdBookingId) : "";
-        const fromHold = bid ? holdOccByBookingId[bid] : undefined;
-        const orderMode = orderModeById[String(a.orderId)] || null;
+        const bid = a.holdBookingId ? String(a.holdBookingId) : ""; // ID TOUR HOLD
+        const fromHold = bid ? holdOccByBookingId[bid] : undefined; // sức chứa loại phòng
+        const orderMode = orderModeById[String(a.orderId)] || null; // shared hay private
         const isShared =
           orderMode === "shared" ||
           a.accommodationMode === "shared" ||

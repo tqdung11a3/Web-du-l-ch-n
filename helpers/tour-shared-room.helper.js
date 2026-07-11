@@ -76,7 +76,7 @@ function _validateCurrentAtomsAcrossHotels(currentAtoms, hotelsResolved) {
  * đếm "1 chỗ" = 1 đầu người lớn vào occupancy chuẩn).
  */
 
-// admin cấp cho bao nhiêu phòng ?
+// admin đã cấp bao nhiêu phòng (theo loại) cho cặp TourSegment + khách sạn trong khung ngày này?
 async function resolveRoomQuotaForSegmentHotel({
   tourSegmentId,
   hotelId,
@@ -93,6 +93,7 @@ async function resolveRoomQuotaForSegmentHotel({
   if (!seg) return [];
   const sFrom = _toDateKey(fromDate);
   const sTo = _toDateKey(toDate);
+  // Một TourSegment có thể có nhiều khung lưu trú (ví dụ 20–22/7 và 23–25/7). Chỉ lấy khung đúng fromDate/toDate đang hỏi.
   const sub = (seg.segments || []).find(
     (s) => _toDateKey(s.fromDate) === sFrom && _toDateKey(s.toDate) === sTo
   );
@@ -127,8 +128,6 @@ async function resolveRoomQuotaForSegmentHotel({
  * @param {string} payload.hotelId
  * @param {string|Date} payload.fromDate
  * @param {string|Date} payload.toDate
- * @param {string|null} [payload.excludeOrderCode] mã đơn đang edit (nếu có)
- *
  * @returns {Promise<{
  *   raw:       Array<{ roomTypeId:string, roomTypeName:string, capacity:number, count:number }>,
  *   available: Array<{ roomTypeId:string, roomTypeName:string, capacity:number, count:number }>,
@@ -139,12 +138,13 @@ async function resolveRoomQuotaForSegmentHotel({
  *     - raw rỗng        → "no_quota"          (tour chưa cấu hình phòng).
  *     - available rỗng  → "no_capacity_left"  (cấu hình có, nhưng đã hết).
  */
+
+// admin cấp bao nhiêu phòng, và còn trống bao nhiêu
 async function resolveAvailableRoomQuotaForSegmentHotel({
   tourSegmentId,
   hotelId,
   fromDate,
   toDate,
-  excludeOrderCode,
 }) {
   const raw = await resolveRoomQuotaForSegmentHotel({
     tourSegmentId,
@@ -159,17 +159,12 @@ async function resolveAvailableRoomQuotaForSegmentHotel({
     hotelId,
     fromDate,
     toDate,
-    excludeOrderCode,
   });
 
   // Trừ phòng đã book → ra phòng còn trống thực tế. Loại nào hết phòng thì
-  // bị loại khỏi danh sách (không dùng baseOccupancy của nó để validate).
-  //
-  // Lưu ý trade-off (BR-01..06): cách trừ này KHÔNG cộng lại "slot trống"
-  // trong các phòng partial-shared (vd 1 phòng 2 chỗ chỉ có 1 nữ). Trong
-  // bước VALIDATE, ta chấp nhận tiếp cận bảo thủ để khớp với cảnh báo
-  // hiển thị cho khách. Bước cuối cùng `assignSharedAtomsToRooms` vẫn xét
-  // partial-shared qua `getPartialSharedRooms` khi tạo đơn thật.
+  // bị loại khỏi danh sách.
+  // Slot ghép dở (partial-shared) được tính riêng qua getPartialSharedRooms
+  // trong evaluateSharedFeasibilityV2Multi và assignSharedAtomsToRooms.
   const available = raw
     .map((q) => {
       const usedCnt = booked[q.roomTypeId] || 0;
@@ -230,7 +225,6 @@ async function _getHotelAgeBands(hotelId) {
  * @param {Array<{hotelId:string, hotelName?:string}>} request.hotels theo
  *        thứ tự ưu tiên (index 0 = hotel chính cấu hình của tour).
  * @param {Array}  request.passengers   passengers của ĐOÀN HIỆN TẠI
- * @param {string|null} [request.excludeOrderId]
  *
  * @returns {Promise<{
  *   ok: boolean,
@@ -282,7 +276,6 @@ async function evaluateSharedFeasibilityV2Multi(request) {
       hotelId: h.hotelId,
       fromDate: request.fromDate,
       toDate: request.toDate,
-      excludeOrderCode: request.excludeOrderCode || null,
     });
 
     if (raw.length > 0) anyHasRawQuota = true;
@@ -309,9 +302,9 @@ async function evaluateSharedFeasibilityV2Multi(request) {
       hotelId: hid,
       hotelName: h.hotelName || "",
       ageBands,
-      rooms: available.map((r) => ({ capacity: r.capacity, count: r.count })),
+      rooms: available.map((r) => ({ capacity: r.capacity, count: r.count })), // phòng trống nguyên
     });
-    if (partialRooms.length > 0) partialRoomsByHotel[hid] = partialRooms;
+    if (partialRooms.length > 0) partialRoomsByHotel[hid] = partialRooms; // phòng đang ghép dở
   }
 
 
@@ -513,22 +506,20 @@ async function evaluateSharedFeasibilityV2Multi(request) {
  * @returns {Promise<{ [roomTypeId:string]: number }>}
  */
 
-// Đã có mấy phòng giữ ?
+//  Trong khung ngày này, mỗi loại phòng đã bị khách thật chiếm bao nhiêu phòng?
 async function countActiveBookedRoomsByType({
   tourSegmentId,
   hotelId,
   fromDate,
   toDate,
-  excludeOrderCode,
 }) {
   const fromKey = _toDateKey(fromDate);
   const toKey = _toDateKey(toDate);
   if (!fromKey || !toKey || !hotelId || !tourSegmentId) return {};
 
   const now = new Date();
-  // Lưu ý: bỏ qua các bản ghi "[Tour Hold]" (placeholder do admin tạo để giữ
-  // quota cho tour) — đó là CHÍNH quota, không phải phòng đã có khách.
-  // Chỉ đếm các HotelBooking thuộc về 1 đơn khách thật (orderCode).
+  // Bỏ qua các bản ghi "[Tour Hold]" (placeholder do admin tạo để giữ quota
+  // cho tour) — đó là CHÍNH quota, không phải phòng đã có khách thật.
   const query = {
     "hotel.hotelId": hotelId,
     tourSegmentId: String(tourSegmentId),
@@ -536,18 +527,11 @@ async function countActiveBookedRoomsByType({
     orderCode: { $exists: true, $nin: [null, ""] },
     "guest.fullName": { $ne: "[Tour Hold]" },
     $or: [
-      { isTemporaryHold: { $ne: true } }, // Đã thanh toán / xác nhận, không còn là giữ tạm
-      { holdExpiresAt: { $gt: now } }, // Giữ tạm nhưng CHƯA hết hạn (ví dụ còn 10 phút)
-      { holdExpiresAt: null }, // Giữ tạm nhưng không có hạn (ví dụ đang chờ thanh toán)
+      { isTemporaryHold: { $ne: true } },
+      { holdExpiresAt: { $gt: now } },
+      { holdExpiresAt: null },
     ],
   };
-  // Khi edit đơn cũ → không tính phòng do chính đơn này giữ vào "đã book".
-  if (excludeOrderCode) {
-    query.orderCode = {
-      $exists: true,
-      $nin: [null, "", excludeOrderCode],
-    };
-  }
   const docs = await HotelBooking.find(query)
     .select("checkIn checkOut roomTypeId rooms")
     .lean();
@@ -964,6 +948,7 @@ async function getPartialSharedRooms({
       : Math.max(0, Number(a.numPeople) || 0);
     const genderAdd = resolved ? resolved.gender : a.gender || null;
 
+    // Lần đầu gặp holdBookingId đó → tạo object, usedSum bắt đầu từ 0.
     if (!grouped[thId]) {
       grouped[thId] = {
         thId,
@@ -1037,9 +1022,6 @@ module.exports = {
 // Kiểm thử nhanh: xem helpers/__tests__ (chưa tạo) hoặc node REPL.
 //
 // Một số ràng buộc thiết kế có ý đồ:
-//   - Aggregate KHÔNG trừ Order hiện tại (excludeOrderId). Khi gọi từ
-//     createPost, ta truyền `null` vì Order chưa được tạo. Ở luồng admin
-//     edit (nếu sau này có), nhớ truyền `excludeOrderId`.
 //   - Nếu admin đổi cấu hình `roomAllocations` của TourSegment sau khi đã có
 //     đơn ở ghép, các đơn cũ KHÔNG được xếp lại tự động — hệ thống chỉ kiểm
 //     tra cho đơn mới. Đây là chính sách "first-come-first-feasible".
