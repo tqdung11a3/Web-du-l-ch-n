@@ -1493,6 +1493,135 @@ module.exports.createPost = async (req, res) => {
         }
       }
 
+      // ── Race-condition guard cho ở riêng (TOCTOU) ──
+      // Pre-check ở dòng ~1241 đọc Order TRƯỚC khi bất kỳ đơn nào được tạo,
+      // nên 2 đơn submit đồng thời cùng qua được (cả 2 thấy phòng còn trống).
+      // Sau khi HotelBooking tạm của đơn NÀY đã commit ở trên, đếm lại từ DB
+      // (giờ đã thấy cả đơn khác). Nếu tổng phòng bị giữ vượt sức chứa, đơn
+      // TẠO SAU (theo createdAt, rồi _id) sẽ thua và rollback — đơn tạo trước
+      // luôn thắng, kết quả deterministic bất kể request nào chạy re-check
+      // trước.
+      let _privateRaceMsg = null;
+      for (const item of items) {
+        if (_privateRaceMsg) break;
+        if (item.accommodationMode === "shared") continue;
+        if (
+          !Array.isArray(item.roomSelections) ||
+          !item.roomSelections.length
+        )
+          continue;
+        for (const sel of item.roomSelections) {
+          const myRooms = Number(sel.selectedRooms || 0);
+          if (myRooms <= 0) continue;
+
+          // Sức chứa (số phòng) loại phòng này trong segment.
+          const ts = await TourSegment.findById(sel.tourSegmentId).lean();
+          if (!ts) continue;
+          let assignedRooms = 0;
+          for (const seg of ts.segments || []) {
+            for (const h of seg.hotels || []) {
+              if (String(h.hotelId) !== String(sel.hotelId)) continue;
+              for (const ra of h.roomAllocations || []) {
+                if (String(ra.roomTypeId) === String(sel.roomTypeId)) {
+                  assignedRooms += ra.assignedRooms || 0;
+                }
+              }
+            }
+          }
+
+          // Mọi đơn (KỂ CẢ đơn này) đang giữ chỗ/đã thanh toán cùng
+          // segment + hotel + roomType + dates.
+          const rivalOrders = await Order.find({
+            deleted: { $ne: true },
+            status: { $ne: "cancel" },
+            "items.roomSelections.hotelId": String(sel.hotelId),
+            "items.roomSelections.roomTypeId": String(sel.roomTypeId),
+          })
+            .select(
+              "_id createdAt paymentStatus isTemporaryHold holdExpiresAt items"
+            )
+            .lean();
+
+          const nowD = new Date();
+          const holders = []; // { id, createdAt, rooms }
+          for (const ord of rivalOrders) {
+            let rooms = 0;
+            for (const it of ord.items || []) {
+              for (const rs of it.roomSelections || []) {
+                if (
+                  String(rs.tourSegmentId) === String(sel.tourSegmentId) &&
+                  String(rs.hotelId) === String(sel.hotelId) &&
+                  String(rs.roomTypeId) === String(sel.roomTypeId) &&
+                  String(rs.fromDate) === String(sel.fromDate) &&
+                  String(rs.toDate) === String(sel.toDate)
+                ) {
+                  rooms += Number(rs.selectedRooms || 0);
+                }
+              }
+            }
+            if (rooms === 0) continue;
+            const isActive =
+              ord.paymentStatus === "paid" ||
+              (ord.isTemporaryHold &&
+                (!ord.holdExpiresAt || new Date(ord.holdExpiresAt) > nowD));
+            if (!isActive) continue;
+            holders.push({
+              id: String(ord._id),
+              createdAt: ord.createdAt ? new Date(ord.createdAt).getTime() : 0,
+              rooms,
+            });
+          }
+
+          // Đơn tạo trước ưu tiên giữ phòng (tiebreaker: createdAt → _id).
+          holders.sort((a, b) =>
+            a.createdAt !== b.createdAt
+              ? a.createdAt - b.createdAt
+              : a.id < b.id
+              ? -1
+              : a.id > b.id
+              ? 1
+              : 0
+          );
+
+          // Cộng dồn số phòng của các đơn đứng TRƯỚC đơn này.
+          let roomsBeforeMe = 0;
+          for (const h of holders) {
+            if (h.id === String(newRecord._id)) break;
+            roomsBeforeMe += h.rooms;
+          }
+
+          if (roomsBeforeMe + myRooms > assignedRooms) {
+            const hotelLabel = sel.hotelName ? ` tại ${sel.hotelName}` : "";
+            const remain = Math.max(0, assignedRooms - roomsBeforeMe);
+            _privateRaceMsg =
+              `Loại phòng "${sel.roomTypeName}"${hotelLabel} vừa được khách ` +
+              `khác đặt xong trong lúc bạn thao tác, hiện chỉ còn ${remain} ` +
+              `phòng. Vui lòng chọn lại.`;
+            break;
+          }
+        }
+      }
+
+      if (_privateRaceMsg) {
+        // ── ROLLBACK đơn thua (giống pattern _cancelHoldAndRestoreSeats) ──
+        try {
+          if (code) await HotelBooking.deleteMany({ orderCode: code });
+        } catch (e) {
+          console.error("[createPost privateRace delHB]", e);
+        }
+        try {
+          await Order.deleteOne({ _id: newRecord._id });
+        } catch (e) {
+          console.error("[createPost privateRace delOrder]", e);
+        }
+        try {
+          await _restoreSeatsForGroups(groups);
+        } catch (e) {
+          console.error("[createPost privateRace restoreSeats]", e);
+        }
+        return res.json({ code: "room_unavailable", message: _privateRaceMsg });
+      }
+
       // ── Auto-assign mode "shared" → chiếm TH (Tour Hold) sẵn có ──
       // Với mỗi entry trong `hotelAllocations[].roomAssignments[]` (= 1 phòng
       // vật lý đã được hệ thống tự gán), thay vì tạo HotelBooking mới (không
