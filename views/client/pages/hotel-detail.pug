@@ -435,7 +435,7 @@ block main
                   - const extraPersonFee = Number(band.extraPersonFeePerNight).toLocaleString('vi-VN')
                   p
                     i.fa-solid.fa-user-plus
-                    |  Phụ thu vượt base occupancy: #{extraPersonFee} VND/đêm/người
+                    |  Phụ thu vượt sức chứa cơ bản: #{extraPersonFee} VND/đêm/người
     // ================== THÔNG TIN HỮU ÍCH ==================
     if usefulInfo && (usefulInfo.builtYear || usefulInfo.numberOfFloors || usefulInfo.inRoomVoltage || usefulInfo.nonSmokingRooms || usefulInfo.numberOfRestaurants || usefulInfo.numberOfBars || usefulInfo.licenseNumber)
       .useful-info-section
@@ -1208,7 +1208,7 @@ block main
                 <div class="price-unit">/ đêm</div>
                 <div class="price-info-grid">
                   <div class="price-info-item">
-                    <span>Base occupancy</span>
+                    <span>Sức chứa cơ bản</span>
                     <strong>${room.baseOccupancy || 2} người</strong>
                   </div>
                   <div class="price-info-item">

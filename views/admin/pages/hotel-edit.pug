@@ -558,7 +558,7 @@ block main
                       - const showExtraPerson = band.countInOccupancy !== false
                       .config-section.extra-person-section(style=showExtraPerson ? '' : 'display: none;')
                         .config-header
-                          label.inner-label Áp dụng phụ thu vượt base occupancy
+                          label.inner-label Áp dụng phụ thu vượt sức chứa cơ bản
                         
                         .config-body
                           .inner-group
@@ -668,7 +668,7 @@ block main
                     //- C.3: Extra person charge (chỉ hiện khi countInOccupancy = true)
                     .config-section.extra-person-section(style="display: none;")
                       .config-header
-                        label.inner-label Áp dụng phụ thu vượt base occupancy
+                        label.inner-label Áp dụng phụ thu vượt sức chứa cơ bản
                       
                       .config-body
                         .inner-group
@@ -1330,7 +1330,7 @@ block main
               <!-- C.3: Extra person (chỉ hiện khi countInOccupancy = true) -->
               <div class="config-section extra-person-section" style="display: none;">
                 <div class="config-header">
-                  <label class="inner-label">Áp dụng phụ thu vượt base occupancy</label>
+                  <label class="inner-label">Áp dụng phụ thu vượt sức chứa cơ bản</label>
                 </div>
                 <div class="config-body">
                   <div class="inner-group">
@@ -1401,7 +1401,7 @@ block main
           }
         });
         
-        // Handler: Nếu tích "Tính vào số người" → hiện "Áp dụng phụ thu vượt base occupancy"
+        // Handler: Nếu tích "Tính vào số người" → hiện "Áp dụng phụ thu vượt sức chứa cơ bản"
         const countOccupancyCheckbox = item.querySelector('.config-count-occupancy');
         const extraPersonSection = item.querySelector('.extra-person-section');
         
