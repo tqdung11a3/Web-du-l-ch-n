@@ -10,7 +10,7 @@ const {
 
 const HOTEL_BOOKING_STATUS_LABELS = {
   pending: "Chờ xác nhận",
-  confirmed: "Chưa nhận phòng",
+  confirmed: "Đã xác nhận",
   checked_in: "Đã nhận phòng",
   checked_out: "Đã trả phòng",
   cancelled: "Đã hủy",
