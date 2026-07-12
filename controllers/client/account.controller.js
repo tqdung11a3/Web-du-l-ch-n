@@ -468,9 +468,15 @@ module.exports.profile = async (req, res) => {
     }
 
     // 5) Lấy lịch sử đặt phòng khách sạn (populate hotel để lấy roomTypes & rooms)
+    //    Chỉ lấy booking đặt phòng khách sạn thuần túy — loại bỏ booking sinh
+    //    ra từ luồng tour du lịch (những booking đó luôn có `tourSegmentId`).
     const rawBookings = await HotelBooking.find({
       userId: me._id,
       deleted: { $ne: true },
+      $or: [
+        { tourSegmentId: { $exists: false } },
+        { tourSegmentId: null },
+      ],
     })
       .populate("hotel.hotelId", "name rooms roomTypes thumbnail address")
       .sort({ createdAt: -1 })

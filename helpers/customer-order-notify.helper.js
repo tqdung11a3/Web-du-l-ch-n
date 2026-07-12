@@ -38,6 +38,7 @@ function getClientBaseUrl() {
     process.env.CLIENT_BASE_URL ||
     process.env.BASE_URL ||
     process.env.WEBSITE_URL ||
+    process.env.WEBSITE_DOMAIN ||
     "";
   return String(base).replace(/\/$/, "");
 }
