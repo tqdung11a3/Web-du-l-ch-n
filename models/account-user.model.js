@@ -11,7 +11,6 @@ const accountUserSchema = new mongoose.Schema(
     idNumber: String,
     nationality: String,
     address: String,
-    toursCount: { type: Number, default: 0 },
   },
   {
     collection: "accounts-user",
