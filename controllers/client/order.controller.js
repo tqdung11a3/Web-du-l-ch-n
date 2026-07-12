@@ -1655,10 +1655,6 @@ module.exports.createPost = async (req, res) => {
       const _segCacheById = {}; // segId -> { doc, usedHoldIds:Set }
       const _hotelDocCache = {}; // hotelId -> { _id, rooms, name }
       const pendingSegPushes = {}; // segId -> Array<assignment>
-      // Nếu 2 đơn cùng $inc vào 1 TH đang ở ghép dở (nhánh _reuseThId), CAS
-      // trên `note` sẽ chỉ cho 1 đơn thắng. Đơn thua set _sharedRaceErrorMsg
-      // để thoát các loop lồng nhau và đi thẳng vào rollback.
-      let _sharedRaceErrorMsg = null;
 
       const _getSegment = async (segId) => {
         const k = String(segId);
@@ -1678,14 +1674,12 @@ module.exports.createPost = async (req, res) => {
       const _getHotelDoc = async (hotelId) => {
         const k = String(hotelId);
         if (_hotelDocCache[k]) return _hotelDocCache[k];
-        const doc = await Hotel.findById(k)
-          .select("rooms name roomTypes")
-          .lean();
+        const doc = await Hotel.findById(k).select("rooms name").lean();
         _hotelDocCache[k] = doc || null;
         return doc || null;
       };
 
-      sharedLoop: for (const item of items) {
+      for (const item of items) {
         if (item.accommodationMode !== "shared") continue;
         if (!Array.isArray(item.sharedRoomRequest) || !item.sharedRoomRequest.length) continue;
         for (const r of item.sharedRoomRequest) {
@@ -1729,84 +1723,34 @@ module.exports.createPost = async (req, res) => {
 
               // tạo HotelBooking cho ở ghép
               if (ra._reuseThId) {
-                // CAS (compare-and-swap) trên `note` để tránh race condition
-                // khi 2 đơn cùng cố $inc vào 1 TH đang ở ghép dở. Retry tối
-                // đa 3 lần: mỗi lần re-fetch `note` mới nhất, kiểm tra sức
-                // chứa còn đủ theo baseOccupancy của roomType, rồi CAS.
-                let casOk = false;
-                let lastReuse = null;
-                for (let attempt = 0; attempt < 3 && !casOk; attempt++) {
-                  const reuse = await HotelBooking.findById(ra._reuseThId)
-                    .select(
-                      "_id roomId roomTypeId hotel guest note adults children babies"
-                    )
-                    .lean();
-                  if (!reuse) break;
-                  lastReuse = reuse;
-
-                  // Kiểm tra sức chứa trước khi CAS: đọc baseOccupancy của
-                  // roomType từ Hotel; nếu tổng pax sau khi cộng vượt cap →
-                  // fail luôn, không cần CAS (một đơn khác đã lấp đầy phòng).
-                  const hotelDocForCap = await _getHotelDoc(alloc.hotelId);
-                  const rtDoc =
-                    hotelDocForCap && Array.isArray(hotelDocForCap.roomTypes)
-                      ? hotelDocForCap.roomTypes.find(
-                          (x) => String(x._id) === String(reuse.roomTypeId)
-                        )
-                      : null;
-                  const cap =
-                    rtDoc && Number.isFinite(Number(rtDoc.baseOccupancy))
-                      ? Math.max(1, Math.round(Number(rtDoc.baseOccupancy)))
-                      : 0;
-                  const projectedTotal =
-                    (Number(reuse.adults) || 0) +
-                    (Number(reuse.children) || 0) +
-                    (Number(reuse.babies) || 0) +
-                    (Number(roomPax.adults) || 0) +
-                    (Number(roomPax.children) || 0) +
-                    (Number(roomPax.babies) || 0);
-                  if (cap > 0 && projectedTotal > cap) {
-                    // Phòng đã đầy do đơn khác cộng dồn trước — dừng CAS.
-                    break;
-                  }
-
+                const reuse = await HotelBooking.findById(ra._reuseThId)
+                  .select("_id roomId roomTypeId hotel guest note")
+                  .lean();
+                if (reuse) {
+                  pickedTh = reuse;
+                  // Append marker đơn này vào note để admin thấy nhiều khách
+                  // đang share phòng. Format: "...|| đơn OD1234: AtomLabel".
                   const appendStr = `|| Đơn ${code}: ${
                     Array.isArray(ra.atomLabels) && ra.atomLabels.length
                       ? ra.atomLabels.join(" || ")
                       : guestFullName
                   }`;
-                  const prevNote = reuse.note || "";
-                  const newNote = prevNote + " " + appendStr;
-
-                  // Atomic CAS: chỉ update thành công nếu `note` chưa bị đơn
-                  // khác append trong lúc mình đang xử lý. Nếu null → có đơn
-                  // khác vừa ghép vào phòng này → retry (đọc lại state mới).
-                  const updated = await HotelBooking.findOneAndUpdate(
-                    { _id: reuse._id, note: prevNote },
-                    {
-                      $set: { note: newNote },
-                      $inc: {
-                        adults: roomPax.adults,
-                        children: roomPax.children,
-                        babies: roomPax.babies,
-                      },
-                      $push: {
-                        childrenDetails: { $each: roomPax.childrenDetails },
-                        babiesDetails: { $each: roomPax.babiesDetails },
-                      },
+                  const newNote = (reuse.note || "") + " " + appendStr;
+                  // Cộng dồn NL/TE/EB của đơn này vào phòng đang ghép.
+                  await HotelBooking.findByIdAndUpdate(reuse._id, {
+                    $set: { note: newNote },
+                    // cộng dồn số lượng khách vào phòng đang ghép
+                    $inc: {
+                      adults: roomPax.adults,
+                      children: roomPax.children,
+                      babies: roomPax.babies,
                     },
-                    { new: true }
-                  );
-                  if (updated) {
-                    pickedTh = reuse;
-                    casOk = true;
-                  }
-                }
-                if (!casOk) {
-                  _sharedRaceErrorMsg =
-                    "Phòng ghép vừa được khách khác đặt trong lúc bạn thao tác, " +
-                    "không còn đủ chỗ. Vui lòng đặt lại hoặc chuyển sang ở riêng.";
-                  break sharedLoop;
+                    // thêm chi tiết tuổi TE/EB
+                    $push: {
+                      childrenDetails: { $each: roomPax.childrenDetails },
+                      babiesDetails: { $each: roomPax.babiesDetails },
+                    },
+                  });
                 }
               }
 
@@ -1949,55 +1893,6 @@ module.exports.createPost = async (req, res) => {
             }
           }
         }
-      }
-
-      // ── Race-condition trên nhánh reuse Tour Hold (CAS failed) ──
-      // Nếu CAS trên `note` không thắng sau khi retry, không thể cộng dồn
-      // pax vào phòng ghép dở → rollback y hệt pattern safety-net dưới đây
-      // (reset TH đã claim, xoá HotelBooking legacy, xoá Order, hoàn ghế).
-      if (_sharedRaceErrorMsg) {
-        const claimedThIds = [];
-        for (const arr of Object.values(pendingSegPushes)) {
-          for (const entry of arr || []) {
-            if (entry.holdBookingId)
-              claimedThIds.push(String(entry.holdBookingId));
-          }
-        }
-        try {
-          if (claimedThIds.length > 0) {
-            await HotelBooking.updateMany(
-              { _id: { $in: claimedThIds } },
-              {
-                $set: {
-                  "guest.fullName": "[Tour Hold]",
-                  "guest.phone": "",
-                  "guest.email": "",
-                  status: "confirmed",
-                  isTemporaryHold: false,
-                },
-                $unset: { orderCode: "", holdExpiresAt: "", userId: "" },
-              }
-            );
-          }
-        } catch (rollbackErr) {
-          console.error("[createPost rollback resetTH]", rollbackErr);
-        }
-        try {
-          if (code) await HotelBooking.deleteMany({ orderCode: code });
-        } catch (rollbackErr) {
-          console.error("[createPost rollback delHB]", rollbackErr);
-        }
-        try {
-          await Order.deleteOne({ _id: newRecord._id });
-        } catch (rollbackErr) {
-          console.error("[createPost rollback delOrder]", rollbackErr);
-        }
-        try {
-          await _restoreSeatsForGroups(groups);
-        } catch (rollbackErr) {
-          console.error("[createPost rollback restoreSeats]", rollbackErr);
-        }
-        return res.json({ code: "error", message: _sharedRaceErrorMsg });
       }
 
       // ── Pre-persist validation (last line of defense) ──
