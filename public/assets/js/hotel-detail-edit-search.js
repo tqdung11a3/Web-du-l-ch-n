@@ -95,6 +95,33 @@
     return false;
   }
 
+  function validateRoomsData(data) {
+    const errors = [];
+    const typeMap = {
+      adults:   { label: "Người lớn", minAge: AGE.ADULT_MIN,  maxAge: 120 },
+      children: { label: "Trẻ em",    minAge: AGE.CHILD_MIN,  maxAge: AGE.CHILD_MAX },
+      babies:   { label: "Em bé",     minAge: AGE.BABY_MIN,   maxAge: AGE.BABY_MAX },
+    };
+    (data || []).forEach(function (room, ri) {
+      const label = data.length > 1 ? "Phòng " + (ri + 1) + " — " : "";
+      ["adults", "children", "babies"].forEach(function (key) {
+        const cfg = typeMap[key];
+        (room[key] || []).forEach(function (g, i) {
+          if (!validateGuestAge(key, g.age)) {
+            errors.push(
+              label + cfg.label + " " + (i + 1) + ": tuổi phải từ " + cfg.minAge +
+              (key === "adults" ? " trở lên." : " đến " + cfg.maxAge + ".")
+            );
+          }
+        });
+      });
+      if (!roomHasGuardian18(room)) {
+        errors.push((label || "Phòng ") + "phải có ít nhất 1 người từ " + AGE.GUARDIAN_MIN + " tuổi trở lên.");
+      }
+    });
+    return errors;
+  }
+
   function parseRoomsDataFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
     const roomsDataStr = urlParams.get("roomsData");
@@ -411,6 +438,17 @@
   if (form) {
     form.addEventListener("submit", function (e) {
       e.preventDefault();
+
+      // Validate tuổi hành khách trước khi tìm kiếm
+      const ageErrors = validateRoomsData(roomsData);
+      if (ageErrors.length > 0) {
+        if (typeof notify !== "undefined" && notify.error) {
+          notify.error(ageErrors.join("\n"));
+        } else {
+          alert(ageErrors.join("\n"));
+        }
+        return;
+      }
 
       const formData = new FormData(form);
       const params = new URLSearchParams();
