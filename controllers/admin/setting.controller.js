@@ -539,7 +539,7 @@ module.exports.accountAdminCreatePost = async (req, res) => {
       createdBy: String(req.account.id),
       updatedBy: String(req.account.id),
       isSuperAdmin: false,
-      tabAccessScope,
+      tabAccessScope, // phân quyền
       assignedHotelId,
     };
 

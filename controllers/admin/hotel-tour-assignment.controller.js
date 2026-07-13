@@ -392,6 +392,8 @@ module.exports.detail = async (req, res) => {
 
     // Lấy hold bookings CHỈ thuộc hotels của company, có roomId cụ thể
     // Xác định phòng nào
+
+    // danh sách phòng đang giữ chỗ
     const holdBookingsRaw = await HotelBooking.find({
       tourSegmentId: tourSeg._id,
       "hotel.hotelId": { $in: hotelIds },
@@ -958,13 +960,13 @@ module.exports.detail = async (req, res) => {
             Array.isArray(a.atomLabels) ? a.atomLabels : []
           );
           if (matched) {
-            numPeople = matched.usedCapacity;
+            numPeople = matched.usedCapacity; // lấy từ Order gốc
             usedCapacityRaw =
               matched.usedCapacityRaw != null
-                ? matched.usedCapacityRaw
+                ? matched.usedCapacityRaw // giữ nguyên số lẻ (vd 1.5)
                 : matched.usedCapacity;
           } else if (hasStored) {
-            numPeople = Math.round(stored);
+            numPeople = Math.round(stored); // dùng giá trị đã lưu trong DB
             // DB (tourSeg.assignments.numPeople) đã lưu occupancy quy đổi gốc
             // (có thể lẻ, vd 1.5) → giữ nguyên để hiển thị, không làm tròn.
             usedCapacityRaw = stored;
@@ -987,8 +989,6 @@ module.exports.detail = async (req, res) => {
           holdBookingId: a.holdBookingId ? String(a.holdBookingId) : null,
           accommodationMode: isShared ? "shared" : (a.accommodationMode || "private"),
           numPeople,
-          // Chỉ shared mới có occupancy lẻ (1.5). Private để undefined → modal
-          // dùng baseOccupancy như cũ.
           ...(usedCapacityRaw != null ? { usedCapacity: usedCapacityRaw } : {}),
         };
       });
@@ -1897,6 +1897,7 @@ module.exports.save = async (req, res) => {
           ? paxToHotelBookingSet(holdPax)
           : null;
 
+      // phòng được gán khách -> cập nhật HotelBooking
       await HotelBooking.findByIdAndUpdate(hb._id, {
         orderCode: primary.orderCode || "",
         "guest.fullName": primary.guestName || "Khách tour",
@@ -1925,6 +1926,8 @@ module.exports.save = async (req, res) => {
       (hbId) => !newAssignedBookingIds.has(hbId)
     );
     if (idsToReset.length > 0) {
+
+      // phòng bị bỏ gán -> reset về TourHold
       await HotelBooking.updateMany(
         { _id: { $in: idsToReset } },
         {
@@ -1966,6 +1969,7 @@ module.exports.save = async (req, res) => {
       }
     }
 
+    // lưu ở TourSegment
     tourSeg.assignments = narrowScoped
       ? [...outsideCompany, ...myCompanyOtherHotels, ...cleanAssignments]
       : [...outsideCompany, ...cleanAssignments];

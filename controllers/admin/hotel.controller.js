@@ -3945,14 +3945,14 @@ module.exports.tourHoldDetail = async (req, res) => {
     for (const booking of filteredHoldBookings) {
       const rt = (selectedHotel.roomTypes || []).find(
         (r) => String(r._id) === String(booking.roomTypeId)
-      );
+      ); // tên loại phòng
       const roomDoc = booking.roomId
         ? (selectedHotel.rooms || []).find((r) => String(r._id) === String(booking.roomId))
-        : null;
-      const guestName = booking.guest?.fullName || "";
-      const checkInStr  = booking.checkIn  ? moment(booking.checkIn).format("DD/MM/YYYY")  : "—";
-      const checkOutStr = booking.checkOut ? moment(booking.checkOut).format("DD/MM/YYYY") : "—";
-      const tfKey = `${checkInStr}_${checkOutStr}`;
+        : null; // số phòng vật lý
+      const guestName = booking.guest?.fullName || ""; // tên khách
+      const checkInStr  = booking.checkIn  ? moment(booking.checkIn).format("DD/MM/YYYY")  : "—"; // ngày nhận phòng
+      const checkOutStr = booking.checkOut ? moment(booking.checkOut).format("DD/MM/YYYY") : "—"; // ngày trả phòng
+      const tfKey = `${checkInStr}_${checkOutStr}`; // khung thời gian
 
       // Tổng hợp danh sách khách ghép phòng (nếu có >1 đơn share TH này).
       const assignees = assignsByThId[String(booking._id)] || [];
@@ -3998,8 +3998,8 @@ module.exports.tourHoldDetail = async (req, res) => {
         status:       booking.status,
         guestName:    isAssigned ? combined[0].guestName : "",
         guestPhone:   isAssigned ? combined[0].phone : "",
-        isAssigned,
-        assignees:    combined,
+        isAssigned, // đã có khách được phân hay chưa
+        assignees:    combined, // toàn bộ khách gắn hold đó
       });
 
       if (!group.timeFrameMap[tfKey]) {
@@ -6037,6 +6037,8 @@ module.exports.bookingCalendar = async (req, res) => {
     // Gom theo holdBookingId (= TH booking _id) → [{guestName, phone, orderCode, guestStatus}]
     const calSegIds = [...new Set(bookings.filter(b => b.tourSegmentId).map(b => String(b.tourSegmentId)))];
     const calAssignsByThId = {}; // thId → assignee[]
+
+    // gom theo holdBookingId
     if (calSegIds.length) {
       const calSegs = await TourSegment.find({ _id: { $in: calSegIds } })
         .select("assignments")
